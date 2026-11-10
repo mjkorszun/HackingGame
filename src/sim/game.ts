@@ -57,6 +57,16 @@ export class Game {
     return this.move !== null;
   }
 
+  /** The node the hop in progress leads to, if any. */
+  get nextHop(): string | null {
+    return this.move?.to ?? null;
+  }
+
+  /** Progress of the hop in progress, 0..1 (0 when not moving). */
+  get hopProgress(): number {
+    return this.move ? this.move.elapsed / this.move.total : 0;
+  }
+
   /** Final destination of the current travel, if any. */
   get moveTarget(): string | null {
     return this.route[this.route.length - 1] ?? this.move?.to ?? null;

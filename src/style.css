@@ -173,3 +173,20 @@ body {
 .ctx-menu button:hover:not(:disabled) { background: var(--green-faint); }
 .ctx-menu button:disabled { color: var(--green-dim); cursor: default; }
 .ctx-hint { color: var(--grey); font-size: 12px; }
+
+/* ---------- player avatar ---------- */
+.avatar {
+  pointer-events: none;
+  transition: transform 0.1s linear;
+}
+.avatar.no-transition { transition: none; }
+.avatar-head { fill: #000; stroke: #b6ffcb; stroke-width: 2.5; }
+.avatar-limb { stroke: #b6ffcb; stroke-width: 2.5; stroke-linecap: round; }
+.avatar-leg-l, .avatar-leg-r, .avatar-arm-l, .avatar-arm-r { transform-origin: 0 -14px; transform-box: view-box; }
+.avatar-arm-l, .avatar-arm-r { transform-origin: 0 -27px; }
+.is-walking .avatar-leg-l, .is-walking .avatar-arm-r { animation: swing 0.4s ease-in-out infinite alternate; }
+.is-walking .avatar-leg-r, .is-walking .avatar-arm-l { animation: swing 0.4s ease-in-out infinite alternate-reverse; }
+@keyframes swing {
+  from { transform: rotate(-22deg); }
+  to { transform: rotate(22deg); }
+}

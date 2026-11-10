@@ -94,3 +94,15 @@ describe('Game.moveTarget', () => {
     expect(g.moveTarget).toBe('ai');
   });
 });
+
+describe('Game hop state', () => {
+  it('exposes the next hop and its progress', () => {
+    const g = new Game(testSystem);
+    expect(g.nextHop).toBeNull();
+    expect(g.hopProgress).toBe(0);
+    g.travelTo('ai');
+    expect(g.nextHop).toBe('edge');
+    run(g, MOVE_TICKS / 2);
+    expect(g.hopProgress).toBeCloseTo(0.5);
+  });
+});
