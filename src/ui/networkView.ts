@@ -93,6 +93,8 @@ export class NetworkView {
   private readonly pauseBtn: HTMLButtonElement;
   private readonly muteBtn: HTMLButtonElement;
   private readonly stage: SVGSVGElement;
+  /** The minimap is its own small SVG pinned to the bottom-right corner of the view. */
+  private readonly miniSvg: SVGSVGElement;
   private neighbourOrder: string[] = [];
   private lastKey = '';
   private positions = new Map<string, { x: number; y: number }>();
@@ -145,7 +147,9 @@ export class NetworkView {
 
     this.stage = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stage', role: 'img' });
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
-    root.append(this.header, this.stage);
+    this.miniSvg = svg('svg', { viewBox: '0 0 220 120', class: 'minimap-svg' });
+    this.miniSvg.addEventListener('contextmenu', (e) => e.preventDefault());
+    root.append(this.header, this.stage, this.miniSvg);
     this.render();
   }
 
@@ -360,8 +364,8 @@ export class NetworkView {
     const nodes = g.network.def.nodes;
     const mw = 200;
     const mh = 100;
-    const ox = W - mw - 10;
-    const oy = H - mh - 10;
+    const ox = 10;
+    const oy = 14;
     const minX = Math.min(...nodes.map((n) => n.x));
     const maxX = Math.max(...nodes.map((n) => n.x));
     const minY = Math.min(...nodes.map((n) => n.y));
@@ -370,7 +374,8 @@ export class NetworkView {
     const sx = (x: number) => ox + pad + ((x - minX) / Math.max(1, maxX - minX)) * (mw - 2 * pad);
     const sy = (y: number) => oy + pad + ((y - minY) / Math.max(1, maxY - minY)) * (mh - 2 * pad);
 
-    const mini = svg('g', { class: 'minimap' }, this.stage);
+    this.miniSvg.innerHTML = '';
+    const mini = svg('g', { class: 'minimap' }, this.miniSvg);
     svg('rect', { x: ox, y: oy, width: mw, height: mh, class: 'minimap-frame' }, mini);
     const label = svg('text', { x: ox + 6, y: oy - 5, class: 'minimap-label' }, mini);
     label.textContent = 'MAP';

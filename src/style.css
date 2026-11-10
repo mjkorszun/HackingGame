@@ -240,3 +240,11 @@ body {
 
 /* A black halo keeps node labels readable where a link runs behind them. */
 .node-name, .node-kind { paint-order: stroke; stroke: #000; stroke-width: 4px; stroke-linejoin: round; }
+
+.minimap-svg {
+  position: absolute;
+  right: 8px;
+  bottom: 18px;
+  width: 260px;
+  height: auto;
+}
