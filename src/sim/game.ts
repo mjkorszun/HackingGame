@@ -1,3 +1,4 @@
+import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { Network } from './network';
 import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
@@ -31,6 +32,8 @@ export class Game {
   private readonly identified = new Set<string>();
   /** Stable number of each hidden node in this system, used for its ?N name. */
   private readonly unknownNumber = new Map<string, number>();
+  /** Privileges the player holds in this system. */
+  readonly privileges = new Set<Privilege>();
 
   constructor(system: SystemDef) {
     this.network = new Network(system);
@@ -78,7 +81,9 @@ export class Game {
 
   /** The node's kind as the player knows it. */
   kindOf(id: string): NodeKind {
-    return this.isIdentified(id) ? this.network.node(id).kind : 'unknown';
+    if (!this.isIdentified(id)) return 'unknown';
+    const node = this.network.node(id);
+    return node.kind === 'honeypot' ? (node.disguise ?? 'database') : node.kind;
   }
 
   /**
@@ -97,6 +102,40 @@ export class Game {
     }
     const node = this.network.find(q);
     return node && this.isIdentified(node.id) ? node : undefined;
+  }
+
+  /** Actions available in the current node, as the player sees them. */
+  get currentActions(): NodeAction[] {
+    return actionsFor(this.kindOf(this.currentNode));
+  }
+
+  /** Runs a node action in the current node. Returns false if it could not be used. */
+  runAction(id: string): boolean {
+    const action = this.currentActions.find((x) => x.id === id.trim().toLowerCase());
+    if (!action) {
+      this.log(`no action "${id}" here`, 'alarm1');
+      return false;
+    }
+    if (this.move) {
+      this.log('cannot do that while connecting', 'alarm1');
+      return false;
+    }
+    if (this.network.node(this.currentNode).kind === 'honeypot') {
+      this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
+      return true;
+    }
+    if (action.requires && !this.privileges.has(action.requires)) {
+      this.log(`${action.id}: requires ${action.requires} privilege`, 'alarm1');
+      return false;
+    }
+    if (action.id === 'download-map') {
+      const before = this.identified.size;
+      for (const n of this.network.def.nodes) this.identified.add(n.id);
+      this.log(`map downloaded: ${this.identified.size - before} unknown nodes identified`, 'info');
+      return true;
+    }
+    this.log(`${action.id}: ${action.result}`, 'info');
+    return true;
   }
 
   get isMoving(): boolean {

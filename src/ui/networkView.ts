@@ -16,21 +16,41 @@ const RING = 145;
 
 const KIND_TAG: Record<NodeKind, string> = {
   gateway: 'GW',
-  router: 'RT',
+  relay: 'RL',
   identity: 'ID',
+  uplink: 'UP',
   database: 'DB',
-  camera: 'CAM',
+  vault: 'KEY',
   overseer: 'AI',
+  orchestrator: 'ORC',
+  monitoring: 'LOG',
+  compute: 'CPU',
+  camera: 'CAM',
+  ads: 'ADS',
+  physical: 'PHY',
+  vehicle: 'VEH',
+  security: 'SEC',
+  honeypot: 'DB',
   unknown: '?',
 };
 
 const KIND_LABEL: Record<NodeKind, string> = {
   gateway: 'gateway',
-  router: 'router',
+  relay: 'relay',
   identity: 'identity service',
-  database: 'database table',
+  uplink: 'uplink',
+  database: 'database',
+  vault: 'key vault',
+  overseer: 'overseer core (system AI)',
+  orchestrator: 'orchestrator',
+  monitoring: 'monitoring log',
+  compute: 'compute cluster',
   camera: 'camera hub',
-  overseer: 'system AI (overseer)',
+  ads: 'ADS control (autonomous defence)',
+  physical: 'physical system control',
+  vehicle: 'external vehicle control',
+  security: 'security systems',
+  honeypot: 'database',
   unknown: 'unknown',
 };
 
@@ -56,6 +76,7 @@ function formatTime(tick: number): string {
 export interface ViewActions {
   travel(nodeId: string): void;
   look(nodeId: string): void;
+  act(actionId: string): void;
   togglePause(): void;
   mute(): void;
   hover(): void;
@@ -261,7 +282,8 @@ export class NetworkView {
     return items.map(({ node, angle }) => ({
       node,
       x: CX + Math.cos(angle) * RING * 1.35,
-      y: CY + Math.sin(angle) * RING,
+      // Nodes below sit a little lower, clear of the current node's name and kind label.
+      y: CY + Math.sin(angle) * RING + Math.max(0, Math.sin(angle)) * 48,
     }));
   }
 
@@ -325,6 +347,11 @@ export class NetworkView {
       });
     }
     items.push({ label: 'Look', action: () => this.actions.look(node.id) });
+    if (isCurrent) {
+      for (const act of this.game.currentActions) {
+        items.push({ label: act.id, hint: act.requires ? `${act.requires} priv.` : undefined, action: () => this.actions.act(act.id) });
+      }
+    }
     this.menu.show(x, y, this.game.nameOf(node.id), items);
   }
 

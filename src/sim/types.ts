@@ -1,13 +1,32 @@
 /**
- * Kinds of nodes available in the skeleton. More will come later.
- * 'unknown' is never a node's real kind: it is how a node looks until it is identified.
+ * Kinds of nodes. 'unknown' is never a node's real kind: it is how a node looks
+ * until it is identified. A 'honeypot' always shows as its disguise.
  */
-export type NodeKind = 'gateway' | 'router' | 'identity' | 'database' | 'camera' | 'overseer' | 'unknown';
+export type NodeKind =
+  | 'gateway'
+  | 'relay'
+  | 'identity'
+  | 'uplink'
+  | 'database'
+  | 'vault'
+  | 'overseer'
+  | 'orchestrator'
+  | 'monitoring'
+  | 'compute'
+  | 'camera'
+  | 'ads'
+  | 'physical'
+  | 'vehicle'
+  | 'security'
+  | 'honeypot'
+  | 'unknown';
 
 export interface NodeDef {
   id: string;
   name: string;
   kind: NodeKind;
+  /** For a honeypot: the node kind it pretends to be. */
+  disguise?: NodeKind;
   /** Starts unidentified: shown as "?" until the player enters it. */
   hidden?: boolean;
   /** Position on the system map, used by the minimap and for direction. */

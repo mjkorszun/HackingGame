@@ -1,6 +1,6 @@
 /** Console command names and tab completion. Pure functions, no DOM. */
 
-export type ArgKind = 'none' | 'node' | 'neighbour';
+export type ArgKind = 'none' | 'node' | 'neighbour' | 'action';
 
 export interface CommandSpec {
   name: string;
@@ -15,6 +15,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'help', aliases: ['?'], arg: 'none', usage: 'help', help: 'this list' },
   { name: 'connect', aliases: ['go', 'move'], arg: 'neighbour', usage: 'connect <node>', help: 'travel to a node (Tab completes names)' },
   { name: 'look', aliases: ['l'], arg: 'node', usage: 'look [node]', help: 'describe the current node, or another one' },
+  { name: 'do', arg: 'action', usage: 'do <action>', help: "use an action of the current node (look lists them)" },
   { name: 'map', arg: 'none', usage: 'map', help: 'list all nodes' },
   { name: 'pause', arg: 'none', usage: 'pause', help: 'stop time (Space)' },
   { name: 'resume', aliases: ['unpause'], arg: 'none', usage: 'resume', help: 'continue time (Space)' },
