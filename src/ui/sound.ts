@@ -11,13 +11,25 @@ const SOUNDS = {
   menuOpen: 'switch_005.wav',
   menuItem: 'click_001.wav',
   menuClose: 'click_002.wav',
-  hover: 'tick_002.wav',
+  hop: 'tick_002.wav',
+  hover: { file: 'glass_001.wav', volume: 0.7 },
   command: 'switch_001.wav',
   error: 'error_005.wav',
   key: 'click1.wav',
 } as const;
 
 export type SoundName = keyof typeof SOUNDS;
+
+/** A sound is a file name, or a file with its own volume (0..1, relative to the master volume). */
+type SoundDef = string | { file: string; volume: number };
+
+function fileOf(def: SoundDef): string {
+  return typeof def === 'string' ? def : def.file;
+}
+
+function volumeOf(def: SoundDef): number {
+  return typeof def === 'string' ? 1 : def.volume;
+}
 
 const STORAGE_KEY = 'cyberhack.sound';
 
@@ -64,7 +76,15 @@ export class Sound {
     if (!buf) return;
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
-    src.connect(this.gain);
+    const vol = volumeOf(SOUNDS[name] as SoundDef);
+    if (vol === 1) {
+      src.connect(this.gain);
+    } else {
+      const g = this.ctx.createGain();
+      g.gain.value = vol;
+      src.connect(g);
+      g.connect(this.gain);
+    }
     src.start();
   }
 
@@ -98,7 +118,7 @@ export class Sound {
     await Promise.all(
       (Object.keys(SOUNDS) as SoundName[]).map(async (name) => {
         try {
-          const res = await fetch(`${this.baseUrl}sfx/${SOUNDS[name]}`);
+          const res = await fetch(`${this.baseUrl}sfx/${fileOf(SOUNDS[name] as SoundDef)}`);
           const data = await res.arrayBuffer();
           this.buffers.set(name, await ctx.decodeAudioData(data));
         } catch {
