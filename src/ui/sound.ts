@@ -3,9 +3,8 @@
  * Uses Web Audio so short sounds can overlap with no delay.
  */
 const SOUNDS = {
-  linkUp: 'three_tone_1.ogg',
+  linkUp: 'computer_noise_001_1s.ogg',
   connect: 'select_001.wav',
-  connecting: 'computer_noise_001_1s.ogg',
   arrive: 'confirmation_001.wav',
   pause: 'low_down.ogg',
   resume: 'two_tone_1.ogg',

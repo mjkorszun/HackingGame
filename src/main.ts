@@ -146,7 +146,6 @@ function flush(): void {
     if (ev.type === 'log') term.write(ev.line);
     else if (ev.type === 'progress') {
       term.progress(ev.line);
-      if (ev.line.progress === 0 && !ev.line.done) sfx.play('connecting');
     }
     else if (ev.type === 'moved') sfx.play('arrive');
     else if (ev.type === 'paused') sfx.play(ev.paused ? 'pause' : 'resume');
