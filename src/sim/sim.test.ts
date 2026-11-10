@@ -107,3 +107,20 @@ describe('Game hop state', () => {
     expect(g.hopProgress).toBeCloseTo(0.5);
   });
 });
+
+describe('hidden nodes', () => {
+  it('show as unknown until the player enters them', () => {
+    const game = new Game(testSystem);
+    expect(game.nameOf('staff')).toBe('?');
+    expect(game.kindOf('staff')).toBe('unknown');
+    expect(game.findNode('Staff Records')).toBeUndefined();
+    expect(game.findNode('staff')).toBeUndefined();
+    expect(game.findNode('?')?.id).toBe('staff');
+    game.travelTo('staff');
+    run(game, MOVE_TICKS * 5);
+    expect(game.currentNode).toBe('staff');
+    expect(game.nameOf('staff')).toBe('Staff Records');
+    expect(game.kindOf('staff')).toBe('database');
+    expect(game.findNode('staff records')?.id).toBe('staff');
+  });
+});

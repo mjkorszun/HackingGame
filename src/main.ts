@@ -16,14 +16,14 @@ sfx.onReady = () => sfx.play('linkUp');
 menu.onEvent = (e) => sfx.play(e === 'open' ? 'menuOpen' : e === 'item' ? 'menuItem' : 'menuClose');
 
 function travel(nodeId: string): void {
-  const node = game.network.node(nodeId);
+  const name = game.nameOf(nodeId);
   if (nodeId === game.currentNode && !game.isMoving) {
-    game.log(`already at ${node.name}`, 'system');
+    game.log(`already at ${name}`, 'system');
   } else if (!game.travelTo(nodeId)) {
-    error(`no route to ${node.name}`);
+    error(`no route to ${name}`);
   } else {
     sfx.play('connect');
-    if (game.paused) game.log(`route set to ${node.name} (paused)`, 'system');
+    if (game.paused) game.log(`route set to ${name} (paused)`, 'system');
   }
 }
 
@@ -33,9 +33,8 @@ function error(text: string): void {
 }
 
 function look(nodeId: string): void {
-  const node = game.network.node(nodeId);
-  const links = game.network.neighbours(nodeId).map((n) => n.name).join(', ');
-  game.log(`${node.name}: ${KIND_LABEL[node.kind]}. links: ${links}`);
+  const links = game.network.neighbours(nodeId).map((n) => game.nameOf(n.id)).join(', ');
+  game.log(`${game.nameOf(nodeId)}: ${KIND_LABEL[game.kindOf(nodeId)]}. links: ${links}`);
 }
 
 const HELP = [
@@ -58,13 +57,13 @@ function runCommand(raw: string): void {
       HELP.forEach((l) => game.log(l, 'system'));
       break;
     case 'look': {
-      const node = arg ? game.network.find(arg) : game.network.node(game.currentNode);
+      const node = arg ? game.findNode(arg) : game.network.node(game.currentNode);
       if (node) look(node.id);
       else error(`unknown node: ${arg}`);
       break;
     }
     case 'connect': {
-      const node = game.network.find(arg);
+      const node = game.findNode(arg);
       if (!arg) game.log('usage: connect <node>', 'system');
       else if (!node) error(`unknown node: ${arg}`);
       else travel(node.id);
@@ -72,7 +71,8 @@ function runCommand(raw: string): void {
     }
     case 'map':
       for (const n of game.network.def.nodes) {
-        game.log(`${n.id.padEnd(8)} ${n.name}${n.id === game.currentNode ? '  <- you' : ''}`);
+        const id = game.isIdentified(n.id) ? n.id : '?';
+        game.log(`${id.padEnd(8)} ${game.nameOf(n.id)}${n.id === game.currentNode ? '  <- you' : ''}`);
       }
       break;
     case 'pause':
@@ -103,7 +103,7 @@ function ui(cmd: string): void {
   flush();
 }
 
-const nodeName = (id: string) => game.network.node(id).name;
+const nodeName = (id: string) => game.nameOf(id);
 
 const term = new Console(document.getElementById('console')!, (cmd) => {
   sfx.play('command');
@@ -114,7 +114,7 @@ term.onType = () => sfx.play('key');
 term.completer = (value) =>
   complete(value, {
     names: (kind) =>
-      (kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes).map((n) => n.name),
+      [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes).map((n) => game.nameOf(n.id)))],
   });
 const view = new NetworkView(document.getElementById('view')!, game, menu, {
   travel: (id) => ui(`connect ${nodeName(id)}`),

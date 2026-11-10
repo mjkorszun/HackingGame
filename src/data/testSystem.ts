@@ -16,7 +16,7 @@ export const testSystem: SystemDef = {
     { id: 'orders', name: 'Orders Table', kind: 'database', x: 2, y: 3 },
     { id: 'core', name: 'Service Mesh', kind: 'router', x: 3, y: 2 },
     { id: 'cams', name: 'Camera Hub', kind: 'camera', x: 4, y: 1 },
-    { id: 'unk1', name: '?', kind: 'unknown', x: 4, y: 3 },
+    { id: 'staff', name: 'Staff Records', kind: 'database', x: 4, y: 3, hidden: true },
     { id: 'ai', name: 'Overseer Core', kind: 'overseer', x: 5, y: 2 },
   ],
   links: [
@@ -26,8 +26,8 @@ export const testSystem: SystemDef = {
     ['auth', 'core'],
     ['orders', 'core'],
     ['core', 'cams'],
-    ['core', 'unk1'],
+    ['core', 'staff'],
     ['cams', 'ai'],
-    ['unk1', 'ai'],
+    ['staff', 'ai'],
   ],
 };
