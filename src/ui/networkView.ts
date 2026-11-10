@@ -66,6 +66,8 @@ export class NetworkView {
   private readonly stage: SVGSVGElement;
   private neighbourOrder: string[] = [];
   private lastKey = '';
+  private positions = new Map<string, { x: number; y: number }>();
+  private avatar: SVGGElement | null = null;
 
   constructor(
     root: HTMLElement,
@@ -112,6 +114,7 @@ export class NetworkView {
     this.header.classList.toggle('is-paused', this.game.paused);
     const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}`;
     if (key !== this.lastKey) this.render();
+    this.updateAvatar();
   }
 
   private render(): void {
@@ -139,7 +142,44 @@ export class NetworkView {
       });
     });
     this.drawNode(current, CX, CY, CURRENT_R, { current: true, targeted: false });
+    this.positions = new Map(positions.map((p) => [p.node.id, { x: p.x, y: p.y }]));
+    this.avatar = this.drawAvatar();
+    this.updateAvatar(true);
     this.drawMinimap();
+  }
+
+  /** The player: a simple stick figure standing in the current node, feet at (0, 0). */
+  private drawAvatar(): SVGGElement {
+    const root = svg('g', { class: 'avatar' }, this.stage);
+    const fig = svg('g', { class: 'avatar-figure' }, root);
+    svg('circle', { cx: 0, cy: -38, r: 6.5, class: 'avatar-head' }, fig);
+    svg('line', { x1: 0, y1: -31, x2: 0, y2: -14, class: 'avatar-limb' }, fig);
+    svg('line', { x1: 0, y1: -27, x2: -9, y2: -18, class: 'avatar-limb avatar-arm-l' }, fig);
+    svg('line', { x1: 0, y1: -27, x2: 9, y2: -18, class: 'avatar-limb avatar-arm-r' }, fig);
+    svg('line', { x1: 0, y1: -14, x2: -7, y2: 0, class: 'avatar-limb avatar-leg-l' }, fig);
+    svg('line', { x1: 0, y1: -14, x2: 7, y2: 0, class: 'avatar-limb avatar-leg-r' }, fig);
+    return root;
+  }
+
+  /** Moves the avatar along the link of the hop in progress. */
+  private updateAvatar(instant = false): void {
+    const av = this.avatar;
+    if (!av) return;
+    const start = { x: CX, y: CY + CURRENT_R * 0.7 };
+    let pos = start;
+    let facing = 1;
+    const hop = this.game.nextHop;
+    const end = hop ? this.positions.get(hop) : undefined;
+    if (end) {
+      const t = this.game.hopProgress;
+      const to = { x: end.x, y: end.y + NEIGHBOUR_R * 0.6 };
+      pos = { x: start.x + (to.x - start.x) * t, y: start.y + (to.y - start.y) * t };
+      facing = to.x < start.x ? -1 : 1;
+    }
+    av.classList.toggle('is-walking', !!end && !this.game.paused);
+    av.classList.toggle('no-transition', instant);
+    av.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+    (av.firstElementChild as SVGGElement).style.transform = `scaleX(${facing})`;
   }
 
   /** Places neighbours on a ring, in the direction they lie on the system map. */
@@ -179,7 +219,7 @@ export class NetworkView {
     if (opts.targeted) cls.push('node-targeted');
     const grp = svg('g', { class: cls.join(' '), 'data-node': node.id, tabindex: 0 }, this.stage);
     svg('circle', { cx: x, cy: y, r, class: 'node-body' }, grp);
-    const tag = svg('text', { x, y: y + (opts.current ? 8 : 5), class: 'node-tag', 'font-size': opts.current ? 26 : 15 }, grp);
+    const tag = svg('text', { x, y: y + (opts.current ? -14 : 5), class: 'node-tag', 'font-size': opts.current ? 26 : 15 }, grp);
     tag.textContent = KIND_TAG[node.kind];
     const name = svg('text', { x, y: y + r + 18, class: 'node-name' }, grp);
     name.textContent = node.name;
