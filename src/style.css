@@ -248,3 +248,15 @@ body {
   width: 260px;
   height: auto;
 }
+
+/* ---------- current node as a room ---------- */
+.room-body { fill: #020c05; stroke: var(--green); stroke-width: 3; }
+.room-grid line { stroke: var(--green-faint); stroke-width: 1; }
+.room-head { fill: #000; stroke: var(--green-faint); }
+.room-icon { stroke-width: 2; }
+.room-title { fill: var(--green); font-family: var(--font); font-size: 15px; font-weight: bold; }
+.room-kind { fill: var(--grey); font-family: var(--font); font-size: 12px; }
+.room-door { fill: var(--green); }
+.room text, .room-door, .data-block, .room-icon { pointer-events: none; }
+.data-block rect { fill: #0d3318; stroke: #5dff8a; stroke-width: 1.5; }
+.data-block line { stroke: #5dff8a; stroke-width: 1.2; }

@@ -6,13 +6,19 @@ import type { Sound } from './sound';
 import { drawNodeShape, halfHeight, hasTag } from './shapes';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const W = 640;
-const H = 520;
+const W = 720;
+const H = 560;
 const CX = W / 2;
-const CY = 205;
-const CURRENT_R = 64;
-const NEIGHBOUR_R = 34;
-const RING = 145;
+const CY = 272;
+/** Half the size of the current node's room. */
+const ROOM = 145;
+/** Size of the room's cut corners and of its grid cells. */
+const CUT = 28;
+const CELL = 29;
+const NEIGHBOUR_R = 30;
+/** Neighbours sit on an ellipse around the room. */
+const RING_X = 305;
+const RING_Y = 232;
 
 const KIND_TAG: Record<NodeKind, string> = {
   gateway: 'GW',
@@ -184,8 +190,10 @@ export class NetworkView {
     this.drawStubs(current, positions, links);
     for (const p of positions) {
       const active = target !== null && (p.node.id === target || g.network.path(current.id, target)[0] === p.node.id);
-      svg('line', { x1: CX, y1: CY, x2: p.x, y2: p.y, class: active ? 'link link-active' : 'link' }, links);
+      const door = this.doorTowards(p.x, p.y);
+      svg('line', { x1: door.x, y1: door.y, x2: p.x, y2: p.y, class: active ? 'link link-active' : 'link' }, links);
     }
+    this.drawRoom(current, positions);
 
     positions.forEach((p, i) => {
       const isTarget = target !== null && g.network.path(current.id, target)[0] === p.node.id;
@@ -195,7 +203,6 @@ export class NetworkView {
         number: i + 1,
       });
     });
-    this.drawNode(current, CX, CY, CURRENT_R, { current: true, targeted: false });
     this.positions = new Map(positions.map((p) => [p.node.id, { x: p.x, y: p.y }]));
     this.avatar = this.drawAvatar();
     this.updateAvatar(true);
@@ -232,6 +239,87 @@ export class NetworkView {
     }
   }
 
+  /** Where the link towards (x, y) leaves the room. */
+  private doorTowards(x: number, y: number): { x: number; y: number } {
+    const dx = x - CX;
+    const dy = y - CY;
+    const k = ROOM / Math.max(Math.abs(dx), Math.abs(dy));
+    return { x: CX + dx * k, y: CY + dy * k };
+  }
+
+  /**
+   * The current node drawn as a large room with space inside for what it holds:
+   * agents, data blocks and other objects. For now only databases show contents.
+   */
+  private drawRoom(node: NodeDef, positions: { x: number; y: number }[]): void {
+    const kind = this.game.kindOf(node.id);
+    const name = this.game.nameOf(node.id);
+    const grp = svg('g', { class: `node node-current room kind-${kind}`, 'data-node': node.id, tabindex: 0 }, this.stage);
+    const [l, t, r, b] = [CX - ROOM, CY - ROOM, CX + ROOM, CY + ROOM];
+    const outline: [number, number][] = [
+      [l + CUT, t], [r - CUT, t], [r, t + CUT], [r, b - CUT], [r - CUT, b], [l + CUT, b], [l, b - CUT], [l, t + CUT],
+    ];
+    const points = outline.map(([x, y]) => `${x},${y}`).join(' ');
+    svg('polygon', { points, class: 'room-body' }, grp);
+    const clipId = 'room-clip';
+    svg('polygon', { points }, svg('clipPath', { id: clipId }, grp));
+    const grid = svg('g', { class: 'room-grid', 'clip-path': `url(#${clipId})` }, grp);
+    for (let x = l + CELL; x < r; x += CELL) svg('line', { x1: x, y1: t, x2: x, y2: b }, grid);
+    for (let y = t + CELL; y < b; y += CELL) svg('line', { x1: l, y1: y, x2: r, y2: y }, grid);
+
+    // Header: the node type's own shape as an icon, then its name and type.
+    const head = svg('rect', { x: l + CUT, y: t + 6, width: 2 * ROOM - 2 * CUT, height: 40, class: 'room-head' }, grp);
+    head.setAttribute('rx', '2');
+    drawNodeShape(kind, l + CUT + 20, t + 26, 11, 'node-body room-icon', grp);
+    const title = svg('text', { x: l + CUT + 42, y: t + 24, class: 'room-title' }, grp);
+    title.textContent = name;
+    const sub = svg('text', { x: l + CUT + 42, y: t + 40, class: 'room-kind' }, grp);
+    sub.textContent = KIND_LABEL[kind];
+
+    // Doors where the links leave.
+    for (const p of positions) {
+      const d = this.doorTowards(p.x, p.y);
+      svg('circle', { cx: d.x, cy: d.y, r: 5, class: 'room-door' }, grp);
+    }
+
+    if (kind === 'database') this.drawDataBlocks(node.id, grp);
+
+    const tip = svg('title', {}, grp);
+    tip.textContent = `${name} (you are here). Right-click for actions.`;
+    grp.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.openNodeMenu(node, e.clientX, e.clientY, true);
+    });
+  }
+
+  /** Placeholder data blocks: a fixed, id-based scatter so each database looks the same every visit. */
+  private drawDataBlocks(seedText: string, parent: Element): void {
+    let seed = 0;
+    for (const ch of seedText) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 2 ** 32;
+    };
+    const cols = Math.floor((2 * ROOM) / CELL);
+    const taken = new Set<string>();
+    const count = 6 + Math.floor(rand() * 7);
+    for (let i = 0, tries = 0; i < count && tries < 200; tries++) {
+      const c = 1 + Math.floor(rand() * (cols - 2));
+      const row = 2 + Math.floor(rand() * (cols - 3));
+      const key = `${c},${row}`;
+      const x = CX - ROOM + c * CELL;
+      const y = CY - ROOM + row * CELL;
+      // Keep clear of the avatar's spot in the middle and of cells already used.
+      if (taken.has(key) || (Math.abs(x + CELL / 2 - CX) < CELL * 1.5 && Math.abs(y + CELL / 2 - (CY + 40)) < CELL * 1.5)) continue;
+      taken.add(key);
+      i++;
+      const blk = svg('g', { class: 'data-block' }, parent);
+      svg('rect', { x: x + 5, y: y + 5, width: CELL - 10, height: CELL - 10 }, blk);
+      svg('line', { x1: x + 9, y1: y + 12, x2: x + CELL - 9, y2: y + 12 }, blk);
+      svg('line', { x1: x + 9, y1: y + 17, x2: x + CELL - 12, y2: y + 17 }, blk);
+    }
+  }
+
   /** The player: a simple stick figure standing in the current node, feet at (0, 0). */
   private drawAvatar(): SVGGElement {
     const root = svg('g', { class: 'avatar' }, this.stage);
@@ -249,15 +337,19 @@ export class NetworkView {
   private updateAvatar(instant = false): void {
     const av = this.avatar;
     if (!av) return;
-    const start = { x: CX, y: CY + CURRENT_R * 0.7 };
+    const start = { x: CX, y: CY + 60 };
     let pos = start;
     let facing = 1;
     const hop = this.game.nextHop;
     const end = hop ? this.positions.get(hop) : undefined;
     if (end) {
+      // Walk across the room to its door, then along the link.
       const t = this.game.hopProgress;
+      const door = this.doorTowards(end.x, end.y);
       const to = { x: end.x, y: end.y + NEIGHBOUR_R * 0.6 };
-      pos = { x: start.x + (to.x - start.x) * t, y: start.y + (to.y - start.y) * t };
+      const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, k: number) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
+      const split = 0.35;
+      pos = t < split ? lerp(start, door, t / split) : lerp(door, to, (t - split) / (1 - split));
       facing = to.x < start.x ? -1 : 1;
     }
     av.classList.toggle('is-walking', !!end && !this.game.paused);
@@ -285,9 +377,8 @@ export class NetworkView {
     }
     return items.map(({ node, angle }) => ({
       node,
-      x: CX + Math.cos(angle) * RING * 1.35,
-      // Nodes below sit a little lower, clear of the current node's name and kind label.
-      y: CY + Math.sin(angle) * RING + Math.max(0, Math.sin(angle)) * 48,
+      x: CX + Math.cos(angle) * RING_X,
+      y: CY + Math.sin(angle) * RING_Y,
     }));
   }
 
