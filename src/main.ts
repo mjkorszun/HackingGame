@@ -6,6 +6,7 @@ import { Console } from './ui/console';
 import { ContextMenu } from './ui/contextMenu';
 import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
+import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const game = new Game(testSystem);
 const menu = new ContextMenu();
@@ -39,38 +40,32 @@ function look(nodeId: string): void {
 
 const HELP = [
   'commands:',
-  '  help            this list',
-  '  look [node]     describe the current node, or another one',
-  '  go <node>       travel to a node (name or id)',
-  '  map             list all nodes',
-  '  pause / resume  stop or continue time (Space)',
-  '  stop            stop after the current hop (Esc)',
-  '  mute            sound on / off (M)',
-  '  clear           clear the console',
+  ...COMMANDS.map((c) => `  ${c.usage.padEnd(16)}${c.help}`),
+  'Tab completes commands and node names; Tab twice lists the options.',
   'mouse: click a node to connect, right-click for actions, click the minimap to travel.',
   'keys: Space pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
 ];
 
 function runCommand(raw: string): void {
-  const [cmd, ...rest] = raw.split(/\s+/);
-  const arg = rest.join(' ');
-  switch (cmd.toLowerCase()) {
+  const { word, arg } = splitCommand(raw);
+  const cmd = findCommand(word);
+  if (!cmd) {
+    error(`unknown command: ${word} (type help)`);
+    return;
+  }
+  switch (cmd.name) {
     case 'help':
-    case '?':
       HELP.forEach((l) => game.log(l, 'system'));
       break;
-    case 'look':
-    case 'l': {
+    case 'look': {
       const node = arg ? game.network.find(arg) : game.network.node(game.currentNode);
       if (node) look(node.id);
       else error(`unknown node: ${arg}`);
       break;
     }
-    case 'go':
-    case 'move':
     case 'connect': {
       const node = game.network.find(arg);
-      if (!arg) game.log('usage: go <node>', 'system');
+      if (!arg) game.log('usage: connect <node>', 'system');
       else if (!node) error(`unknown node: ${arg}`);
       else travel(node.id);
       break;
@@ -84,7 +79,6 @@ function runCommand(raw: string): void {
       game.setPaused(true);
       break;
     case 'resume':
-    case 'unpause':
       game.setPaused(false);
       break;
     case 'stop':
@@ -98,20 +92,35 @@ function runCommand(raw: string): void {
     case 'clear':
       term.clear();
       break;
-    default:
-      error(`unknown command: ${cmd} (type help)`);
   }
 }
+
+/** Everything the mouse and shortcuts do goes through a console command, shown in the console. */
+function ui(cmd: string): void {
+  flush();
+  term.echo(cmd);
+  runCommand(cmd);
+  flush();
+}
+
+const nodeName = (id: string) => game.network.node(id).name;
 
 const term = new Console(document.getElementById('console')!, (cmd) => {
   sfx.play('command');
   runCommand(cmd);
+  flush();
 });
 term.onType = () => sfx.play('key');
+term.completer = (value) =>
+  complete(value, {
+    names: (kind) =>
+      (kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes).map((n) => n.name),
+  });
 const view = new NetworkView(document.getElementById('view')!, game, menu, {
-  travel,
-  look,
-  togglePause: () => game.togglePause(),
+  travel: (id) => ui(`connect ${nodeName(id)}`),
+  look: (id) => ui(`look ${nodeName(id)}`),
+  togglePause: () => ui(game.paused ? 'resume' : 'pause'),
+  mute: () => ui('mute'),
   hover: () => sfx.play('hover'),
   sound: sfx,
 });
@@ -126,20 +135,16 @@ document.getElementById('view')!.appendChild(buildTag);
 document.addEventListener('keydown', (e) => {
   if (term.inputFocused) return;
   if (e.code === 'Space') {
-    game.togglePause();
+    ui(game.paused ? 'resume' : 'pause');
     e.preventDefault();
   } else if (e.key === 'Escape') {
     if (menu.open) menu.dismiss();
-    else if (game.isMoving) {
-      game.cancelTravel();
-      game.log('travel will stop after this hop', 'system');
-    }
+    else if (game.isMoving) ui('stop');
   } else if (e.key === 'm' || e.key === 'M') {
-    sfx.toggleMute();
-    game.log(sfx.muted ? 'sound off' : 'sound on', 'system');
+    ui('mute');
   } else if (/^[1-9]$/.test(e.key)) {
     const id = view.neighbourByNumber(Number(e.key));
-    if (id) travel(id);
+    if (id) ui(`connect ${nodeName(id)}`);
   } else if (e.key === 'Enter' || e.key === '`') {
     (document.querySelector('#console input') as HTMLInputElement | null)?.focus();
     e.preventDefault();
@@ -149,10 +154,8 @@ document.addEventListener('keydown', (e) => {
 function flush(): void {
   for (const ev of game.drainEvents()) {
     if (ev.type === 'log') term.write(ev.line);
-    else if (ev.type === 'progress') {
-      term.progress(ev.line);
-      if (ev.line.progress === 0 && !ev.line.done) sfx.play('hop');
-    }
+    else if (ev.type === 'progress') term.progress(ev.line);
+    else if (ev.type === 'hop') sfx.play('hop');
     else if (ev.type === 'moved') sfx.play('arrive');
     else if (ev.type === 'paused') sfx.play(ev.paused ? 'pause' : 'resume');
   }

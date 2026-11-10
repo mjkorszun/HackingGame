@@ -1,4 +1,5 @@
 import type { LogLine, ProgressLine } from '../sim/types';
+import type { Completion } from './commands';
 
 const BAR_WIDTH = 20;
 
@@ -21,6 +22,9 @@ export class Console {
 
   /** Called for every printable key typed into the prompt (for sound). */
   onType: (() => void) | null = null;
+  /** Tab completion for the prompt. */
+  completer: ((value: string) => Completion) | null = null;
+  private lastTabValue: string | null = null;
 
   constructor(root: HTMLElement, private readonly onCommand: (cmd: string) => void) {
     root.innerHTML = '';
@@ -67,9 +71,36 @@ export class Console {
     if (line.done) this.progressEls.delete(line.id);
   }
 
+  /** Shows a command issued from the graphical UI as if it had been typed. */
+  echo(cmd: string): void {
+    this.history.push(cmd);
+    this.historyPos = this.history.length;
+    this.write({ text: `> ${cmd}`, color: 'system' });
+  }
+
   clear(): void {
     this.log.innerHTML = '';
     this.progressEls.clear();
+  }
+
+  /** First Tab completes; a second Tab with nothing more to complete lists the options. */
+  private tab(): void {
+    if (!this.completer) return;
+    const current = this.input.value;
+    const result = this.completer(current);
+    if (result.value !== current) {
+      this.input.value = result.value;
+      this.lastTabValue = null;
+      this.onType?.();
+      return;
+    }
+    if (this.lastTabValue === current && result.options.length > 1) {
+      this.write({ text: `> ${current}`, color: 'system' });
+      this.write({ text: result.options.join('    '), color: 'normal' });
+      this.lastTabValue = null;
+      return;
+    }
+    this.lastTabValue = current;
   }
 
   private append(el: HTMLElement): void {
@@ -79,6 +110,13 @@ export class Console {
   }
 
   private onKey(e: KeyboardEvent): void {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.tab();
+      return;
+    }
+    this.lastTabValue = null;
     if (e.key.length === 1 || e.key === 'Backspace') this.onType?.();
     if (e.key === 'Enter') {
       const cmd = this.input.value.trim();

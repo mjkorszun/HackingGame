@@ -219,3 +219,6 @@ body {
   opacity: 0.7;
   pointer-events: none;
 }
+
+/* Text drawn on top of a node shape must not steal the pointer from it. */
+.node-tag, .node-num { pointer-events: none; }

@@ -10,7 +10,6 @@ interface MoveTask {
   to: string;
   elapsed: number;
   total: number;
-  progressId: number;
 }
 
 /**
@@ -26,7 +25,6 @@ export class Game {
   private move: MoveTask | null = null;
   private route: string[] = [];
   private events: SimEvent[] = [];
-  private nextProgressId = 1;
 
   constructor(system: SystemDef) {
     this.network = new Network(system);
@@ -102,9 +100,9 @@ export class Game {
   private startNextHop(): void {
     const to = this.route.shift();
     if (!to) return;
-    const id = this.nextProgressId++;
-    this.move = { to, elapsed: 0, total: MOVE_TICKS, progressId: id };
-    this.emitProgress();
+    this.move = { to, elapsed: 0, total: MOVE_TICKS };
+    this.events.push({ type: 'hop', nodeId: to });
+    this.log(`connecting to ${this.network.node(to).name}...`);
   }
 
   private updateMove(): void {
@@ -113,29 +111,13 @@ export class Game {
     move.elapsed++;
     if (move.elapsed >= move.total) {
       this.currentNode = move.to;
-      this.emitProgress(true);
       this.move = null;
       this.events.push({ type: 'moved', nodeId: this.currentNode });
       this.log(`arrived: ${this.network.node(this.currentNode).name}`, 'info');
       this.startNextHop();
-    } else {
-      this.emitProgress();
     }
   }
 
-  private emitProgress(done = false): void {
-    const move = this.move;
-    if (!move) return;
-    this.events.push({
-      type: 'progress',
-      line: {
-        id: move.progressId,
-        label: `connecting to ${this.network.node(move.to).name}`,
-        progress: done ? 1 : move.elapsed / move.total,
-        done,
-      },
-    });
-  }
 
   log(text: string, color: LogColor = 'normal'): void {
     this.events.push({ type: 'log', line: { text, color } });

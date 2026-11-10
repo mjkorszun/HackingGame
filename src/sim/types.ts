@@ -38,5 +38,6 @@ export interface ProgressLine {
 export type SimEvent =
   | { type: 'log'; line: LogLine }
   | { type: 'progress'; line: ProgressLine }
+  | { type: 'hop'; nodeId: string }
   | { type: 'moved'; nodeId: string }
   | { type: 'paused'; paused: boolean };

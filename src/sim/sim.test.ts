@@ -76,13 +76,14 @@ describe('Game', () => {
     expect(g.currentNode).toBe('edge');
   });
 
-  it('emits progress and arrival events', () => {
+  it('emits hop and arrival events', () => {
     const g = new Game(testSystem);
     g.drainEvents();
     g.travelTo('edge');
     run(g, MOVE_TICKS);
     const events = g.drainEvents();
-    expect(events.some((e) => e.type === 'progress' && e.line.done)).toBe(true);
+    expect(events.some((e) => e.type === 'hop' && e.nodeId === 'edge')).toBe(true);
+    expect(events.some((e) => e.type === 'progress')).toBe(false);
     expect(events.some((e) => e.type === 'moved' && e.nodeId === 'edge')).toBe(true);
   });
 });
