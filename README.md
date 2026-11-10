@@ -26,4 +26,9 @@ npm run build     # type check + production build into dist/
 - Click a neighbouring node to connect to it. Click a node on the minimap to travel there hop by hop.
 - Right-click any node for its actions.
 - Space: pause / resume. 1-9: connect to the numbered neighbour. Esc: stop after the current hop. Enter: focus the console.
-- Console commands: `help`, `look`, `go <node>`, `map`, `pause`, `resume`, `stop`, `clear`.
+- M: sound on / off. Volume slider in the top bar.
+- Console commands: `help`, `look`, `go <node>`, `map`, `pause`, `resume`, `stop`, `mute`, `clear`.
+
+## Credits
+
+Sound effects: [Kenney](https://kenney.nl), CC0.

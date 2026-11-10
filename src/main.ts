@@ -5,19 +5,28 @@ import { Game, TICKS_PER_SECOND } from './sim/game';
 import { Console } from './ui/console';
 import { ContextMenu } from './ui/contextMenu';
 import { KIND_LABEL, NetworkView } from './ui/networkView';
+import { Sound } from './ui/sound';
 
 const game = new Game(testSystem);
 const menu = new ContextMenu();
+const sfx = new Sound(import.meta.env.BASE_URL);
+menu.onEvent = (e) => sfx.play(e === 'open' ? 'menuOpen' : e === 'item' ? 'menuItem' : 'menuClose');
 
 function travel(nodeId: string): void {
   const node = game.network.node(nodeId);
   if (nodeId === game.currentNode && !game.isMoving) {
     game.log(`already at ${node.name}`, 'system');
   } else if (!game.travelTo(nodeId)) {
-    game.log(`no route to ${node.name}`, 'alarm1');
-  } else if (game.paused) {
-    game.log(`route set to ${node.name} (paused)`, 'system');
+    error(`no route to ${node.name}`);
+  } else {
+    sfx.play('connect');
+    if (game.paused) game.log(`route set to ${node.name} (paused)`, 'system');
   }
+}
+
+function error(text: string): void {
+  game.log(text, 'alarm1');
+  sfx.play('error');
 }
 
 function look(nodeId: string): void {
@@ -34,9 +43,10 @@ const HELP = [
   '  map             list all nodes',
   '  pause / resume  stop or continue time (Space)',
   '  stop            stop after the current hop (Esc)',
+  '  mute            sound on / off (M)',
   '  clear           clear the console',
   'mouse: click a node to connect, right-click for actions, click the minimap to travel.',
-  'keys: Space pause, 1-9 connect to a numbered neighbour, Esc stop travelling.',
+  'keys: Space pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
 ];
 
 function runCommand(raw: string): void {
@@ -51,7 +61,7 @@ function runCommand(raw: string): void {
     case 'l': {
       const node = arg ? game.network.find(arg) : game.network.node(game.currentNode);
       if (node) look(node.id);
-      else game.log(`unknown node: ${arg}`, 'alarm1');
+      else error(`unknown node: ${arg}`);
       break;
     }
     case 'go':
@@ -59,7 +69,7 @@ function runCommand(raw: string): void {
     case 'connect': {
       const node = game.network.find(arg);
       if (!arg) game.log('usage: go <node>', 'system');
-      else if (!node) game.log(`unknown node: ${arg}`, 'alarm1');
+      else if (!node) error(`unknown node: ${arg}`);
       else travel(node.id);
       break;
     }
@@ -79,19 +89,29 @@ function runCommand(raw: string): void {
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
       break;
+    case 'mute':
+      sfx.toggleMute();
+      game.log(sfx.muted ? 'sound off' : 'sound on', 'system');
+      break;
     case 'clear':
       term.clear();
       break;
     default:
-      game.log(`unknown command: ${cmd} (type help)`, 'alarm1');
+      error(`unknown command: ${cmd} (type help)`);
   }
 }
 
-const term = new Console(document.getElementById('console')!, runCommand);
+const term = new Console(document.getElementById('console')!, (cmd) => {
+  sfx.play('command');
+  runCommand(cmd);
+});
+term.onType = () => sfx.play('key');
 const view = new NetworkView(document.getElementById('view')!, game, menu, {
   travel,
   look,
   togglePause: () => game.togglePause(),
+  hover: () => sfx.play('hover'),
+  sound: sfx,
 });
 
 game.log('type help for commands', 'system');
@@ -102,11 +122,14 @@ document.addEventListener('keydown', (e) => {
     game.togglePause();
     e.preventDefault();
   } else if (e.key === 'Escape') {
-    if (menu.open) menu.hide();
+    if (menu.open) menu.dismiss();
     else if (game.isMoving) {
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
     }
+  } else if (e.key === 'm' || e.key === 'M') {
+    sfx.toggleMute();
+    game.log(sfx.muted ? 'sound off' : 'sound on', 'system');
   } else if (/^[1-9]$/.test(e.key)) {
     const id = view.neighbourByNumber(Number(e.key));
     if (id) travel(id);
@@ -120,6 +143,8 @@ function flush(): void {
   for (const ev of game.drainEvents()) {
     if (ev.type === 'log') term.write(ev.line);
     else if (ev.type === 'progress') term.progress(ev.line);
+    else if (ev.type === 'moved') sfx.play('arrive');
+    else if (ev.type === 'paused') sfx.play(ev.paused ? 'pause' : 'resume');
   }
 }
 
