@@ -1,0 +1,175 @@
+:root {
+  --bg: #000;
+  --green: #33ff66;
+  --green-dim: #1a7a33;
+  --green-faint: #0d3318;
+  --blue: #4aa8ff;
+  --yellow: #ffe14a;
+  --orange: #ff9a2e;
+  --red: #ff4040;
+  --grey: #7a8a80;
+  --font: 'Consolas', 'Menlo', 'DejaVu Sans Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--green);
+  font-family: var(--font);
+  font-size: 14px;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100vh;
+}
+
+/* ---------- console (left) ---------- */
+#console {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 8px 10px;
+  border-right: 1px solid var(--green-faint);
+  cursor: text;
+}
+
+.log {
+  flex: 1;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+.prompt {
+  display: flex;
+  color: var(--green);
+  padding-top: 4px;
+}
+
+.prompt input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--green);
+  font: inherit;
+  caret-color: var(--green);
+}
+
+.c-normal { color: var(--green); }
+.c-info { color: var(--blue); }
+.c-system { color: var(--grey); }
+.c-alarm1 { color: var(--yellow); }
+.c-alarm2 { color: var(--orange); }
+.c-alarm3 { color: var(--red); }
+
+/* ---------- graphical view (right) ---------- */
+#view {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  user-select: none;
+}
+
+.view-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--green-faint);
+}
+
+.sys-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.sys-name { font-weight: bold; }
+.sys-loc { color: var(--grey); font-size: 12px; }
+
+.alarm { padding: 2px 8px; border: 1px solid currentColor; }
+.alarm-green { color: var(--green); }
+
+.clock { color: var(--grey); min-width: 70px; text-align: right; }
+
+.pause-btn {
+  background: transparent;
+  color: var(--green);
+  border: 1px solid var(--green-dim);
+  font: inherit;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.pause-btn:hover { background: var(--green-faint); }
+.view-header.is-paused .pause-btn { color: var(--yellow); border-color: var(--yellow); }
+.view-header.is-paused .clock { color: var(--yellow); }
+
+.stage {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.link { stroke: var(--green-dim); stroke-width: 2; }
+.link-active { stroke: var(--blue); stroke-dasharray: 6 6; animation: flow 0.6s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -12; } }
+
+.node { cursor: pointer; outline: none; }
+.node-current { cursor: default; }
+.node-body { fill: #000; stroke: var(--green); stroke-width: 2; }
+.node-current .node-body { stroke-width: 3; fill: var(--green-faint); }
+.node-neighbour:hover .node-body,
+.node-neighbour:focus .node-body { fill: var(--green-faint); stroke: #8dffad; }
+.node-targeted .node-body { stroke: var(--blue); }
+.node-tag { fill: var(--green); text-anchor: middle; font-family: var(--font); font-weight: bold; }
+.node-name { fill: var(--green); text-anchor: middle; font-family: var(--font); font-size: 13px; }
+.node-current .node-name { font-size: 15px; font-weight: bold; }
+.node-kind { fill: var(--grey); text-anchor: middle; font-family: var(--font); font-size: 12px; }
+.node-num { fill: var(--grey); text-anchor: middle; font-family: var(--font); font-size: 11px; }
+
+.minimap-frame { fill: #000; stroke: var(--green-faint); }
+.minimap-label { fill: var(--grey); font-family: var(--font); font-size: 10px; }
+.mini-link { stroke: var(--green-dim); stroke-width: 1; }
+.mini-node { fill: #000; stroke: var(--green); stroke-width: 1.5; cursor: pointer; }
+.mini-node:hover { fill: var(--green-dim); }
+.mini-current { fill: var(--green); }
+.mini-target { stroke: var(--blue); fill: var(--blue); }
+
+/* ---------- context menu ---------- */
+.ctx-menu {
+  position: fixed;
+  z-index: 10;
+  min-width: 170px;
+  background: #000;
+  border: 1px solid var(--green);
+  padding: 2px 0;
+  font-family: var(--font);
+}
+.ctx-menu[hidden] { display: none; }
+.ctx-title { color: var(--grey); padding: 4px 10px; border-bottom: 1px solid var(--green-faint); font-size: 12px; }
+.ctx-menu button {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--green);
+  font: inherit;
+  text-align: left;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.ctx-menu button:hover:not(:disabled) { background: var(--green-faint); }
+.ctx-menu button:disabled { color: var(--green-dim); cursor: default; }
+.ctx-hint { color: var(--grey); font-size: 12px; }
