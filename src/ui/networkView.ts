@@ -3,6 +3,7 @@ import { TICKS_PER_SECOND } from '../sim/game';
 import type { NodeDef, NodeKind } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
 import type { Sound } from './sound';
+import { drawNodeShape, halfHeight, hasTag } from './shapes';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const W = 640;
@@ -14,21 +15,23 @@ const NEIGHBOUR_R = 34;
 const RING = 145;
 
 const KIND_TAG: Record<NodeKind, string> = {
-  entry: 'GW',
+  gateway: 'GW',
   router: 'RT',
-  auth: 'ID',
-  data: 'DB',
+  identity: 'ID',
+  database: 'DB',
   camera: 'CAM',
-  core: 'AI',
+  overseer: 'AI',
+  unknown: '?',
 };
 
 const KIND_LABEL: Record<NodeKind, string> = {
-  entry: 'gateway',
+  gateway: 'gateway',
   router: 'router',
-  auth: 'identity service',
-  data: 'database table',
+  identity: 'identity service',
+  database: 'database table',
   camera: 'camera hub',
-  core: 'system AI',
+  overseer: 'system AI (overseer)',
+  unknown: 'unknown',
 };
 
 function svg<K extends keyof SVGElementTagNameMap>(
@@ -243,15 +246,25 @@ export class NetworkView {
     else cls.push('node-neighbour');
     if (opts.targeted) cls.push('node-targeted');
     const grp = svg('g', { class: cls.join(' '), 'data-node': node.id, tabindex: 0 }, this.stage);
-    const body = svg('circle', { cx: x, cy: y, r, class: 'node-body' }, grp);
+    const body = drawNodeShape(node.kind, x, y, r, 'node-body', grp);
     // Hover sound only on the node shape itself, not on its labels.
     if (!opts.current) body.addEventListener('mouseenter', () => this.actions.hover());
-    const tag = svg('text', { x, y: y + (opts.current ? -14 : 5), class: 'node-tag', 'font-size': opts.current ? 26 : 15 }, grp);
-    tag.textContent = KIND_TAG[node.kind];
-    const name = svg('text', { x, y: y + r + 18, class: 'node-name' }, grp);
-    name.textContent = node.name;
-    if (opts.current) {
-      const kind = svg('text', { x, y: y + r + 36, class: 'node-kind' }, grp);
+    if (node.kind === 'unknown') {
+      // An unrecognised node shows nothing but a question mark.
+      const size = opts.current ? 34 : 30;
+      const tag = svg('text', { x, y: opts.current ? y - 12 : y + size * 0.35, class: 'node-tag', 'font-size': size }, grp);
+      tag.textContent = '?';
+    } else if (hasTag(node.kind)) {
+      const tag = svg('text', { x, y: y + (opts.current ? -14 : 5), class: 'node-tag', 'font-size': opts.current ? 22 : 13 }, grp);
+      tag.textContent = KIND_TAG[node.kind];
+    }
+    const bottom = y + r * Math.max(halfHeight(node.kind), opts.current ? 1 : 0);
+    if (node.kind !== 'unknown') {
+      const name = svg('text', { x, y: bottom + 18, class: 'node-name' }, grp);
+      name.textContent = node.name;
+    }
+    if (opts.current && node.kind !== 'unknown') {
+      const kind = svg('text', { x, y: bottom + 36, class: 'node-kind' }, grp);
       kind.textContent = KIND_LABEL[node.kind];
     }
     const title = svg('title', {}, grp);
@@ -311,7 +324,8 @@ export class NetworkView {
       const cls = ['mini-node'];
       if (n.id === g.currentNode) cls.push('mini-current');
       if (n.id === target) cls.push('mini-target');
-      const dot = svg('circle', { cx: sx(n.x), cy: sy(n.y), r: n.id === g.currentNode ? 6 : 4.5, class: cls.join(' '), 'data-mini': n.id }, mini);
+      const dot = drawNodeShape(n.kind, sx(n.x), sy(n.y), n.id === g.currentNode ? 6 : 4.5, cls.join(' '), mini);
+      dot.setAttribute('data-mini', n.id);
       const t = svg('title', {}, dot);
       t.textContent = n.name;
       dot.addEventListener('mouseenter', () => this.actions.hover());
