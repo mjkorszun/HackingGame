@@ -28,7 +28,7 @@ describe('Network', () => {
     expect(net.path('gw', 'gw')).toEqual([]);
   });
   it('finds nodes by id or name', () => {
-    expect(net.find('ORDERS TABLE')?.id).toBe('orders');
+    expect(net.find('ORDERS DB')?.id).toBe('orders');
     expect(net.find('cams')?.id).toBe('cams');
   });
   it('rejects broken links', () => {
@@ -124,5 +124,44 @@ describe('hidden nodes', () => {
     expect(game.nameOf('staff')).toBe('Staff Records');
     expect(game.kindOf('staff')).toBe('database');
     expect(game.findNode('staff records')?.id).toBe('staff');
+  });
+});
+
+describe('node actions', () => {
+  function at(id: string) {
+    const g = new Game(testSystem);
+    g.travelTo(id);
+    run(g, MOVE_TICKS * 20);
+    expect(g.currentNode).toBe(id);
+    return g;
+  }
+
+  it('download-map in the overseer core identifies every node', () => {
+    const g = at('ai');
+    expect(g.isIdentified('orders')).toBe(false);
+    expect(g.runAction('download-map')).toBe(true);
+    expect(g.isIdentified('orders')).toBe(true);
+    expect(g.nameOf('orders')).toBe('Orders DB');
+  });
+
+  it('refuses actions that need a privilege the player lacks', () => {
+    const g = at('ai');
+    expect(g.runAction('cancel-alarm')).toBe(false);
+    g.privileges.add('overseer');
+    expect(g.runAction('cancel-alarm')).toBe(true);
+  });
+
+  it('only offers actions of the current node', () => {
+    const g = new Game(testSystem);
+    expect(g.currentActions).toEqual([]);
+    expect(g.runAction('download-map')).toBe(false);
+  });
+
+  it('a honeypot looks like its disguise and raises the alarm when used', () => {
+    const g = at('trap');
+    expect(g.kindOf('trap')).toBe('database');
+    g.drainEvents();
+    expect(g.runAction('query')).toBe(true);
+    expect(g.drainEvents().some((e) => e.type === 'log' && e.line.color === 'alarm3')).toBe(true);
   });
 });

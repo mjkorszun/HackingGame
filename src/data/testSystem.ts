@@ -1,8 +1,8 @@
 import type { SystemDef } from '../sim/types';
 
 /**
- * A small hand-made system for the skeleton. Placeholder content only:
- * real systems will be generated later.
+ * A small hand-made system for the skeleton, with one node of every type.
+ * Placeholder content only: real systems will be generated later.
  */
 export const testSystem: SystemDef = {
   id: 'halcyon',
@@ -11,23 +11,44 @@ export const testSystem: SystemDef = {
   entry: 'gw',
   nodes: [
     { id: 'gw', name: 'Public Gateway', kind: 'gateway', x: 0, y: 2 },
-    { id: 'edge', name: 'Edge Router', kind: 'router', x: 1, y: 2 },
+    { id: 'edge', name: 'Edge Relay', kind: 'relay', x: 1, y: 2 },
     { id: 'auth', name: 'Auth Service', kind: 'identity', x: 2, y: 1 },
-    { id: 'orders', name: 'Orders Table', kind: 'database', x: 2, y: 3, hidden: true },
-    { id: 'core', name: 'Service Mesh', kind: 'router', x: 3, y: 2 },
+    { id: 'orders', name: 'Orders DB', kind: 'database', x: 2, y: 3, hidden: true },
+    { id: 'logs', name: 'Audit Log', kind: 'monitoring', x: 2, y: 0 },
+    { id: 'trap', name: 'HR Archive', kind: 'honeypot', disguise: 'database', x: 2, y: 4 },
+    { id: 'core', name: 'Service Mesh', kind: 'relay', x: 3, y: 2 },
     { id: 'cams', name: 'Camera Hub', kind: 'camera', x: 4, y: 1 },
     { id: 'staff', name: 'Staff Records', kind: 'database', x: 4, y: 3, hidden: true },
-    { id: 'ai', name: 'Overseer Core', kind: 'overseer', x: 5, y: 2 },
+    { id: 'sec', name: 'Building Security', kind: 'security', x: 4, y: 0 },
+    { id: 'compute', name: 'Compute Cluster', kind: 'compute', x: 4, y: 4 },
+    { id: 'orch', name: 'Orchestrator', kind: 'orchestrator', x: 5, y: 2 },
+    { id: 'vault', name: 'Key Vault', kind: 'vault', x: 5, y: 0 },
+    { id: 'phys', name: 'Facility Control', kind: 'physical', x: 5, y: 4 },
+    { id: 'ai', name: 'Overseer Core', kind: 'overseer', x: 6, y: 2 },
+    { id: 'fleet', name: 'Delivery Fleet', kind: 'vehicle', x: 6, y: 4 },
+    { id: 'ads', name: 'Perimeter Defence', kind: 'ads', x: 7, y: 1 },
+    { id: 'uplink', name: 'Backup Uplink', kind: 'uplink', x: 7, y: 3 },
   ],
   links: [
     ['gw', 'edge'],
     ['edge', 'auth'],
     ['edge', 'orders'],
+    ['auth', 'logs'],
+    ['orders', 'trap'],
     ['auth', 'core'],
     ['orders', 'core'],
     ['core', 'cams'],
     ['core', 'staff'],
-    ['cams', 'ai'],
-    ['staff', 'ai'],
+    ['cams', 'sec'],
+    ['staff', 'compute'],
+    ['cams', 'orch'],
+    ['staff', 'orch'],
+    ['sec', 'vault'],
+    ['compute', 'phys'],
+    ['orch', 'ai'],
+    ['vault', 'ai'],
+    ['ai', 'ads'],
+    ['ai', 'uplink'],
+    ['phys', 'fleet'],
   ],
 };

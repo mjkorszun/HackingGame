@@ -35,6 +35,10 @@ function error(text: string): void {
 function look(nodeId: string): void {
   const links = game.network.neighbours(nodeId).map((n) => game.nameOf(n.id)).join(', ');
   game.log(`${game.nameOf(nodeId)}: ${KIND_LABEL[game.kindOf(nodeId)]}. links: ${links}`);
+  if (nodeId !== game.currentNode) return;
+  for (const act of game.currentActions) {
+    game.log(`  do ${act.id.padEnd(16)}${act.help}${act.requires ? ` (needs ${act.requires} privilege)` : ''}`);
+  }
 }
 
 const HELP = [
@@ -69,6 +73,10 @@ function runCommand(raw: string): void {
       else travel(node.id);
       break;
     }
+    case 'do':
+      if (!arg) game.log('usage: do <action> (look lists the actions here)', 'system');
+      else if (!game.runAction(arg)) sfx.play('error');
+      break;
     case 'map':
       for (const n of game.network.def.nodes) {
         const known = game.isIdentified(n.id);
@@ -115,11 +123,14 @@ term.onType = () => sfx.play('key');
 term.completer = (value) =>
   complete(value, {
     names: (kind) =>
-      [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes).map((n) => game.nameOf(n.id)))],
+      kind === 'action'
+        ? game.currentActions.map((a) => a.id)
+        : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes).map((n) => game.nameOf(n.id)))],
   });
 const view = new NetworkView(document.getElementById('view')!, game, menu, {
   travel: (id) => ui(`connect ${nodeName(id)}`),
   look: (id) => ui(`look ${nodeName(id)}`),
+  act: (id) => ui(`do ${id}`),
   togglePause: () => ui(game.paused ? 'resume' : 'pause'),
   mute: () => ui('mute'),
   hover: () => sfx.play('hover'),

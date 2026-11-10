@@ -230,3 +230,13 @@ body {
 .node-tag, .node-num { pointer-events: none; }
 
 .link-stub { stroke-width: 2; }
+
+/* Scrollbars in the game's colours instead of the browser's default. */
+* { scrollbar-width: thin; scrollbar-color: var(--green-dim) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--green-dim); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--green); }
+
+/* A black halo keeps node labels readable where a link runs behind them. */
+.node-name, .node-kind { paint-order: stroke; stroke: #000; stroke-width: 4px; stroke-linejoin: round; }
