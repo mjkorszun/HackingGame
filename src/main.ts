@@ -10,6 +10,8 @@ import { Sound } from './ui/sound';
 const game = new Game(testSystem);
 const menu = new ContextMenu();
 const sfx = new Sound(import.meta.env.BASE_URL);
+// Browsers block audio until the first click or key, so the link-up sound plays then.
+sfx.onReady = () => sfx.play('linkUp');
 menu.onEvent = (e) => sfx.play(e === 'open' ? 'menuOpen' : e === 'item' ? 'menuItem' : 'menuClose');
 
 function travel(nodeId: string): void {
@@ -142,7 +144,10 @@ document.addEventListener('keydown', (e) => {
 function flush(): void {
   for (const ev of game.drainEvents()) {
     if (ev.type === 'log') term.write(ev.line);
-    else if (ev.type === 'progress') term.progress(ev.line);
+    else if (ev.type === 'progress') {
+      term.progress(ev.line);
+      if (ev.line.progress === 0 && !ev.line.done) sfx.play('connecting');
+    }
     else if (ev.type === 'moved') sfx.play('arrive');
     else if (ev.type === 'paused') sfx.play(ev.paused ? 'pause' : 'resume');
   }

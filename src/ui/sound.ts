@@ -3,7 +3,9 @@
  * Uses Web Audio so short sounds can overlap with no delay.
  */
 const SOUNDS = {
+  linkUp: 'three_tone_1.ogg',
   connect: 'select_001.wav',
+  connecting: 'computer_noise_001_1s.ogg',
   arrive: 'confirmation_001.wav',
   pause: 'low_down.ogg',
   resume: 'two_tone_1.ogg',
@@ -40,6 +42,8 @@ export class Sound {
   private loading: Promise<void> | null = null;
   volume: number;
   muted: boolean;
+  /** Called once, when audio is unlocked by the first user gesture and sounds are loaded. */
+  onReady: (() => void) | null = null;
 
   constructor(private readonly baseUrl: string) {
     const s = loadSettings();
@@ -87,7 +91,7 @@ export class Sound {
     this.gain = this.ctx.createGain();
     this.gain.gain.value = this.volume;
     this.gain.connect(this.ctx.destination);
-    this.loading = this.loadAll();
+    this.loading = this.loadAll().then(() => this.onReady?.());
   }
 
   private async loadAll(): Promise<void> {
