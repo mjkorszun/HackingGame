@@ -16,6 +16,8 @@ const ROOM = 145;
 const CUT = 28;
 const CELL = 29;
 const NEIGHBOUR_R = 30;
+/** Size of the player figure (1 = original). */
+const AVATAR_SCALE = 0.8;
 /** Neighbours sit on an ellipse around the room. */
 const RING_X = 305;
 const RING_Y = 232;
@@ -355,7 +357,7 @@ export class NetworkView {
     av.classList.toggle('is-walking', !!end && !this.game.paused);
     av.classList.toggle('no-transition', instant);
     av.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
-    (av.firstElementChild as SVGGElement).style.transform = `scaleX(${facing})`;
+    (av.firstElementChild as SVGGElement).style.transform = `scale(${facing * AVATAR_SCALE}, ${AVATAR_SCALE})`;
   }
 
   /** Places neighbours on a ring, in the direction they lie on the system map. */
