@@ -223,3 +223,7 @@ body {
 
 /* Text drawn on top of a node shape must not steal the pointer from it. */
 .node-tag, .node-num { pointer-events: none; }
+
+.node-pupil { fill: none; stroke: var(--green); stroke-width: 2; pointer-events: none; }
+.node-current .node-pupil { stroke-width: 3; }
+.minimap .node-pupil { stroke-width: 1; }

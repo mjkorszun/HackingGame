@@ -1,5 +1,5 @@
 /** Kinds of nodes available in the skeleton. More will come later. */
-export type NodeKind = 'entry' | 'router' | 'auth' | 'data' | 'camera' | 'core';
+export type NodeKind = 'gateway' | 'router' | 'identity' | 'database' | 'camera' | 'overseer' | 'unknown';
 
 export interface NodeDef {
   id: string;
