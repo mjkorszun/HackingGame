@@ -27,7 +27,8 @@ npm run build     # type check + production build into dist/
 - Right-click any node for its actions.
 - Space: pause / resume. 1-9: connect to the numbered neighbour. Esc: stop after the current hop. Enter: focus the console.
 - M: sound on / off. Volume slider in the top bar.
-- Console commands: `help`, `look`, `go <node>`, `map`, `pause`, `resume`, `stop`, `mute`, `clear`.
+- Console commands: `help`, `connect <node>`, `look [node]`, `map`, `pause`, `resume`, `stop`, `mute`, `clear`. Tab completes commands and node names; Tab twice lists the options.
+- Every mouse action and shortcut runs the matching console command and shows it in the console.
 
 ## Credits
 

@@ -54,6 +54,7 @@ export interface ViewActions {
   travel(nodeId: string): void;
   look(nodeId: string): void;
   togglePause(): void;
+  mute(): void;
   hover(): void;
   sound: Sound;
 }
@@ -104,7 +105,7 @@ export class NetworkView {
     this.muteBtn.type = 'button';
     this.muteBtn.className = 'mute-btn';
     this.muteBtn.title = 'Sound on / off (M)';
-    this.muteBtn.addEventListener('click', () => actions.sound.toggleMute());
+    this.muteBtn.addEventListener('click', () => actions.mute());
     const vol = document.createElement('input');
     vol.type = 'range';
     vol.min = '0';

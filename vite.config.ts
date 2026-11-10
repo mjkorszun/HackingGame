@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 
-/** Build label: the number of the last merged pull request (from the squash commit title) and the build date. */
+/** Build label: the number of the last merged pull request (from the squash commit title) and the build date and time. */
 function buildLabel(): string {
   let pr = 'dev';
   try {
@@ -11,7 +11,8 @@ function buildLabel(): string {
   } catch {
     /* not a git checkout */
   }
-  const date = new Date().toISOString().slice(0, 10);
+  // Build time in Polish local time, e.g. 2026-11-10 22:15.
+  const date = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Warsaw', dateStyle: 'short', timeStyle: 'short' });
   return `v${pr} · ${date}`;
 }
 
