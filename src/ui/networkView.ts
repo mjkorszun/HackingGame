@@ -140,14 +140,14 @@ export class NetworkView {
     this.muteBtn.textContent = this.actions.sound.muted ? 'SND OFF' : 'SND ON';
     this.muteBtn.classList.toggle('is-muted', this.actions.sound.muted);
     this.header.classList.toggle('is-paused', this.game.paused);
-    const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}`;
+    const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}`;
     if (key !== this.lastKey) this.render();
     this.updateAvatar();
   }
 
   private render(): void {
     const g = this.game;
-    this.lastKey = `${g.currentNode}|${g.moveTarget}|${g.paused}`;
+    this.lastKey = `${g.currentNode}|${g.moveTarget}|${g.paused}|${g.identifiedCount}`;
     this.stage.innerHTML = '';
     const current = g.network.node(g.currentNode);
     const neighbours = g.network.neighbours(current.id);
@@ -156,6 +156,7 @@ export class NetworkView {
     const target = g.moveTarget;
 
     const links = svg('g', { class: 'links' }, this.stage);
+    this.drawStubs(current, positions, links);
     for (const p of positions) {
       const active = target !== null && (p.node.id === target || g.network.path(current.id, target)[0] === p.node.id);
       svg('line', { x1: CX, y1: CY, x2: p.x, y2: p.y, class: active ? 'link link-active' : 'link' }, links);
@@ -174,6 +175,36 @@ export class NetworkView {
     this.avatar = this.drawAvatar();
     this.updateAvatar(true);
     this.drawMinimap();
+  }
+
+  /**
+   * Short fading lines from each neighbour towards the nodes beyond it, so it is
+   * clear the network goes on. Two visible neighbours linked together get a full line.
+   */
+  private drawStubs(current: NodeDef, positions: { node: NodeDef; x: number; y: number }[], parent: Element): void {
+    const g = this.game;
+    const shown = new Map(positions.map((p) => [p.node.id, p]));
+    const defs = svg('defs', {}, parent);
+    let n = 0;
+    for (const p of positions) {
+      for (const far of g.network.neighbours(p.node.id)) {
+        if (far.id === current.id) continue;
+        const other = shown.get(far.id);
+        if (other) {
+          if (p.node.id < far.id) svg('line', { x1: p.x, y1: p.y, x2: other.x, y2: other.y, class: 'link' }, parent);
+          continue;
+        }
+        const a = Math.atan2(far.y - p.node.y, far.x - p.node.x);
+        const [dx, dy] = [Math.cos(a), Math.sin(a)];
+        const [x1, y1] = [p.x + dx * NEIGHBOUR_R * 0.8, p.y + dy * NEIGHBOUR_R * 0.8];
+        const [x2, y2] = [p.x + dx * (NEIGHBOUR_R + 60), p.y + dy * (NEIGHBOUR_R + 60)];
+        const id = `stub-${n++}`;
+        const grad = svg('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1, y1, x2, y2 }, defs);
+        svg('stop', { offset: '0', 'stop-color': '#1a7a33', 'stop-opacity': 1 }, grad);
+        svg('stop', { offset: '1', 'stop-color': '#1a7a33', 'stop-opacity': 0 }, grad);
+        svg('line', { x1, y1, x2, y2, class: 'link-stub', stroke: `url(#${id})` }, parent);
+      }
+    }
   }
 
   /** The player: a simple stick figure standing in the current node, feet at (0, 0). */
@@ -241,34 +272,36 @@ export class NetworkView {
     r: number,
     opts: { current: boolean; targeted: boolean; number?: number },
   ): void {
-    const cls = ['node', `kind-${node.kind}`];
+    const kind = this.game.kindOf(node.id);
+    const nodeName = this.game.nameOf(node.id);
+    const cls = ['node', `kind-${kind}`];
     if (opts.current) cls.push('node-current');
     else cls.push('node-neighbour');
     if (opts.targeted) cls.push('node-targeted');
     const grp = svg('g', { class: cls.join(' '), 'data-node': node.id, tabindex: 0 }, this.stage);
-    const body = drawNodeShape(node.kind, x, y, r, 'node-body', grp);
+    const body = drawNodeShape(kind, x, y, r, 'node-body', grp);
     // Hover sound only on the node shape itself, not on its labels.
     if (!opts.current) body.addEventListener('mouseenter', () => this.actions.hover());
-    if (node.kind === 'unknown') {
+    if (kind === 'unknown') {
       // An unrecognised node shows nothing but a question mark.
       const size = opts.current ? 34 : 30;
       const tag = svg('text', { x, y: opts.current ? y - 12 : y + size * 0.35, class: 'node-tag', 'font-size': size }, grp);
       tag.textContent = '?';
-    } else if (hasTag(node.kind)) {
+    } else if (hasTag(kind)) {
       const tag = svg('text', { x, y: y + (opts.current ? -14 : 5), class: 'node-tag', 'font-size': opts.current ? 22 : 13 }, grp);
-      tag.textContent = KIND_TAG[node.kind];
+      tag.textContent = KIND_TAG[kind];
     }
-    const bottom = y + r * Math.max(halfHeight(node.kind), opts.current ? 1 : 0);
-    if (node.kind !== 'unknown') {
+    const bottom = y + r * Math.max(halfHeight(kind), opts.current ? 1 : 0);
+    if (kind !== 'unknown') {
       const name = svg('text', { x, y: bottom + 18, class: 'node-name' }, grp);
-      name.textContent = node.name;
+      name.textContent = nodeName;
     }
-    if (opts.current && node.kind !== 'unknown') {
-      const kind = svg('text', { x, y: bottom + 36, class: 'node-kind' }, grp);
-      kind.textContent = KIND_LABEL[node.kind];
+    if (opts.current && kind !== 'unknown') {
+      const label = svg('text', { x, y: bottom + 36, class: 'node-kind' }, grp);
+      label.textContent = KIND_LABEL[kind];
     }
     const title = svg('title', {}, grp);
-    title.textContent = opts.current ? `${node.name} (you are here)` : `${node.name}: click to connect`;
+    title.textContent = opts.current ? `${nodeName} (you are here)` : `${nodeName}: click to connect`;
 
     grp.addEventListener('click', () => {
       if (!opts.current) this.actions.travel(node.id);
@@ -292,7 +325,7 @@ export class NetworkView {
       });
     }
     items.push({ label: 'Look', action: () => this.actions.look(node.id) });
-    this.menu.show(x, y, node.name, items);
+    this.menu.show(x, y, this.game.nameOf(node.id), items);
   }
 
   private drawMinimap(): void {
@@ -324,15 +357,15 @@ export class NetworkView {
       const cls = ['mini-node'];
       if (n.id === g.currentNode) cls.push('mini-current');
       if (n.id === target) cls.push('mini-target');
-      const dot = drawNodeShape(n.kind, sx(n.x), sy(n.y), n.id === g.currentNode ? 6 : 4.5, cls.join(' '), mini);
+      const dot = drawNodeShape(g.kindOf(n.id), sx(n.x), sy(n.y), n.id === g.currentNode ? 6 : 4.5, cls.join(' '), mini);
       dot.setAttribute('data-mini', n.id);
       const t = svg('title', {}, dot);
-      t.textContent = n.name;
+      t.textContent = g.nameOf(n.id);
       dot.addEventListener('mouseenter', () => this.actions.hover());
       dot.addEventListener('click', () => this.actions.travel(n.id));
       dot.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        this.menu.show(e.clientX, e.clientY, n.name, [
+        this.menu.show(e.clientX, e.clientY, g.nameOf(n.id), [
           { label: 'Travel here', hint: 'click', disabled: n.id === g.currentNode, action: () => this.actions.travel(n.id) },
           { label: 'Look', action: () => this.actions.look(n.id) },
         ]);

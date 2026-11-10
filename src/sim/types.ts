@@ -1,10 +1,15 @@
-/** Kinds of nodes available in the skeleton. More will come later. */
+/**
+ * Kinds of nodes available in the skeleton. More will come later.
+ * 'unknown' is never a node's real kind: it is how a node looks until it is identified.
+ */
 export type NodeKind = 'gateway' | 'router' | 'identity' | 'database' | 'camera' | 'overseer' | 'unknown';
 
 export interface NodeDef {
   id: string;
   name: string;
   kind: NodeKind;
+  /** Starts unidentified: shown as "?" until the player enters it. */
+  hidden?: boolean;
   /** Position on the system map, used by the minimap and for direction. */
   x: number;
   y: number;

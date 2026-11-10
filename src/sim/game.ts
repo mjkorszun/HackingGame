@@ -1,5 +1,8 @@
 import { Network } from './network';
-import type { LogColor, SimEvent, SystemDef } from './types';
+import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
+
+/** What an unidentified node is called. */
+export const UNKNOWN_NAME = '?';
 
 export const TICKS_PER_SECOND = 10;
 
@@ -25,12 +28,14 @@ export class Game {
   private move: MoveTask | null = null;
   private route: string[] = [];
   private events: SimEvent[] = [];
+  private readonly identified = new Set<string>();
 
   constructor(system: SystemDef) {
     this.network = new Network(system);
     this.currentNode = system.entry;
+    for (const n of system.nodes) if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
     this.log(`link up: ${system.name} (${system.location})`, 'system');
-    this.log(`you are at ${this.network.node(this.currentNode).name}`);
+    this.log(`you are at ${this.nameOf(this.currentNode)}`);
   }
 
   /** Advances the simulation by one tick, unless paused. */
@@ -49,6 +54,40 @@ export class Game {
 
   togglePause(): void {
     this.setPaused(!this.paused);
+  }
+
+  /** Whether the player knows what this node is. */
+  isIdentified(id: string): boolean {
+    return this.identified.has(id);
+  }
+
+  /** How many nodes are identified (changes when one is revealed). */
+  get identifiedCount(): number {
+    return this.identified.size;
+  }
+
+  /** The node's name as the player knows it. */
+  nameOf(id: string): string {
+    return this.isIdentified(id) ? this.network.node(id).name : UNKNOWN_NAME;
+  }
+
+  /** The node's kind as the player knows it. */
+  kindOf(id: string): NodeKind {
+    return this.isIdentified(id) ? this.network.node(id).kind : 'unknown';
+  }
+
+  /**
+   * Finds a node by what the player can see: the name or id of an identified node,
+   * or "?" for an unidentified one (a neighbour first).
+   */
+  findNode(query: string): NodeDef | undefined {
+    const q = query.trim().toLowerCase();
+    if (q === UNKNOWN_NAME) {
+      const unknown = (n: NodeDef) => !this.isIdentified(n.id);
+      return this.network.neighbours(this.currentNode).find(unknown) ?? this.network.def.nodes.find(unknown);
+    }
+    const node = this.network.find(q);
+    return node && this.isIdentified(node.id) ? node : undefined;
   }
 
   get isMoving(): boolean {
@@ -102,7 +141,7 @@ export class Game {
     if (!to) return;
     this.move = { to, elapsed: 0, total: MOVE_TICKS };
     this.events.push({ type: 'hop', nodeId: to });
-    this.log(`connecting to ${this.network.node(to).name}...`);
+    this.log(`connecting to ${this.nameOf(to)}...`);
   }
 
   private updateMove(): void {
@@ -113,7 +152,11 @@ export class Game {
       this.currentNode = move.to;
       this.move = null;
       this.events.push({ type: 'moved', nodeId: this.currentNode });
-      this.log(`arrived: ${this.network.node(this.currentNode).name}`, 'info');
+      this.log(`arrived: ${this.nameOf(this.currentNode)}`, 'info');
+      if (!this.isIdentified(this.currentNode)) {
+        this.identified.add(this.currentNode);
+        this.log(`node identified: ${this.nameOf(this.currentNode)}`, 'info');
+      }
       this.startNextHop();
     }
   }
