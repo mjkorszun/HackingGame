@@ -111,11 +111,13 @@ describe('Game hop state', () => {
 describe('hidden nodes', () => {
   it('show as unknown until the player enters them', () => {
     const game = new Game(testSystem);
-    expect(game.nameOf('staff')).toBe('?');
+    expect(game.nameOf('orders')).toBe('?1');
+    expect(game.nameOf('staff')).toBe('?2');
     expect(game.kindOf('staff')).toBe('unknown');
     expect(game.findNode('Staff Records')).toBeUndefined();
     expect(game.findNode('staff')).toBeUndefined();
-    expect(game.findNode('?')?.id).toBe('staff');
+    expect(game.findNode('?2')?.id).toBe('staff');
+    expect(game.findNode('?')).toBeUndefined(); // not next to any unknown node yet
     game.travelTo('staff');
     run(game, MOVE_TICKS * 5);
     expect(game.currentNode).toBe('staff');

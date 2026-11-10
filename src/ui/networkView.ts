@@ -283,10 +283,10 @@ export class NetworkView {
     // Hover sound only on the node shape itself, not on its labels.
     if (!opts.current) body.addEventListener('mouseenter', () => this.actions.hover());
     if (kind === 'unknown') {
-      // An unrecognised node shows nothing but a question mark.
-      const size = opts.current ? 34 : 30;
+      // An unrecognised node shows nothing but its ?N name.
+      const size = opts.current ? 34 : 26;
       const tag = svg('text', { x, y: opts.current ? y - 12 : y + size * 0.35, class: 'node-tag', 'font-size': size }, grp);
-      tag.textContent = '?';
+      tag.textContent = nodeName;
     } else if (hasTag(kind)) {
       const tag = svg('text', { x, y: y + (opts.current ? -14 : 5), class: 'node-tag', 'font-size': opts.current ? 22 : 13 }, grp);
       tag.textContent = KIND_TAG[kind];
