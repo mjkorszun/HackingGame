@@ -254,10 +254,6 @@ export class NetworkView {
       const kind = svg('text', { x, y: y + r + 36, class: 'node-kind' }, grp);
       kind.textContent = KIND_LABEL[node.kind];
     }
-    if (opts.number !== undefined && opts.number <= 9) {
-      const num = svg('text', { x: x + r * 0.8, y: y - r * 0.8, class: 'node-num' }, grp);
-      num.textContent = String(opts.number);
-    }
     const title = svg('title', {}, grp);
     title.textContent = opts.current ? `${node.name} (you are here)` : `${node.name}: click to connect`;
 
