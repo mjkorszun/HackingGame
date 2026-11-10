@@ -1,8 +1,8 @@
 import { Network } from './network';
 import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
-/** What an unidentified node is called. */
-export const UNKNOWN_NAME = '?';
+/** Unidentified nodes are called ?1, ?2, ... */
+export const UNKNOWN_PREFIX = '?';
 
 export const TICKS_PER_SECOND = 10;
 
@@ -29,11 +29,16 @@ export class Game {
   private route: string[] = [];
   private events: SimEvent[] = [];
   private readonly identified = new Set<string>();
+  /** Stable number of each hidden node in this system, used for its ?N name. */
+  private readonly unknownNumber = new Map<string, number>();
 
   constructor(system: SystemDef) {
     this.network = new Network(system);
     this.currentNode = system.entry;
-    for (const n of system.nodes) if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
+    for (const n of system.nodes) {
+      if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
+      else this.unknownNumber.set(n.id, this.unknownNumber.size + 1);
+    }
     this.log(`link up: ${system.name} (${system.location})`, 'system');
     this.log(`you are at ${this.nameOf(this.currentNode)}`);
   }
@@ -68,7 +73,7 @@ export class Game {
 
   /** The node's name as the player knows it. */
   nameOf(id: string): string {
-    return this.isIdentified(id) ? this.network.node(id).name : UNKNOWN_NAME;
+    return this.isIdentified(id) ? this.network.node(id).name : `${UNKNOWN_PREFIX}${this.unknownNumber.get(id)}`;
   }
 
   /** The node's kind as the player knows it. */
@@ -78,13 +83,17 @@ export class Game {
 
   /**
    * Finds a node by what the player can see: the name or id of an identified node,
-   * or "?" for an unidentified one (a neighbour first).
+   * or ?N for an unidentified one. A bare "?" works when exactly one neighbour is unknown.
    */
   findNode(query: string): NodeDef | undefined {
     const q = query.trim().toLowerCase();
-    if (q === UNKNOWN_NAME) {
+    if (q.startsWith(UNKNOWN_PREFIX)) {
       const unknown = (n: NodeDef) => !this.isIdentified(n.id);
-      return this.network.neighbours(this.currentNode).find(unknown) ?? this.network.def.nodes.find(unknown);
+      if (q === UNKNOWN_PREFIX) {
+        const near = this.network.neighbours(this.currentNode).filter(unknown);
+        return near.length === 1 ? near[0] : undefined;
+      }
+      return this.network.def.nodes.find((n) => unknown(n) && this.nameOf(n.id).toLowerCase() === q);
     }
     const node = this.network.find(q);
     return node && this.isIdentified(node.id) ? node : undefined;

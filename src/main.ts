@@ -71,8 +71,9 @@ function runCommand(raw: string): void {
     }
     case 'map':
       for (const n of game.network.def.nodes) {
-        const id = game.isIdentified(n.id) ? n.id : '?';
-        game.log(`${id.padEnd(8)} ${game.nameOf(n.id)}${n.id === game.currentNode ? '  <- you' : ''}`);
+        const known = game.isIdentified(n.id);
+        const id = known ? n.id : game.nameOf(n.id);
+        game.log(`${id.padEnd(8)} ${known ? n.name : 'unknown'}${n.id === game.currentNode ? '  <- you' : ''}`);
       }
       break;
     case 'pause':
