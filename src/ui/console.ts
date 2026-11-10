@@ -19,6 +19,9 @@ export class Console {
   private readonly history: string[] = [];
   private historyPos = 0;
 
+  /** Called for every printable key typed into the prompt (for sound). */
+  onType: (() => void) | null = null;
+
   constructor(root: HTMLElement, private readonly onCommand: (cmd: string) => void) {
     root.innerHTML = '';
     this.log = document.createElement('div');
@@ -76,6 +79,7 @@ export class Console {
   }
 
   private onKey(e: KeyboardEvent): void {
+    if (e.key.length === 1 || e.key === 'Backspace') this.onType?.();
     if (e.key === 'Enter') {
       const cmd = this.input.value.trim();
       this.input.value = '';

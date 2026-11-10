@@ -2,6 +2,7 @@ import type { Game } from '../sim/game';
 import { TICKS_PER_SECOND } from '../sim/game';
 import type { NodeDef, NodeKind } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
+import type { Sound } from './sound';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const W = 640;
@@ -53,6 +54,8 @@ export interface ViewActions {
   travel(nodeId: string): void;
   look(nodeId: string): void;
   togglePause(): void;
+  hover(): void;
+  sound: Sound;
 }
 
 /**
@@ -63,6 +66,7 @@ export class NetworkView {
   private readonly header: HTMLElement;
   private readonly clock: HTMLElement;
   private readonly pauseBtn: HTMLButtonElement;
+  private readonly muteBtn: HTMLButtonElement;
   private readonly stage: SVGSVGElement;
   private neighbourOrder: string[] = [];
   private lastKey = '';
@@ -94,7 +98,25 @@ export class NetworkView {
     this.pauseBtn.className = 'pause-btn';
     this.pauseBtn.title = 'Pause / resume (Space)';
     this.pauseBtn.addEventListener('click', () => actions.togglePause());
-    this.header.append(title, alarm, this.clock, this.pauseBtn);
+    const soundBox = document.createElement('div');
+    soundBox.className = 'sound-box';
+    this.muteBtn = document.createElement('button');
+    this.muteBtn.type = 'button';
+    this.muteBtn.className = 'mute-btn';
+    this.muteBtn.title = 'Sound on / off (M)';
+    this.muteBtn.addEventListener('click', () => actions.sound.toggleMute());
+    const vol = document.createElement('input');
+    vol.type = 'range';
+    vol.min = '0';
+    vol.max = '100';
+    vol.value = String(Math.round(actions.sound.volume * 100));
+    vol.className = 'volume';
+    vol.title = 'Volume';
+    vol.setAttribute('aria-label', 'Volume');
+    vol.addEventListener('input', () => actions.sound.setVolume(Number(vol.value) / 100));
+    vol.addEventListener('change', () => actions.sound.play('hover'));
+    soundBox.append(this.muteBtn, vol);
+    this.header.append(title, alarm, soundBox, this.clock, this.pauseBtn);
 
     this.stage = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stage', role: 'img' });
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -111,6 +133,8 @@ export class NetworkView {
   update(): void {
     this.clock.textContent = formatTime(this.game.tick);
     this.pauseBtn.textContent = this.game.paused ? '▶ RESUME' : '❚❚ PAUSE';
+    this.muteBtn.textContent = this.actions.sound.muted ? 'SND OFF' : 'SND ON';
+    this.muteBtn.classList.toggle('is-muted', this.actions.sound.muted);
     this.header.classList.toggle('is-paused', this.game.paused);
     const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}`;
     if (key !== this.lastKey) this.render();
@@ -234,6 +258,7 @@ export class NetworkView {
     const title = svg('title', {}, grp);
     title.textContent = opts.current ? `${node.name} (you are here)` : `${node.name}: click to connect`;
 
+    if (!opts.current) grp.addEventListener('mouseenter', () => this.actions.hover());
     grp.addEventListener('click', () => {
       if (!opts.current) this.actions.travel(node.id);
     });
@@ -291,6 +316,7 @@ export class NetworkView {
       const dot = svg('circle', { cx: sx(n.x), cy: sy(n.y), r: n.id === g.currentNode ? 6 : 4.5, class: cls.join(' '), 'data-mini': n.id }, mini);
       const t = svg('title', {}, dot);
       t.textContent = n.name;
+      dot.addEventListener('mouseenter', () => this.actions.hover());
       dot.addEventListener('click', () => this.actions.travel(n.id));
       dot.addEventListener('contextmenu', (e) => {
         e.preventDefault();

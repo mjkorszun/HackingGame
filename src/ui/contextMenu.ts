@@ -9,6 +9,8 @@ export interface MenuItem {
 /** A single right-click menu shared by every clickable object. */
 export class ContextMenu {
   private readonly el: HTMLElement;
+  /** Called for sound feedback: menu opened, item chosen, menu dismissed. */
+  onEvent: ((e: 'open' | 'item' | 'close') => void) | null = null;
 
   constructor() {
     this.el = document.createElement('div');
@@ -16,7 +18,7 @@ export class ContextMenu {
     this.el.hidden = true;
     document.body.appendChild(this.el);
     document.addEventListener('mousedown', (e) => {
-      if (!this.el.contains(e.target as Node)) this.hide();
+      if (this.open && !this.el.contains(e.target as Node)) this.dismiss();
     });
     window.addEventListener('blur', () => this.hide());
   }
@@ -47,14 +49,23 @@ export class ContextMenu {
       }
       btn.addEventListener('click', () => {
         this.hide();
+        this.onEvent?.('item');
         item.action();
       });
       this.el.appendChild(btn);
     }
     this.el.hidden = false;
+    this.onEvent?.('open');
     const rect = this.el.getBoundingClientRect();
     this.el.style.left = `${Math.min(x, window.innerWidth - rect.width - 4)}px`;
     this.el.style.top = `${Math.min(y, window.innerHeight - rect.height - 4)}px`;
+  }
+
+  /** Closes the menu without choosing anything. */
+  dismiss(): void {
+    if (!this.open) return;
+    this.hide();
+    this.onEvent?.('close');
   }
 
   hide(): void {
