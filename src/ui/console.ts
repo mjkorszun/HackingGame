@@ -75,7 +75,7 @@ export class Console {
   echo(cmd: string): void {
     this.history.push(cmd);
     this.historyPos = this.history.length;
-    this.write({ text: `> ${cmd}`, color: 'system' });
+    this.write({ text: `> ${cmd}`, color: 'command' });
   }
 
   clear(): void {
@@ -95,7 +95,7 @@ export class Console {
       return;
     }
     if (this.lastTabValue === current && result.options.length > 1) {
-      this.write({ text: `> ${current}`, color: 'system' });
+      this.write({ text: `> ${current}`, color: 'command' });
       this.write({ text: result.options.join('    '), color: 'normal' });
       this.lastTabValue = null;
       return;
@@ -124,7 +124,7 @@ export class Console {
       if (!cmd) return;
       this.history.push(cmd);
       this.historyPos = this.history.length;
-      this.write({ text: `> ${cmd}`, color: 'system' });
+      this.write({ text: `> ${cmd}`, color: 'command' });
       this.onCommand(cmd);
     } else if (e.key === 'ArrowUp' && this.history.length) {
       this.historyPos = Math.max(0, this.historyPos - 1);

@@ -20,7 +20,7 @@ export interface SystemDef {
   links: [string, string][];
 }
 
-export type LogColor = 'normal' | 'info' | 'system' | 'alarm1' | 'alarm2' | 'alarm3';
+export type LogColor = 'normal' | 'info' | 'system' | 'command' | 'alarm1' | 'alarm2' | 'alarm3';
 
 export interface LogLine {
   text: string;

@@ -68,6 +68,7 @@ body {
 .c-normal { color: var(--green); }
 .c-info { color: var(--blue); }
 .c-system { color: var(--grey); }
+.c-command { color: #d4e0d8; }
 .c-alarm1 { color: var(--yellow); }
 .c-alarm2 { color: var(--orange); }
 .c-alarm3 { color: var(--red); }
