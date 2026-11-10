@@ -28,7 +28,7 @@ export const NODE_ACTIONS: Partial<Record<NodeKind, NodeAction[]>> = {
   uplink: [
     a('jump', 'cross to the system on the other end', 'the other end of this uplink is not known yet'),
     a('sniff', 'listen to the traffic and learn about the other system', 'nothing useful in the traffic yet'),
-    a('isolate', "stop this system's alarms from reaching the other system", 'alarms from this system will not pass through this uplink (alarms come later)'),
+    a('isolate', 'cut traffic to the other system: no alarms and no agents get through', 'uplink isolated: alarms and agents will not pass through (alarms and agents come later)'),
   ],
   database: [
     a('query', 'search the data for something valuable', 'nothing valuable found (files come later)'),
