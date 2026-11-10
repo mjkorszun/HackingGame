@@ -1,3 +1,4 @@
 Sound effects in this folder come from Kenney (www.kenney.nl):
 Interface Sounds, UI Audio and Sci-Fi Sounds packs.
+computer_noise_001_1s.ogg is computer_noise_001.ogg cut to 1 s with a fade.
 License: Creative Commons Zero (CC0) http://creativecommons.org/publicdomain/zero/1.0/
