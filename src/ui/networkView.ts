@@ -114,7 +114,7 @@ export class NetworkView {
     vol.title = 'Volume';
     vol.setAttribute('aria-label', 'Volume');
     vol.addEventListener('input', () => actions.sound.setVolume(Number(vol.value) / 100));
-    vol.addEventListener('change', () => actions.sound.play('hover'));
+    vol.addEventListener('change', () => actions.sound.play('hop'));
     soundBox.append(this.muteBtn, vol);
     this.header.append(title, alarm, soundBox, this.clock, this.pauseBtn);
 
@@ -242,7 +242,9 @@ export class NetworkView {
     else cls.push('node-neighbour');
     if (opts.targeted) cls.push('node-targeted');
     const grp = svg('g', { class: cls.join(' '), 'data-node': node.id, tabindex: 0 }, this.stage);
-    svg('circle', { cx: x, cy: y, r, class: 'node-body' }, grp);
+    const body = svg('circle', { cx: x, cy: y, r, class: 'node-body' }, grp);
+    // Hover sound only on the node shape itself, not on its labels.
+    if (!opts.current) body.addEventListener('mouseenter', () => this.actions.hover());
     const tag = svg('text', { x, y: y + (opts.current ? -14 : 5), class: 'node-tag', 'font-size': opts.current ? 26 : 15 }, grp);
     tag.textContent = KIND_TAG[node.kind];
     const name = svg('text', { x, y: y + r + 18, class: 'node-name' }, grp);
@@ -258,7 +260,6 @@ export class NetworkView {
     const title = svg('title', {}, grp);
     title.textContent = opts.current ? `${node.name} (you are here)` : `${node.name}: click to connect`;
 
-    if (!opts.current) grp.addEventListener('mouseenter', () => this.actions.hover());
     grp.addEventListener('click', () => {
       if (!opts.current) this.actions.travel(node.id);
     });

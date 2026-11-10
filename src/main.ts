@@ -118,6 +118,11 @@ const view = new NetworkView(document.getElementById('view')!, game, menu, {
 
 game.log('type help for commands', 'system');
 
+const buildTag = document.createElement('div');
+buildTag.className = 'build-tag';
+buildTag.textContent = __BUILD_LABEL__;
+document.getElementById('view')!.appendChild(buildTag);
+
 document.addEventListener('keydown', (e) => {
   if (term.inputFocused) return;
   if (e.code === 'Space') {
@@ -146,6 +151,7 @@ function flush(): void {
     if (ev.type === 'log') term.write(ev.line);
     else if (ev.type === 'progress') {
       term.progress(ev.line);
+      if (ev.line.progress === 0 && !ev.line.done) sfx.play('hop');
     }
     else if (ev.type === 'moved') sfx.play('arrive');
     else if (ev.type === 'paused') sfx.play(ev.paused ? 'pause' : 'resume');
