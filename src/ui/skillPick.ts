@@ -1,8 +1,8 @@
-import { skillChoices, type Skill } from '../sim/progression';
+import { levelRoll, skillChoices, type Skill } from '../sim/progression';
 
-/** Level up: three skills to choose from; one click learns it. */
-export function showSkillPick(level: number, owned: string[], onPick: (skill: Skill) => void): void {
-  const choices = skillChoices(owned);
+/** Level up: three skills to choose from (set by the game code and the level); one click learns it. */
+export function showSkillPick(level: number, owned: string[], code: string, onPick: (skill: Skill) => void): void {
+  const choices = skillChoices(owned, levelRoll(code, level));
   const box = document.createElement('div');
   box.className = 'run-summary';
   box.innerHTML = `
