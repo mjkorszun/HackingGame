@@ -31,17 +31,21 @@ export function showRunSummary(report: RunReport, balance: number, before: XpBef
       <table>${fileRows}</table>
       <h3>software downloaded</h3>
       <ul>${swRows}</ul>
-      <div class="rs-sum">
-        <span>contract pay</span><span class="rs-num">${sats(report.pay)}</span>
-        <span>file values</span><span class="rs-num">${sats(report.filesTotal)}</span>
-        <span class="rs-total">total earned</span><span class="rs-num rs-total">${sats(report.total)}</span>
-        <span>reputation</span><span class="rs-num">+${report.reputation}</span>
-        <span>your account</span><span class="rs-num">${sats(balance)}</span>
+      <div class="rs-sums">
+        <div class="rs-sum">
+          <span>contract pay</span><span class="rs-num">${sats(report.pay)}</span>
+          <span>file values</span><span class="rs-num">${sats(report.filesTotal)}</span>
+          <span class="rs-total">earned this run</span><span class="rs-num rs-total">${sats(report.total)}</span>
+        </div>
+        <div class="rs-sum rs-rep">
+          <span>reputation</span><span class="rs-num">+${report.reputation}</span>
+        </div>
       </div>
+      <div class="rs-account"><span>YOUR ACCOUNT</span><span class="rs-num">${sats(balance)}</span></div>
       <h3>experience</h3>
       <table>${report.xpLines.length ? report.xpLines.map((l) => `<tr><td>${esc(l.what)}</td><td class="rs-num">+${l.xp} XP</td></tr>`).join('') : '<tr><td class="rs-dim">nothing this time</td></tr>'}</table>
       <div class="xp-row"><span class="xp-level">level ${before.level}</span><span class="xp-text">${before.xp} / ${xpToNext(before.level)} XP</span></div>
-      <div class="xp-bar"><div class="xp-fill" style="width:${(100 * before.xp) / xpToNext(before.level)}%"></div></div>
+      <div class="xp-bar"><div class="xp-fill" style="width:${(100 * before.xp) / xpToNext(before.level)}%"></div><div class="xp-gain" style="left:${(100 * before.xp) / xpToNext(before.level)}%"></div></div>
       <div class="xp-up" hidden></div>
       <button type="button">OK</button>
     </div>`;
@@ -57,7 +61,10 @@ export function showRunSummary(report: RunReport, balance: number, before: XpBef
 
 /** The bar fills with the XP earned; on reaching the end it shows LEVEL UP and starts again from zero. */
 function animateXp(box: HTMLElement, before: XpBefore, gained: number): void {
+  // The XP you had stays green; what this run brought grows after it in blue.
   const fill = box.querySelector<HTMLElement>('.xp-fill')!;
+  const gain = box.querySelector<HTMLElement>('.xp-gain')!;
+  let base = before.xp;
   const level = box.querySelector<HTMLElement>('.xp-level')!;
   const text = box.querySelector<HTMLElement>('.xp-text')!;
   const up = box.querySelector<HTMLElement>('.xp-up')!;
@@ -71,8 +78,8 @@ function animateXp(box: HTMLElement, before: XpBefore, gained: number): void {
     const take = Math.min(left, need - x);
     left -= take;
     x += take;
-    fill.style.transition = `width ${stepMs}ms ease-out`;
-    fill.style.width = `${(100 * x) / need}%`;
+    gain.style.transition = `width ${stepMs}ms ease-out`;
+    gain.style.width = `${(100 * (x - base)) / need}%`;
     text.textContent = `${x} / ${need} XP`;
     if (x < need) return;
     // Level up: flash, then empty the bar for the next level.
@@ -82,8 +89,11 @@ function animateXp(box: HTMLElement, before: XpBefore, gained: number): void {
       up.hidden = false;
       up.textContent = `LEVEL UP! you are now level ${l}. pick a skill after OK`;
       level.textContent = `level ${l}`;
-      fill.style.transition = 'none';
+      base = 0;
       fill.style.width = '0%';
+      gain.style.transition = 'none';
+      gain.style.left = '0%';
+      gain.style.width = '0%';
       text.textContent = `0 / ${xpToNext(l)} XP`;
       setTimeout(next, 120);
     }, stepMs + 150);

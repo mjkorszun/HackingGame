@@ -179,6 +179,15 @@ export function iconName(p: Pick<Program, 'type' | 'name' | 'icon'>): string {
   return pool[h % pool.length];
 }
 
+/** Combat icons for the system's own warriors: one per warrior type, different types never share one, same system same icons. */
+export function agentIcon(systemId: string, typeIndex: number): string {
+  const pool = ICON_POOLS.warrior;
+  let h = 0;
+  for (const ch of systemId) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  // A step coprime with the pool size keeps the types apart.
+  return pool[(h + typeIndex * 7) % pool.length];
+}
+
 /** A random icon from a type's pool, for a newly made program. */
 export function randomIcon(type: ProgramType, roll: () => number = Math.random): string {
   const pool = ICON_POOLS[type];
