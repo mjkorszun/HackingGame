@@ -30,7 +30,7 @@ export function halfHeight(kind: NodeKind): number {
     gateway: 1.15,
     identity: 0.85,
     uplink: 0.8,
-    database: 0.68,
+    database: 0.95,
     vault: 0.91,
     overseer: 1.02,
     orchestrator: 0.89,
@@ -63,8 +63,11 @@ export function drawNodeShape(kind: NodeKind, x: number, y: number, r: number, c
       return el('rect', { x: x - r * 0.85, y: y - r * 0.85, width: r * 1.7, height: r * 1.7, class: cls }, parent);
     case 'uplink': // triangle pointing up
       return poly(regular(x, y + r * 0.2, r * 1.2, 3, -Math.PI / 2));
-    case 'database': // wide rectangle
-      return el('rect', { x: x - r * 1.2, y: y - r * 0.68, width: r * 2.4, height: r * 1.36, class: cls }, parent);
+    case 'database': { // square with cut corners
+      const h = r * 0.95;
+      const c = r * 0.32;
+      return poly([[x - h + c, y - h], [x + h - c, y - h], [x + h, y - h + c], [x + h, y + h - c], [x + h - c, y + h], [x - h + c, y + h], [x - h, y + h - c], [x - h, y - h + c]]);
+    }
     case 'vault': // hexagon
       return poly(regular(x, y, r * 1.05, 6, 0));
     case 'overseer': // octagon

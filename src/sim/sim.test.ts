@@ -165,3 +165,12 @@ describe('node actions', () => {
     expect(g.drainEvents().some((e) => e.type === 'log' && e.line.color === 'alarm3')).toBe(true);
   });
 });
+
+describe('gates', () => {
+  it('sit on links, in either direction', () => {
+    const net = new Network(testSystem);
+    expect(net.hasGate('edge', 'auth')).toBe(true);
+    expect(net.hasGate('auth', 'edge')).toBe(true);
+    expect(net.hasGate('gw', 'edge')).toBe(false);
+  });
+});

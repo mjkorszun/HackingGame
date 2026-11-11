@@ -10,11 +10,12 @@ const W = 720;
 const H = 560;
 const CX = W / 2;
 const CY = 272;
-/** Half the size of the current node's room. */
-const ROOM = 145;
-/** Size of the room's cut corners and of its grid cells. */
-const CUT = 28;
+/** Size of the current node's room: its type's shape drawn at this radius. */
+const ROOM_R = 125;
+/** Size of the room's grid cells. */
 const CELL = 29;
+/** Flat or narrow shapes get a bigger room so there is still space inside. */
+const ROOM_SCALE: Partial<Record<NodeKind, number>> = { monitoring: 1.3, vehicle: 1.15, compute: 1.1, camera: 1.1, uplink: 1.1, ads: 1.1 };
 const NEIGHBOUR_R = 30;
 /** Size of the player figure (1 = original). */
 const AVATAR_SCALE = 0.8;
@@ -107,6 +108,9 @@ export class NetworkView {
   private lastKey = '';
   private positions = new Map<string, { x: number; y: number }>();
   private avatar: SVGGElement | null = null;
+  /** Outline of the current room, used to find where links leave it. */
+  private roomShape: SVGGeometryElement | null = null;
+  private roomR = ROOM_R;
 
   constructor(
     root: HTMLElement,
@@ -190,12 +194,14 @@ export class NetworkView {
 
     const links = svg('g', { class: 'links' }, this.stage);
     this.drawStubs(current, positions, links);
+    // The room comes first so the doors can be found on its outline; the links group stays behind it.
+    this.drawRoom(current, positions);
     for (const p of positions) {
       const active = target !== null && (p.node.id === target || g.network.path(current.id, target)[0] === p.node.id);
       const door = this.doorTowards(p.x, p.y);
       svg('line', { x1: door.x, y1: door.y, x2: p.x, y2: p.y, class: active ? 'link link-active' : 'link' }, links);
+      if (g.network.hasGate(current.id, p.node.id)) this.drawGate((door.x + p.x) / 2, (door.y + p.y) / 2, Math.atan2(p.y - door.y, p.x - door.x), links);
     }
-    this.drawRoom(current, positions);
 
     positions.forEach((p, i) => {
       const isTarget = target !== null && g.network.path(current.id, target)[0] === p.node.id;
@@ -241,42 +247,57 @@ export class NetworkView {
     }
   }
 
-  /** Where the link towards (x, y) leaves the room. */
+  /** A gate: a small barrier across the middle of a link. */
+  private drawGate(x: number, y: number, angle: number, parent: Element): void {
+    const grp = svg('g', { class: 'gate', transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${((angle * 180) / Math.PI).toFixed(1)})` }, parent);
+    svg('rect', { x: -5, y: -13, width: 10, height: 26, rx: 2 }, grp);
+    svg('line', { x1: -5, y1: -4, x2: 5, y2: -4 }, grp);
+    svg('line', { x1: -5, y1: 4, x2: 5, y2: 4 }, grp);
+    svg('title', {}, grp).textContent = 'gate';
+  }
+
+  /** Where the link towards (x, y) leaves the room: found on the room's real outline. */
   private doorTowards(x: number, y: number): { x: number; y: number } {
-    const dx = x - CX;
-    const dy = y - CY;
-    const k = ROOM / Math.max(Math.abs(dx), Math.abs(dy));
-    return { x: CX + dx * k, y: CY + dy * k };
+    const shape = this.roomShape;
+    const len = Math.hypot(x - CX, y - CY) || 1;
+    const [dx, dy] = [(x - CX) / len, (y - CY) / len];
+    if (!shape) return { x: CX + dx * this.roomR, y: CY + dy * this.roomR };
+    let lo = 0;
+    let hi = this.roomR * 1.6;
+    for (let i = 0; i < 18; i++) {
+      const mid = (lo + hi) / 2;
+      if (this.inRoom(CX + dx * mid, CY + dy * mid)) lo = mid;
+      else hi = mid;
+    }
+    return { x: CX + dx * lo, y: CY + dy * lo };
+  }
+
+  private inRoom(x: number, y: number): boolean {
+    const shape = this.roomShape;
+    if (!shape) return false;
+    try {
+      return shape.isPointInFill(new DOMPoint(x, y));
+    } catch {
+      return Math.hypot(x - CX, y - CY) < this.roomR;
+    }
   }
 
   /**
-   * The current node drawn as a large room with space inside for what it holds:
-   * agents, data blocks and other objects. For now only databases show contents.
+   * The current node drawn large, in its own type's shape, with a grid and room inside
+   * for what it holds: agents, data blocks and other objects. For now only databases show contents.
    */
   private drawRoom(node: NodeDef, positions: { x: number; y: number }[]): void {
     const kind = this.game.kindOf(node.id);
     const name = this.game.nameOf(node.id);
     const grp = svg('g', { class: `node node-current room kind-${kind}`, 'data-node': node.id, tabindex: 0 }, this.stage);
-    const [l, t, r, b] = [CX - ROOM, CY - ROOM, CX + ROOM, CY + ROOM];
-    const outline: [number, number][] = [
-      [l + CUT, t], [r - CUT, t], [r, t + CUT], [r, b - CUT], [r - CUT, b], [l + CUT, b], [l, b - CUT], [l, t + CUT],
-    ];
-    const points = outline.map(([x, y]) => `${x},${y}`).join(' ');
-    svg('polygon', { points, class: 'room-body' }, grp);
+    this.roomR = ROOM_R * (ROOM_SCALE[kind] ?? 1);
+    this.roomShape = drawNodeShape(kind, CX, CY, this.roomR, 'room-body', grp) as SVGGeometryElement;
     const clipId = 'room-clip';
-    svg('polygon', { points }, svg('clipPath', { id: clipId }, grp));
+    drawNodeShape(kind, CX, CY, this.roomR, '', svg('clipPath', { id: clipId }, grp));
     const grid = svg('g', { class: 'room-grid', 'clip-path': `url(#${clipId})` }, grp);
-    for (let x = l + CELL; x < r; x += CELL) svg('line', { x1: x, y1: t, x2: x, y2: b }, grid);
-    for (let y = t + CELL; y < b; y += CELL) svg('line', { x1: l, y1: y, x2: r, y2: y }, grid);
-
-    // Header: the node type's own shape as an icon, then its name and type.
-    const head = svg('rect', { x: l + CUT, y: t + 6, width: 2 * ROOM - 2 * CUT, height: 40, class: 'room-head' }, grp);
-    head.setAttribute('rx', '2');
-    drawNodeShape(kind, l + CUT + 20, t + 26, 11, 'node-body room-icon', grp);
-    const title = svg('text', { x: l + CUT + 42, y: t + 24, class: 'room-title' }, grp);
-    title.textContent = name;
-    const sub = svg('text', { x: l + CUT + 42, y: t + 40, class: 'room-kind' }, grp);
-    sub.textContent = KIND_LABEL[kind];
+    const span = this.roomR * 1.6;
+    for (let x = CX - span + CELL; x < CX + span; x += CELL) svg('line', { x1: x, y1: CY - span, x2: x, y2: CY + span }, grid);
+    for (let y = CY - span + CELL; y < CY + span; y += CELL) svg('line', { x1: CX - span, y1: y, x2: CX + span, y2: y }, grid);
 
     // Doors where the links leave.
     for (const p of positions) {
@@ -285,6 +306,14 @@ export class NetworkView {
     }
 
     if (kind === 'database') this.drawDataBlocks(node.id, grp);
+
+    // Name and type in the top-left corner of the view, with the type's small shape as an icon.
+    const hud = svg('g', { class: `room-hud kind-${kind}` }, this.stage);
+    drawNodeShape(kind, 22, 26, 11, 'node-body room-icon', hud);
+    const title = svg('text', { x: 44, y: 24, class: 'room-title' }, hud);
+    title.textContent = name;
+    const sub = svg('text', { x: 44, y: 40, class: 'room-kind' }, hud);
+    sub.textContent = KIND_LABEL[kind];
 
     const tip = svg('title', {}, grp);
     tip.textContent = `${name} (you are here). Right-click for actions.`;
@@ -302,17 +331,21 @@ export class NetworkView {
       seed = (seed * 1664525 + 1013904223) >>> 0;
       return seed / 2 ** 32;
     };
-    const cols = Math.floor((2 * ROOM) / CELL);
+    const cols = Math.floor((2 * ROOM_R) / CELL);
+    const left = CX - (cols * CELL) / 2;
+    const top = CY - (cols * CELL) / 2;
     const taken = new Set<string>();
     const count = 6 + Math.floor(rand() * 7);
-    for (let i = 0, tries = 0; i < count && tries < 200; tries++) {
-      const c = 1 + Math.floor(rand() * (cols - 2));
-      const row = 2 + Math.floor(rand() * (cols - 3));
+    for (let i = 0, tries = 0; i < count && tries < 300; tries++) {
+      const c = Math.floor(rand() * cols);
+      const row = Math.floor(rand() * cols);
       const key = `${c},${row}`;
-      const x = CX - ROOM + c * CELL;
-      const y = CY - ROOM + row * CELL;
+      const x = left + c * CELL;
+      const y = top + row * CELL;
+      const inside = [[x + 3, y + 3], [x + CELL - 3, y + 3], [x + 3, y + CELL - 3], [x + CELL - 3, y + CELL - 3]].every(([px, py]) => this.inRoom(px, py));
       // Keep clear of the avatar's spot in the middle and of cells already used.
-      if (taken.has(key) || (Math.abs(x + CELL / 2 - CX) < CELL * 1.5 && Math.abs(y + CELL / 2 - (CY + 40)) < CELL * 1.5)) continue;
+      const nearAvatar = Math.abs(x + CELL / 2 - CX) < CELL * 1.5 && Math.abs(y + CELL / 2 - (CY + 30)) < CELL * 1.5;
+      if (!inside || nearAvatar || taken.has(key)) continue;
       taken.add(key);
       i++;
       const blk = svg('g', { class: 'data-block' }, parent);
@@ -339,7 +372,7 @@ export class NetworkView {
   private updateAvatar(instant = false): void {
     const av = this.avatar;
     if (!av) return;
-    const start = { x: CX, y: CY + 60 };
+    const start = { x: CX, y: CY + 40 };
     let pos = start;
     let facing = 1;
     const hop = this.game.nextHop;
@@ -476,6 +509,7 @@ export class NetworkView {
       const na = g.network.node(a);
       const nb = g.network.node(b);
       svg('line', { x1: sx(na.x), y1: sy(na.y), x2: sx(nb.x), y2: sy(nb.y), class: 'mini-link' }, mini);
+      if (g.network.hasGate(a, b)) svg('rect', { x: (sx(na.x) + sx(nb.x)) / 2 - 2, y: (sy(na.y) + sy(nb.y)) / 2 - 2, width: 4, height: 4, class: 'mini-gate' }, mini);
     }
     const target = g.moveTarget;
     for (const n of nodes) {

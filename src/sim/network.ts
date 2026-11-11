@@ -34,6 +34,11 @@ export class Network {
     return (this.adjacency.get(id) ?? []).map((n) => this.node(n));
   }
 
+  /** Whether the link between a and b has a gate on it. */
+  hasGate(a: string, b: string): boolean {
+    return (this.def.gates ?? []).some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+  }
+
   isLinked(a: string, b: string): boolean {
     return (this.adjacency.get(a) ?? []).includes(b);
   }
