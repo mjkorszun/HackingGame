@@ -165,7 +165,47 @@ export function randomIcon(type: ProgramType, roll: () => number = Math.random):
   return pool[Math.floor(roll() * pool.length)];
 }
 
-/** A program's icon as inline SVG; it takes the text colour. */
-export function programIcon(p: Pick<Program, 'type' | 'name' | 'icon'>, cls = 'prog-icon'): string {
-  return `<svg class="${cls}" viewBox="0 0 512 512" aria-hidden="true">${BODY[iconName(p)]}</svg>`;
+/** A program's icon as inline SVG; it takes its own colour, or the text colour. */
+export function programIcon(p: Pick<Program, 'type' | 'name' | 'icon' | 'color'>, cls = 'prog-icon'): string {
+  return iconSvg(iconName(p), cls, p.color);
+}
+
+/** An icon by name as inline SVG, in a colour (or the text colour). */
+export function iconSvg(name: string, cls = 'prog-icon', color?: string): string {
+  return `<svg class="${cls}" viewBox="0 0 512 512" aria-hidden="true"${color ? ` style="color:${color}"` : ''}>${BODY[name] ?? ''}</svg>`;
+}
+
+/** The SVG body of an icon, if it is known (a pool icon, or one picked from the full set). */
+export function iconBody(name: string): string | undefined {
+  return BODY[name];
+}
+
+const BUILT_IN = new Set(Object.keys(BODY));
+
+/** Whether an icon ships with the game (the pools), so it need not be saved with the player's picks. */
+export function isBuiltInIcon(name: string): boolean {
+  return BUILT_IN.has(name);
+}
+
+/** Makes an icon from the full set usable (e.g. a saved player's pick). */
+export function registerIcon(name: string, body: string): void {
+  BODY[name] = body;
+}
+
+/** Colours a program icon or the avatar can have. */
+export const ICON_COLORS = ['#3dff7a', '#b6ffcb', '#e8f0ea', '#ffd84a', '#ff9a3d', '#ff4d4d', '#3de0ff', '#5aa0ff', '#b07cff'];
+
+/** Icons offered first when choosing the avatar. */
+export const AVATAR_ICONS = ['hood', 'hooded-figure', 'ninja-head', 'android-mask', 'mecha-mask', 'domino-mask', 'cyber-eye', 'fox-head', 'ghost', 'barn-owl', 'crow-dive', 'brain', 'all-seeing-eye', 'two-shadows'];
+
+let allIcons: Promise<Record<string, string>> | null = null;
+
+/** Every game-icons.net icon (about 4000), fetched once when first needed. */
+export function loadAllIcons(): Promise<Record<string, string>> {
+  allIcons ??= fetch(`${import.meta.env.BASE_URL}game-icons.json`).then((r) => {
+    if (!r.ok) throw new Error(`icons: ${r.status}`);
+    return r.json() as Promise<Record<string, string>>;
+  });
+  allIcons.catch(() => { allIcons = null; });
+  return allIcons;
 }

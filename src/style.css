@@ -257,15 +257,11 @@ body {
   transition: transform 0.1s linear;
 }
 .avatar.no-transition { transition: none; }
-.avatar-head { fill: #000; stroke: #b6ffcb; stroke-width: 2.5; }
-.avatar-limb { stroke: #b6ffcb; stroke-width: 2.5; stroke-linecap: round; }
-.avatar-leg-l, .avatar-leg-r, .avatar-arm-l, .avatar-arm-r { transform-origin: 0 -14px; transform-box: view-box; }
-.avatar-arm-l, .avatar-arm-r { transform-origin: 0 -27px; }
-.is-walking .avatar-leg-l, .is-walking .avatar-arm-r { animation: swing 0.4s ease-in-out infinite alternate; }
-.is-walking .avatar-leg-r, .is-walking .avatar-arm-l { animation: swing 0.4s ease-in-out infinite alternate-reverse; }
-@keyframes swing {
-  from { transform: rotate(-22deg); }
-  to { transform: rotate(22deg); }
+.avatar-icon { fill: currentColor; filter: drop-shadow(0 0 3px #000) drop-shadow(0 0 2px #000); }
+.is-walking .avatar-bob { animation: bob 0.3s ease-in-out infinite alternate; }
+@keyframes bob {
+  from { transform: translateY(0); }
+  to { transform: translateY(-4px); }
 }
 
 /* ---------- sound controls ---------- */
@@ -656,3 +652,26 @@ body {
 .prog-icon { width: 1.15em; height: 1.15em; vertical-align: -0.2em; margin-right: 0.45em; fill: currentColor; }
 .pi-icon { width: 34px; height: 34px; vertical-align: -8px; margin-right: 10px; fill: currentColor; }
 .dev-icon { width: 22px; height: 22px; vertical-align: -5px; fill: currentColor; }
+
+/* ---------- icon picker, avatar ---------- */
+.pi-panel.ip-panel { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; }
+.ip-top { display: flex; align-items: center; gap: 14px; margin: 6px 0 10px; }
+.ip-big { width: 64px; height: 64px; fill: currentColor; }
+.ip-name { color: #c8d4cc; }
+.ip-colors { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.ip-color { width: 26px; height: 26px; border: 2px solid #000; outline: 1px solid #145c2c; cursor: pointer; padding: 0; }
+.ip-color.is-on { outline: 2px solid #fff; }
+.ip-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.ip-icon { width: 44px; height: 44px; padding: 4px; background: #000; border: 1px solid #145c2c; cursor: pointer; }
+.ip-icon svg { width: 100%; height: 100%; fill: currentColor; }
+.ip-icon:hover { border-color: #3dff7a; }
+.ip-icon.is-on { border-color: #ffd84a; background: #0d2614; }
+.ip-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; background: #000; color: #3dff7a; border: 1px solid #145c2c; font: inherit; padding: 6px 8px; }
+.ip-note { color: #c8d4cc; font-size: 13px; padding: 4px 0; width: 100%; }
+.home-avatar { background: none; border: none; padding: 0; cursor: pointer; vertical-align: middle; margin-right: 6px; }
+.home-avatar-icon { width: 30px; height: 30px; fill: currentColor; vertical-align: middle; }
+.home-avatar:hover .home-avatar-icon { filter: drop-shadow(0 0 4px currentColor); }
+.ch-avatar { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.ch-avatar-icon { width: 56px; height: 56px; fill: currentColor; }
+.dev-icon-btn { background: #000; color: #3dff7a; border: 1px solid #145c2c; font: inherit; cursor: pointer; padding: 2px 8px; display: inline-flex; align-items: center; gap: 8px; }
+.dev-icon-btn:hover { border-color: #3dff7a; }

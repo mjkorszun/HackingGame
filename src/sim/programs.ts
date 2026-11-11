@@ -34,6 +34,8 @@ export interface Program {
   traits?: string[];
   /** Icon name from its type's pool (game-icons.net); without one, the name picks it. */
   icon?: string;
+  /** Colour of the icon (CSS), if the player chose one. */
+  color?: string;
   /** A legendary program carries its author's name. */
   author?: string;
 }

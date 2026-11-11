@@ -9,6 +9,7 @@ import type { NodeDef, NodeKind } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
 import type { Sound } from './sound';
 import { drawNodeShape, halfHeight, hasTag } from './shapes';
+import { iconBody } from './icons';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const W = 720;
@@ -170,6 +171,8 @@ function formatTime(tick: number): string {
 }
 
 export interface ViewActions {
+  /** How the player looks: an icon and its colour. */
+  avatar?: { icon: string; color: string };
   travel(nodeId: string): void;
   look(nodeId: string): void;
   act(actionId: string): void;
@@ -745,16 +748,15 @@ export class NetworkView {
     }
   }
 
-  /** The player: a simple stick figure standing in the current node, feet at (0, 0). */
+  /** The player: their chosen icon standing in the current node, its bottom at (0, 0). */
   private drawAvatar(): SVGGElement {
     const root = svg('g', { class: 'avatar' }, this.stage);
     const fig = svg('g', { class: 'avatar-figure' }, root);
-    svg('circle', { cx: 0, cy: -38, r: 6.5, class: 'avatar-head' }, fig);
-    svg('line', { x1: 0, y1: -31, x2: 0, y2: -14, class: 'avatar-limb' }, fig);
-    svg('line', { x1: 0, y1: -27, x2: -9, y2: -18, class: 'avatar-limb avatar-arm-l' }, fig);
-    svg('line', { x1: 0, y1: -27, x2: 9, y2: -18, class: 'avatar-limb avatar-arm-r' }, fig);
-    svg('line', { x1: 0, y1: -14, x2: -7, y2: 0, class: 'avatar-limb avatar-leg-l' }, fig);
-    svg('line', { x1: 0, y1: -14, x2: 7, y2: 0, class: 'avatar-limb avatar-leg-r' }, fig);
+    const a = this.actions.avatar ?? { icon: 'hood', color: '#3dff7a' };
+    const bob = svg('g', { class: 'avatar-bob' }, fig);
+    const icon = svg('svg', { x: -25, y: -50, width: 50, height: 50, viewBox: '0 0 512 512', class: 'avatar-icon' }, bob);
+    icon.style.color = a.color;
+    icon.innerHTML = iconBody(a.icon) ?? '';
     return root;
   }
 
@@ -873,8 +875,6 @@ export class NetworkView {
       }
       // After the node's own actions: only programs that make sense here.
       const busy = this.game.isBusy;
-      const scout = this.game.findProgram('scout');
-      if (scout) items.push({ label: 'Scout', hint: scout.name, disabled: busy, action: () => this.actions.run(scout) });
       const scan = this.game.findProgram('scan');
       if (scan && this.game.filesIn(node.id).some((f) => !f.scanned)) {
         items.push({ label: 'Scan all', hint: scan.name, disabled: busy, action: () => this.actions.scanAll() });

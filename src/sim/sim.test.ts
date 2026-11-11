@@ -758,7 +758,7 @@ describe('skimmer and days', () => {
     run(g, MOVE_TICKS * 3);
     expect(g.runProgram('skimmer')).toBe(true);
     expect(g.planted?.name).toBe('Skimmer 1.0');
-    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST' };
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {} };
     passDay(account, () => 0.99);
     expect(account.sats).toBeCloseTo(0.08);
     passDay(account, () => 0);
@@ -808,7 +808,7 @@ describe('software development', () => {
     const { newPizzeria } = await import('./generate');
     const { passDay } = await import('../ui/account');
     const net = newPizzeria(7);
-    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST' };
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {} };
     passDay(account, () => 0.99, 7);
     expect(account.day).toBe(8);
     expect(account.sats).toBeCloseTo(0.56);
@@ -840,8 +840,8 @@ describe('experience', () => {
     Object.defineProperty(g, 'contractDone', { get: () => true });
     g.feats.push('kill', 'kill', 'honeytoken');
     const r = g.endRun();
-    expect(r.xpLines[0].xp).toBe(60);
-    expect(r.xp).toBe(60 + 20 + 10);
+    expect(r.xpLines[0].xp).toBe(100);
+    expect(r.xp).toBe(100 + 20 + 10);
   });
 });
 

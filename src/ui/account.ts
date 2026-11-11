@@ -32,6 +32,10 @@ export interface Account {
   skillPicks: number;
   /** The game's code: it alone decides which skills each level offers. */
   code: string;
+  /** How the player looks in the net: an icon and its colour. */
+  avatar: { icon: string; color: string };
+  /** Icons picked from the full set (name to SVG body), so they show without loading the whole set. */
+  customIcons: Record<string, string>;
 }
 
 /**
@@ -66,7 +70,7 @@ const START_STORED = ['Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mimic 1.0', 'Skimm
 
 function fresh(): Account {
   const programs = STARTING_PROGRAMS.map((p) => ({ ...p }));
-  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode() };
+  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {} };
 }
 
 function randomSeed(): number {
@@ -95,6 +99,8 @@ export function toggleLoaded(a: Account, id: string): boolean {
 }
 
 const KEY = 'cyberhack.account';
+
+export const DEFAULT_AVATAR = { icon: 'hood', color: '#3dff7a' };
 
 export function loadAccount(): Account {
   try {
@@ -133,6 +139,8 @@ function migrate(a: Account): Account {
   if (!Array.isArray(a.skills)) a.skills = [];
   if (typeof a.skillPicks !== 'number') a.skillPicks = 0;
   if (typeof a.code !== 'string' || !a.code) a.code = newGameCode();
+  if (!a.avatar || typeof a.avatar.icon !== 'string') a.avatar = { ...DEFAULT_AVATAR };
+  if (!a.customIcons || typeof a.customIcons !== 'object') a.customIcons = {};
   if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id);
   // Unload from the end until what is loaded fits.
   while (a.loaded.length && usedMemory(loadedPrograms(a)) > a.memory) a.loaded.pop();

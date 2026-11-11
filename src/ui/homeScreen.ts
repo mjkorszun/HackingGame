@@ -3,7 +3,8 @@ import type { NetworkSeed } from '../sim/generate';
 import { sats } from '../sim/money';
 import { devDays, MAX_DEV_RATING, RARITY_TRAITS, type DevProject } from '../sim/development';
 import { cleanGameCode, SKILLS, xpToNext } from '../sim/progression';
-import { programIcon } from './icons';
+import { AVATAR_ICONS, ICON_POOLS, iconSvg, programIcon, randomIcon } from './icons';
+import { showIconPicker } from './iconPicker';
 import { PROGRAM_TYPES, programSize, type Program, type ProgramType } from '../sim/programs';
 
 /** A contract on offer: the job and the system it is in. */
@@ -36,12 +37,17 @@ export interface HomeActions {
   character(): { level: number; xp: number; skills: string[]; picks: number; code: string };
   /** Sets the game code (for testing for now). */
   setCode(code: string): void;
+  /** For testing: gains exactly the XP the next level needs. */
+  levelUp(): void;
+  /** How the player looks in the net. */
+  avatar(): { icon: string; color: string };
+  setAvatar(icon: string, color: string, body: string): void;
   /** Opens the skill choice for the level ups not picked yet; `done` runs after. */
   pickSkills(done: () => void): void;
   /** Software development: the project in progress, starting one, and working on it. */
   dev: {
     project(): DevProject | undefined;
-    start(type: ProgramType, rating: number, name: string): void;
+    start(type: ProgramType, rating: number, name: string, icon: string, color: string, body: string): void;
     /** Works a day, a week, or the days left. Returns what happened, and the program if it got finished. */
     work(mode: 'day' | 'week' | 'finish'): { lines: string[]; program?: Program };
   };
@@ -61,7 +67,7 @@ export class HomeScreen {
   private devLines: string[] = [];
   private devDone: Program | undefined;
   /** The new-project form keeps its choices between renders. */
-  private form = { type: 'hide' as ProgramType, rating: 1, name: '' };
+  private form = { type: 'hide' as ProgramType, rating: 1, name: '', icon: randomIcon('hide'), color: '#3dff7a', picked: false, body: '' };
   private readonly main: HTMLElement;
   readonly gear: HTMLElement;
 
@@ -99,7 +105,7 @@ export class HomeScreen {
     const locked = s.reputation < CONTRACT_REPUTATION;
     this.main.innerHTML = `
       <h1 class="home-title">CYBERHACK</h1>
-      <div class="home-stats">day ${s.day} · reputation ${s.reputation}</div>
+      <div class="home-stats"><button type="button" class="home-avatar" title="Change avatar">${iconSvg(this.actions.avatar().icon, 'home-avatar-icon', this.actions.avatar().color)}</button> day ${s.day} · reputation ${s.reputation}</div>
       ${s.news.length ? `<div class="home-news">${s.news.map((n) => `<div>${n}</div>`).join('')}</div>` : ''}
       <nav class="home-menu">
         <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">Known networks</button>
@@ -119,6 +125,7 @@ export class HomeScreen {
         this.render();
       });
     }
+    this.main.querySelector('.home-avatar')!.addEventListener('click', () => this.changeAvatar());
     this.main.querySelector('[data-act="enter"]')!.addEventListener('click', () => {
       if (!this.chosen) return;
       this.actions.click();
@@ -162,6 +169,16 @@ export class HomeScreen {
     }
   }
 
+  /** Opens the icon picker for the player's avatar. */
+  private changeAvatar(): void {
+    this.actions.click();
+    const a = this.actions.avatar();
+    showIconPicker({ title: 'your avatar', suggested: AVATAR_ICONS, icon: a.icon, color: a.color, onPick: (icon, color, body) => {
+      this.actions.setAvatar(icon, color, body);
+      this.render();
+    } });
+  }
+
   /** Character: level, the XP bar, the skills you have, and a pending skill choice. */
   private renderCharacter(list: Element): void {
     const c = this.actions.character();
@@ -170,9 +187,11 @@ export class HomeScreen {
     box.className = 'contract-card';
     const owned = c.skills.map((id) => SKILLS.find((s) => s.id === id)).filter((s) => s !== undefined);
     box.innerHTML = `
+      <div class="ch-avatar">${iconSvg(this.actions.avatar().icon, 'ch-avatar-icon', this.actions.avatar().color)}<button type="button" class="home-btn cc-btn" data-avatar>Change avatar</button></div>
       <div class="cc-head"><span class="cc-title">level ${c.level}</span><span class="home-dim">${c.xp} / ${need} XP</span></div>
       <div class="xp-bar"><div class="xp-fill" style="width:${(100 * c.xp) / need}%"></div></div>
       <div class="cc-line home-dim">next level in ${need - c.xp} XP</div>
+      <button type="button" class="home-btn cc-btn" data-levelup title="For testing: gain the XP the next level needs">Level up (test)</button>
       ${c.picks ? `<button type="button" class="home-btn cc-btn" data-pick>Choose a skill${c.picks > 1 ? ` (${c.picks})` : ''}</button>` : ''}
       <div class="cc-line ch-head">skills</div>
       ${owned.length ? owned.map((s) => `<div class="cc-line"><span class="ch-skill">${s.name}</span> <span class="home-dim">${s.text}</span></div>`).join('') : '<div class="cc-line home-dim">none yet. every level up lets you pick one of three</div>'}
@@ -188,6 +207,12 @@ export class HomeScreen {
       }
       this.actions.click();
       this.actions.setCode(code);
+      this.render();
+    });
+    box.querySelector('[data-avatar]')!.addEventListener('click', () => this.changeAvatar());
+    box.querySelector('[data-levelup]')!.addEventListener('click', () => {
+      this.actions.click();
+      this.actions.levelUp();
       this.render();
     });
     box.querySelector('[data-pick]')?.addEventListener('click', () => {
@@ -217,6 +242,7 @@ export class HomeScreen {
         ${result}
         <div class="cc-head"><span class="cc-title">new program</span><span class="home-dim">${devDays(f.rating)} days of work</span></div>
         <label class="dev-row">type <select class="dev-type">${PROGRAM_TYPES.map((t) => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+        <div class="dev-row">icon <button type="button" class="dev-icon-btn" title="Choose the icon and its colour">${iconSvg(f.icon, 'dev-icon', f.color)} change</button></div>
         <label class="dev-row">rating <select class="dev-rating">${Array.from({ length: MAX_DEV_RATING }, (_, i) => `<option${i + 1 === f.rating ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></label>
         <label class="dev-row">name <input class="dev-name" maxlength="20" value="${esc(name)}"></label>
         <div class="cc-line home-dim">size ${programSize(f)} GB. bugs can make it take longer. rarity and traits are rolled when it is done: common ${RARITY_TRAITS.common} traits, uncommon ${RARITY_TRAITS.uncommon}, rare ${RARITY_TRAITS.rare}, epic ${RARITY_TRAITS.epic}, legendary ${RARITY_TRAITS.legendary} and your name</div>
@@ -226,6 +252,8 @@ export class HomeScreen {
       const nameEl = box.querySelector<HTMLInputElement>('.dev-name')!;
       const auto = !f.name;
       const change = () => {
+        // A new type draws a new icon from its pool, unless the player chose one.
+        if (!f.picked && f.type !== type.value) f.icon = randomIcon(type.value as ProgramType);
         f.type = type.value as ProgramType;
         f.rating = Number(rating.value);
         if (auto) f.name = '';
@@ -234,10 +262,17 @@ export class HomeScreen {
       type.addEventListener('change', change);
       rating.addEventListener('change', change);
       nameEl.addEventListener('input', () => { f.name = nameEl.value; });
+      box.querySelector('.dev-icon-btn')!.addEventListener('click', () => {
+        this.actions.click();
+        showIconPicker({ title: `icon for ${f.type}`, suggested: ICON_POOLS[f.type], icon: f.icon, color: f.color, onPick: (icon, color, body) => {
+          Object.assign(f, { icon, color, picked: true, body });
+          this.render();
+        } });
+      });
       box.querySelector('[data-dev="start"]')!.addEventListener('click', () => {
         this.actions.click();
-        this.actions.dev.start(f.type, f.rating, (nameEl.value.trim() || name).slice(0, 20));
-        f.name = '';
+        this.actions.dev.start(f.type, f.rating, (nameEl.value.trim() || name).slice(0, 20), f.icon, f.color, f.body);
+        Object.assign(f, { name: '', picked: false, icon: randomIcon(f.type), body: '' });
         this.devLines = [];
         this.devDone = undefined;
         this.render();
