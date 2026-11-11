@@ -68,6 +68,22 @@ export function fileActions(f: DataFile): FileAction[] {
   return [...guard, ...contentActions(f)];
 }
 
+/** What a left click does on a decrypted file, if anything. */
+export function clickAction(f: DataFile): FileAction | undefined {
+  if (f.deleted || !f.decrypted) return undefined;
+  switch (apparentContent(f)) {
+    case 'valuable':
+      if (!f.evaluated) return 'evaluate';
+      return f.downloaded ? undefined : 'download';
+    case 'software':
+      return f.downloaded ? undefined : 'download';
+    case 'contract':
+      return f.altered ? undefined : f.need;
+    default:
+      return undefined;
+  }
+}
+
 function contentActions(f: DataFile): FileAction[] {
   switch (apparentContent(f)) {
     case 'keyring':
