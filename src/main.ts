@@ -78,12 +78,16 @@ function runCommand(raw: string): void {
       if (!arg) game.log('usage: do <action> (look lists the actions here)', 'system');
       else if (!game.runAction(arg)) sfx.play('error');
       break;
+    case 'run':
+      if (!arg) game.log('usage: run <program> (your deck lists them)', 'system');
+      else if (!game.runProgram(arg)) sfx.play('error');
+      break;
     case 'map':
       for (const n of game.network.def.nodes) {
         if (!game.isKnown(n.id)) continue;
         const known = game.isIdentified(n.id);
         const id = known ? n.id : game.nameOf(n.id);
-        game.log(`${id.padEnd(8)} ${known ? n.name : 'unknown'}${n.id === game.currentNode ? '  <- you' : ''}`);
+        game.log(`${id.padEnd(8)} ${known ? n.name : 'hidden'}${n.id === game.currentNode ? '  <- you' : ''}`);
       }
       break;
     case 'pause':
@@ -93,6 +97,7 @@ function runCommand(raw: string): void {
       game.setPaused(false);
       break;
     case 'stop':
+      if (game.cancelScout()) break;
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
       break;
@@ -116,7 +121,7 @@ function ui(cmd: string): void {
 
 const nodeName = (id: string) => game.nameOf(id);
 
-renderDeck(document.getElementById('deck')!);
+renderDeck(document.getElementById('deck')!, game, (id) => ui(`run ${id}`));
 
 const term = new Console(document.getElementById('console')!, (cmd) => {
   sfx.play('command');
@@ -129,12 +134,15 @@ term.completer = (value) =>
     names: (kind) =>
       kind === 'action'
         ? game.currentActions.map((a) => a.id)
-        : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes.filter((n) => game.isKnown(n.id))).map((n) => game.nameOf(n.id)))],
+        : kind === 'program'
+          ? game.programs.map((p) => p.id)
+          : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes.filter((n) => game.isKnown(n.id))).map((n) => game.nameOf(n.id)))],
   });
 const view = new NetworkView(document.getElementById('view')!, game, menu, {
   travel: (id) => ui(`connect ${nodeName(id)}`),
   look: (id) => ui(`look ${nodeName(id)}`),
   act: (id) => ui(`do ${id}`),
+  run: (id) => ui(`run ${id}`),
   togglePause: () => ui(game.paused ? 'resume' : 'pause'),
   mute: () => ui('mute'),
   hover: () => sfx.play('hover'),
@@ -155,7 +163,7 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
   } else if (e.key === 'Escape') {
     if (menu.open) menu.dismiss();
-    else if (game.isMoving) ui('stop');
+    else if (game.isMoving || game.isScouting) ui('stop');
   } else if (e.key === 'm' || e.key === 'M') {
     ui('mute');
   } else if (/^[1-9]$/.test(e.key)) {

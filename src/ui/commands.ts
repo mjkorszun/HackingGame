@@ -1,6 +1,6 @@
 /** Console command names and tab completion. Pure functions, no DOM. */
 
-export type ArgKind = 'none' | 'node' | 'neighbour' | 'action';
+export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'program';
 
 export interface CommandSpec {
   name: string;
@@ -16,10 +16,11 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'connect', aliases: ['go', 'move'], arg: 'neighbour', usage: 'connect <node>', help: 'travel to a node (Tab completes names)' },
   { name: 'look', aliases: ['l'], arg: 'node', usage: 'look [node]', help: 'describe the current node, or another one' },
   { name: 'do', arg: 'action', usage: 'do <action>', help: "use an action of the current node (look lists them)" },
+  { name: 'run', arg: 'program', usage: 'run <program>', help: 'run a program from your deck (e.g. run scout)' },
   { name: 'map', arg: 'none', usage: 'map', help: 'list all nodes' },
   { name: 'pause', arg: 'none', usage: 'pause', help: 'stop time (Space)' },
   { name: 'resume', aliases: ['unpause'], arg: 'none', usage: 'resume', help: 'continue time (Space)' },
-  { name: 'stop', arg: 'none', usage: 'stop', help: 'stop after the current hop (Esc)' },
+  { name: 'stop', arg: 'none', usage: 'stop', help: 'stop travelling after this hop, or stop a running scout (Esc)' },
   { name: 'mute', arg: 'none', usage: 'mute', help: 'sound on / off (M)' },
   { name: 'clear', arg: 'none', usage: 'clear', help: 'clear the console' },
 ];

@@ -1,3 +1,4 @@
+import { SCOUT_NOISE, scoutChances } from './programs';
 import { describe, expect, it } from 'vitest';
 import { testSystem } from '../data/testSystem';
 import { FixedClock } from './clock';
@@ -113,16 +114,16 @@ describe('Game hop state', () => {
 });
 
 describe('hidden nodes', () => {
-  it('show as unknown until the player enters them', () => {
+  it('show as hidden until the player enters them', () => {
     const game = new Game(testSystem);
-    expect(game.kindOf('staff')).toBe('unknown');
+    expect(game.kindOf('staff')).toBe('hidden');
     expect(game.findNode('Staff Records')).toBeUndefined();
     expect(game.findNode('staff')).toBeUndefined();
     game.revealMap();
     expect(game.nameOf('orders')).toBe('?1');
     expect(game.nameOf('staff')).toBe('?2');
     expect(game.findNode('?2')?.id).toBe('staff');
-    expect(game.findNode('?')).toBeUndefined(); // not next to any unknown node yet
+    expect(game.findNode('?')).toBeUndefined(); // not next to any hidden node yet
     game.travelTo('staff');
     run(game, MOVE_TICKS * 5);
     expect(game.currentNode).toBe('staff');
@@ -219,5 +220,57 @@ describe('discovering the map', () => {
     const g = new Game(testSystem);
     g.revealMap();
     expect(g.isKnown('ai')).toBe(true);
+  });
+});
+
+describe('scout', () => {
+  /** Rolls in order, as d100 results (1..100). */
+  const rolls = (...r: number[]) => {
+    let i = 0;
+    return () => (r[Math.min(i++, r.length - 1)] - 1) / 100;
+  };
+  const finish = (g: Game) => {
+    for (let i = 0; i < 1000 && g.isScouting; i++) g.step();
+  };
+
+  it('chances grow with rating and fall with encryption', () => {
+    expect(scoutChances(3, 2)).toEqual({ identify: 60, extend: 20 });
+    expect(scoutChances(1, 3).extend).toBe(0);
+    expect(scoutChances(1000, 1).extend).toBeGreaterThan(99);
+  });
+
+  it('makes noise in the node it runs from', () => {
+    const g = new Game(testSystem, rolls(100));
+    expect(g.runProgram('scout')).toBe(true);
+    expect(g.noise.get('gw')).toBe(SCOUT_NOISE);
+  });
+
+  it('identifies a hidden neighbour on a good roll and stops on a bad extend roll', () => {
+    const s = new Game(testSystem, rolls(1, 100));
+    s.travelTo('edge');
+    run(s, MOVE_TICKS * 2);
+    expect(s.isIdentified('orders')).toBe(false);
+    s.runProgram('scout');
+    expect(s.travelTo('gw')).toBe(false); // busy scouting
+    finish(s);
+    expect(s.isIdentified('orders')).toBe(true);
+    expect(s.isKnown('core')).toBe(false);
+  });
+
+  it('a hidden neighbour stays hidden on a bad roll', () => {
+    const s = new Game(testSystem, rolls(100));
+    s.travelTo('edge');
+    run(s, MOVE_TICKS * 2);
+    s.runProgram('scout');
+    finish(s);
+    expect(s.isIdentified('orders')).toBe(false);
+  });
+
+  it('strong rolls look further, up to the whole map', () => {
+    const s = new Game(testSystem, rolls(1));
+    s.runProgram('scout');
+    finish(s);
+    expect(s.knownCount).toBe(testSystem.nodes.length);
+    expect(s.isIdentified('staff')).toBe(true);
   });
 });

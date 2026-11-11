@@ -95,7 +95,7 @@ export function drawNodeShape(kind: NodeKind, x: number, y: number, r: number, c
         class: cls,
       }, parent);
     case 'relay':
-    case 'unknown':
+    case 'hidden':
     default: // circle
       return el('circle', { cx: x, cy: y, r, class: cls }, parent);
   }

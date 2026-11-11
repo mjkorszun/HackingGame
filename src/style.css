@@ -174,7 +174,7 @@ body {
 @keyframes flow { to { stroke-dashoffset: -12; } }
 
 /* Node colours: every type has its own colour (and its own shape). */
-.kind-gateway, .kind-unknown { --kc: #33ff66; } /* green */
+.kind-gateway, .kind-hidden { --kc: #33ff66; } /* green */
 .kind-relay { --kc: #23a34a; } /* dark green */
 .kind-uplink { --kc: #1fc4a4; } /* sea green */
 .kind-database { --kc: #3fe0e0; } /* turquoise */
@@ -323,3 +323,12 @@ body {
 .gate rect { fill: #000; stroke: var(--grey); stroke-width: 2; }
 .gate line { stroke: var(--grey); stroke-width: 1.5; }
 .mini-gate { fill: var(--grey); }
+
+/* ---------- scout eyes ---------- */
+.scout-layer { pointer-events: none; }
+.scout-eye-white { fill: #021a10; stroke: #eaffef; stroke-width: 1.6; }
+.scout-eye-pupil { fill: #33ff66; }
+.minimap .scout-eye-white { stroke-width: 2.4; }
+
+.deck-program { cursor: pointer; white-space: pre; }
+.deck-program:hover { color: #d4ffe0; text-decoration: underline; }

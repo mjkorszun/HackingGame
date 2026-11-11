@@ -1,6 +1,6 @@
 /**
- * Kinds of nodes. 'unknown' is never a node's real kind: it is how a node looks
- * until it is identified. A 'honeypot' always shows as its disguise.
+ * Kinds of nodes. 'hidden' is never a node's real kind: it is how a node looks
+ * until it is identified (it was hidden on purpose). A 'honeypot' always shows as its disguise.
  */
 export type NodeKind =
   | 'gateway'
@@ -19,7 +19,7 @@ export type NodeKind =
   | 'vehicle'
   | 'security'
   | 'honeypot'
-  | 'unknown';
+  | 'hidden';
 
 export interface NodeDef {
   id: string;
@@ -44,6 +44,8 @@ export interface SystemDef {
   links: [string, string][];
   /** Links that have a gate in the middle (gates are not nodes: they sit on the connection). */
   gates?: [string, string][];
+  /** How well the system hides itself; programs like Scout roll against it. */
+  encryption?: number;
 }
 
 export type LogColor = 'normal' | 'info' | 'system' | 'command' | 'alarm1' | 'alarm2' | 'alarm3';

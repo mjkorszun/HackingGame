@@ -1,8 +1,7 @@
-/** Starting programs (placeholder until programs exist in the sim). */
-const PROGRAMS = ['attack', 'smoke', 'armor', 'hide', 'deceive', 'analyze', 'scan', 'evaluate', 'decrypt'];
+import type { Game } from '../sim/game';
 
-/** The panel under the console: your own hardware and programs. For now only a placeholder. */
-export function renderDeck(root: HTMLElement): void {
+/** The panel under the console: your own hardware and programs. Click a program to run it. */
+export function renderDeck(root: HTMLElement, game: Game, run: (id: string) => void): void {
   root.innerHTML = `
     <div class="deck-title">YOUR DECK</div>
     <div class="deck-cols">
@@ -12,7 +11,16 @@ export function renderDeck(root: HTMLElement): void {
       </div>
       <div>
         <h3>programs</h3>
-        <ul>${PROGRAMS.map((p) => `<li>${p}</li>`).join('')}</ul>
+        <ul class="deck-programs"></ul>
       </div>
     </div>`;
+  const list = root.querySelector('.deck-programs')!;
+  for (const p of game.programs) {
+    const li = document.createElement('li');
+    li.className = 'deck-program';
+    li.textContent = `${p.name.padEnd(10)} ${p.rating}`;
+    li.title = `run ${p.id}`;
+    li.addEventListener('click', () => run(p.id));
+    list.appendChild(li);
+  }
 }

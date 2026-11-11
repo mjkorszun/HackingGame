@@ -51,6 +51,7 @@ export const testSystem: SystemDef = {
     ['ai', 'uplink'],
     ['phys', 'fleet'],
   ],
+  encryption: 2,
   gates: [
     ['edge', 'auth'],
     ['core', 'cams'],
