@@ -534,6 +534,10 @@ describe('file left click', () => {
     f.downloaded = true;
     expect(clickAction(f)).toBeUndefined();
   });
+  it('cracks a seal before anything else', () => {
+    expect(clickAction({ ...base, decrypted: false, content: 'valuable', protection: 'seal' } as DataFile)).toBe('brute');
+    expect(clickAction({ ...base, decrypted: false, content: 'valuable' } as DataFile)).toBeUndefined();
+  });
   it('downloads software', () => {
     expect(clickAction({ ...base, content: 'software' } as DataFile)).toBe('download');
     expect(clickAction({ ...base, content: 'software', downloaded: true } as DataFile)).toBeUndefined();

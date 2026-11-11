@@ -142,7 +142,7 @@ function fileTip(f: DataFile): TipLine[] {
   const lines: TipLine[] = [{ text: f.id, cls: 'tip-title' }];
   if (f.protection) lines.push({ text: PROTECTION_LABEL[f.protection] + (f.protection === 'lock' ? `: ${f.lockPrivilege}` : ''), cls: 'tip-protection' });
   if (!f.decrypted) {
-    const hint = f.protection === 'seal' ? 'brute it first' : f.protection === 'lock' ? 'needs the privilege, or forge' : f.protection === 'killswitch' ? 'defuse it first, or it is lost' : 'click to decrypt';
+    const hint = f.protection === 'seal' ? 'click to brute the seal first' : f.protection === 'lock' ? 'needs the privilege, or forge' : f.protection === 'killswitch' ? 'defuse it first, or it is lost' : 'click to decrypt';
     return [...lines, { text: 'encrypted', cls: 'c-system' }, { text: hint, cls: 'c-system' }];
   }
   const seen = apparentContent(f);
@@ -280,6 +280,9 @@ export class NetworkView {
     this.render();
   }
 
+  /** The loading bar over the file being worked on, updated every frame. */
+  private fileBar: { fill: SVGElement; width: number } | null = null;
+
   /** Neighbour reached with number key n (1-based), in the order shown on screen. */
   neighbourByNumber(n: number): string | undefined {
     return this.neighbourOrder[n - 1];
@@ -301,10 +304,13 @@ export class NetworkView {
     if (key !== this.lastKey) this.render();
     this.updateAvatar();
     this.updateScout();
+    const busy = this.game.decryptingFile;
+    if (this.fileBar && busy) this.fileBar.fill.setAttribute('width', String(this.fileBar.width * Math.min(1, busy.progress)));
   }
 
   private render(): void {
     const g = this.game;
+    this.fileBar = null;
     this.lastKey = `${g.currentNode}|${g.moveTarget}|${g.paused}|${g.identifiedCount}|${g.knownCount}|${g.filesKey}`;
     this.stage.innerHTML = '';
     const current = g.network.node(g.currentNode);
@@ -523,6 +529,13 @@ export class NetworkView {
       const pad = 5;
       svg('rect', { x: x + pad, y: y + pad, width: CELL - 2 * pad, height: CELL - 2 * pad }, blk);
       const mid = y + CELL / 2;
+      if (decrypting?.fileId === file.id) {
+        // A small loading bar over the file while a lasting action works on it.
+        const w = CELL - 2 * pad;
+        svg('rect', { x: x + pad, y: y, width: w, height: 4, class: 'file-bar-bg' }, parent);
+        const fill = svg('rect', { x: x + pad, y: y, width: w * decrypting.progress, height: 4, class: 'file-bar' }, parent);
+        this.fileBar = { fill, width: w };
+      }
       const seen = file.decrypted ? apparentContent(file) : undefined;
       if (file.protection) {
         drawProtection(file.protection, x + CELL / 2, mid, blk);
@@ -538,16 +551,16 @@ export class NetworkView {
       this.tip.attach(blk, () => fileTip(file));
       blk.addEventListener('mouseenter', () => this.actions.hover());
       blk.addEventListener('click', () => {
-        if (!file.decrypted) return this.actions.decryptFile(file.id, false);
         const act = clickAction(file);
         if (act) this.actions.fileAction(act, file.id);
+        else if (!file.decrypted) this.actions.decryptFile(file.id, false);
       });
       blk.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const busy = this.game.isBusy;
         const items = [];
-        if (!file.decrypted) items.push({ label: 'Decrypt', hint: 'click', disabled: busy, action: () => this.actions.decryptFile(file.id, false) });
+        if (!file.decrypted) items.push({ label: 'Decrypt', hint: clickAction(file) ? undefined : 'click', disabled: busy, action: () => this.actions.decryptFile(file.id, false) });
         for (const act of fileActions(file)) {
           const needs = (FILE_PROGRAMS as readonly string[]).includes(act) && !this.game.findProgram(act as FileProgram);
           const done = act === 'download' && file.downloaded;

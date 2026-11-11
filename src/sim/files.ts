@@ -70,7 +70,9 @@ export function fileActions(f: DataFile): FileAction[] {
 
 /** What a left click does on a decrypted file, if anything. */
 export function clickAction(f: DataFile): FileAction | undefined {
-  if (f.deleted || !f.decrypted) return undefined;
+  if (f.deleted) return undefined;
+  // A sealed archive must be cracked before it can be decrypted.
+  if (!f.decrypted) return f.protection === 'seal' ? PROTECTION_PROGRAM.seal : undefined;
   switch (apparentContent(f)) {
     case 'valuable':
       if (!f.evaluated) return 'evaluate';
