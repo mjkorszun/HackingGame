@@ -28,6 +28,7 @@ export function showRunSummary(report: RunReport, balance: number, onOk: () => v
         <span>contract pay</span><span class="rs-num">${sats(report.pay)}</span>
         <span>file values</span><span class="rs-num">${sats(report.filesTotal)}</span>
         <span class="rs-total">total earned</span><span class="rs-num rs-total">${sats(report.total)}</span>
+        <span>reputation</span><span class="rs-num">+${report.reputation}</span>
         <span>your account</span><span class="rs-num">${sats(balance)}</span>
       </div>
       <button type="button">OK</button>

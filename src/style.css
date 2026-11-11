@@ -578,3 +578,5 @@ body {
 .deck-loot-sw.is-loadable { cursor: pointer; text-decoration: underline dotted; }
 .deck-loot-sw.is-loadable:hover { color: #d6f5ff; }
 .file-swname { fill: #9fe4ff; font: 8px var(--font); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: #000; stroke-width: 2.5px; }
+.home-stats { color: var(--grey); margin: -28px 0 28px; letter-spacing: 0.05em; }
+.home-lock { color: var(--grey); font-size: 13px; }

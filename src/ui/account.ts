@@ -1,5 +1,6 @@
 import { DEFAULT_MEMORY, STARTING_PROGRAMS } from '../sim/game';
 import type { Program } from '../sim/programs';
+import { newPizzeria, type NetworkSeed } from '../sim/generate';
 
 /** What the player keeps between runs: sats and software. Saved in the browser. */
 export interface Account {
@@ -10,6 +11,11 @@ export interface Account {
   loaded: string[];
   /** Memory slots of your hardware. */
   memory: number;
+  /** Day counter: every trip into the net is one day. */
+  day: number;
+  reputation: number;
+  /** Networks you know, saved as tiny seed records. */
+  networks: NetworkSeed[];
 }
 
 /** Starting programs that do not fit in the starting memory: they wait in storage. */
@@ -17,7 +23,11 @@ const START_STORED = ['Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mimic 1.0'];
 
 function fresh(): Account {
   const programs = STARTING_PROGRAMS.map((p) => ({ ...p }));
-  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY };
+  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())] };
+}
+
+function randomSeed(): number {
+  return Math.floor(Math.random() * 2 ** 31);
 }
 
 export function loadedPrograms(a: Account): Program[] {
@@ -68,6 +78,9 @@ function migrate(a: Account): Account {
   const programs = a.programs as { type: string; name: string }[];
   renameOld(programs);
   if (typeof a.memory !== 'number') a.memory = DEFAULT_MEMORY;
+  if (typeof a.day !== 'number') a.day = 1;
+  if (typeof a.reputation !== 'number') a.reputation = 0;
+  if (!Array.isArray(a.networks) || !a.networks.length) a.networks = [newPizzeria(randomSeed())];
   if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).slice(0, a.memory).map((p) => p.id);
   // New starting programs reach old saves too.
   for (const p of STARTING_PROGRAMS) {

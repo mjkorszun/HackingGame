@@ -683,3 +683,20 @@ describe('memory', () => {
     expect(g.loadProgram('Owl 2')).toBe(false); // memory full
   });
 });
+
+describe('generated networks', () => {
+  it('the same seed record always builds the same network, and it is playable', async () => {
+    const { generate, newPizzeria } = await import('./generate');
+    const seed = newPizzeria(12345);
+    expect(JSON.stringify(seed).length).toBeLessThan(160);
+    const a = generate(seed);
+    expect(generate(seed)).toEqual(a);
+    expect(a.entry).toBe('intake');
+    for (const id of ['intake', 'orders', 'customers', 'cams']) expect(a.nodes.some((n) => n.id === id)).toBe(true);
+    const g = new Game(a);
+    expect(g.filesIn('orders').length).toBeGreaterThan(0);
+    // Another pizzeria holds different files.
+    const b = new Game(generate(newPizzeria(999)));
+    expect(b.filesIn('orders').map((f) => f.content)).not.toEqual(g.filesIn('orders').map((f) => f.content));
+  });
+});
