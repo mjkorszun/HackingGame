@@ -11,6 +11,8 @@ import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, type Program, type ProgramType } from './sim/programs';
 import { loadAccount, loadedPrograms, nextProgramId, passDay, saveAccount, toggleLoaded } from './ui/account';
 import { showRunSummary } from './ui/runSummary';
+import { showSkillPick } from './ui/skillPick';
+import { addXp } from './sim/progression';
 import { HomeScreen, type Choice, type ContractOffer } from './ui/homeScreen';
 import { finishProgram, newProject, work } from './sim/development';
 import { generate } from './sim/generate';
@@ -67,6 +69,11 @@ function leaveNet(): void {
   const report = game.endRun();
   account.sats += report.total;
   account.reputation += report.reputation;
+  const before = { level: account.level, xp: account.xp };
+  const grown = addXp(account.level, account.xp, report.xp);
+  account.level = grown.level;
+  account.xp = grown.xp;
+  account.skillPicks += grown.levelsUp;
   if (game.planted) {
     const sk = game.planted;
     account.programs = account.programs.filter((p) => p.id !== sk.id);
@@ -78,7 +85,19 @@ function leaveNet(): void {
   for (const l of game.loot) if (l.loaded && l.software) account.loaded.push(l.software.id);
   saveAccount(account);
   flush();
-  showRunSummary(report, account.sats, () => location.reload());
+  showRunSummary(report, account.sats, before, () => pickSkills(() => location.reload()));
+}
+
+/** One skill choice for every level gained and not yet picked, then `done`. */
+function pickSkills(done: () => void): void {
+  if (account.skillPicks <= 0) return done();
+  showSkillPick(account.level - account.skillPicks + 1, account.skills, (skill) => {
+    account.skills.push(skill.id);
+    account.skillPicks--;
+    saveAccount(account);
+    sfx.play('menuItem');
+    pickSkills(done);
+  });
 }
 
 function runCommand(raw: string): void {
@@ -208,6 +227,8 @@ const homeState = { day: account.day, reputation: account.reputation, networks: 
 const home = new HomeScreen(document.getElementById('home')!, homeState, {
   enter: (choice) => enterNetwork(choice),
   click: () => sfx.play('menuItem'),
+  character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks }),
+  pickSkills: (done) => pickSkills(done),
   dev: {
     project: () => account.project,
     start: (type, rating, name) => {

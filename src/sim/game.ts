@@ -42,7 +42,21 @@ export interface RunReport {
   filesTotal: number;
   total: number;
   reputation: number;
+  /** Experience earned, and what it was for. */
+  xp: number;
+  xpLines: { what: string; xp: number }[];
 }
+
+/** Placeholder XP for things done well in a run (counted, paid at the end). */
+export const FEAT_XP = { kill: 10, deceive: 5, silence: 5, protection: 5, honeytoken: 10 } as const;
+export type Feat = keyof typeof FEAT_XP;
+const FEAT_LABEL: Record<Feat, string> = {
+  kill: 'agents destroyed',
+  deceive: 'agents deceived',
+  silence: 'agents silenced',
+  protection: 'file protections removed',
+  honeytoken: 'honeytokens spotted',
+};
 
 interface ScoutTask {
   /** Hop number: 1 = neighbours, 2 = two links away, ... */
@@ -103,6 +117,8 @@ export class Game {
   readonly memorySlots: number;
   /** What the player took in this run: paid out (sats, programs) only when the run ends. */
   readonly loot: LootItem[] = [];
+  /** Things done well this run: each pays experience at the end. */
+  readonly feats: Feat[] = [];
   /** The run is over: the player left the net. */
   ended = false;
   /** Agents defending the system. */
@@ -413,6 +429,7 @@ export class Game {
       this.query = null;
       if (this.d100() <= versus(program.rating, a.stats.deceiveResist)) {
         a.mood = 'trusting';
+        this.feats.push('deceive');
         this.log(`${program.name}: ${a.name} is deceived. it leaves you alone while you stay here`, 'info');
       } else {
         this.log(`${program.name}: ${a.name} saw through it`, 'alarm1');
@@ -429,6 +446,7 @@ export class Game {
       }
       if (this.d100() <= versus(program.rating, a.stats.silenceResist)) {
         a.silenced = true;
+        this.feats.push('silence');
         this.log(`${program.name}: ${a.name} silenced. its messages cannot leave this node`, 'info');
         if (a.mood !== 'hostile') this.makeHostile(a, false);
       } else {
@@ -444,6 +462,7 @@ export class Game {
     a.hp -= damage;
     if (a.hp <= 0) {
       this.agents.splice(this.agents.indexOf(a), 1);
+      this.feats.push('kill');
       this.log(`${program.name}: ${a.name} destroyed${a.mood === 'hostile' ? '' : ' in one blow. no one noticed'}`, 'info');
       return true;
     }
@@ -480,8 +499,18 @@ export class Game {
     // Placeholder reputation: a contract done +5; a local job +1 if you took something and the alarm never went red.
     const reputation = job ? (success ? 5 : 0) : this.loot.length && this.alarm < 3 ? 1 : 0;
     const filesTotal = files.reduce((sum, f) => sum + f.price, 0);
+    // Placeholder experience: the goal met (a contract done, or a local job where you took something),
+    // more for a harder system, plus every feat counted during the run.
+    const security = this.network.def.security ?? 1;
+    const xpLines: { what: string; xp: number }[] = [];
+    if (job ? success : this.loot.length > 0) xpLines.push({ what: `${job ? 'contract done' : 'job done'} (security ${security})`, xp: (job ? 30 : 15) * security });
+    for (const f of Object.keys(FEAT_XP) as Feat[]) {
+      const n = this.feats.filter((x) => x === f).length;
+      if (n) xpLines.push({ what: `${FEAT_LABEL[f]} x${n}`, xp: n * FEAT_XP[f] });
+    }
+    const xp = xpLines.reduce((sum, l) => sum + l.xp, 0);
     this.log('link down: you left the net', 'system');
-    return { contract: job ? { title: job.title, pay: job.pay } : undefined, success, files, software, pay, filesTotal, total: pay + filesTotal, reputation };
+    return { contract: job ? { title: job.title, pay: job.pay } : undefined, success, files, software, pay, filesTotal, total: pay + filesTotal, reputation, xp, xpLines };
   }
 
 
@@ -964,6 +993,7 @@ export class Game {
       const was = file.protection!;
       file.protection = undefined;
       const done = { killswitch: 'kill switch defused', seal: 'seal cracked', tracker: 'tracker scrubbed', lock: 'lock forged open' }[was];
+      this.feats.push('protection');
       this.log(`${program.name}: ${file.id} ${done}`, 'info');
       this.filesChanged++;
       return true;
@@ -976,6 +1006,7 @@ export class Game {
       }
       if (action === 'evaluate' && file.content === 'honeytoken' && this.d100() <= this.trapChance(program.rating)) {
         file.detected = true;
+        this.feats.push('honeytoken');
         this.log(`${program.name}: ${file.id} is a ${CONTENT_LABEL.honeytoken}. good catch: leave it alone`, 'alarm2');
       } else if (action === 'evaluate') {
         file.evaluated = true;

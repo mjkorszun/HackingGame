@@ -2,6 +2,7 @@ import type { ContractDef, SystemDef } from '../sim/types';
 import type { NetworkSeed } from '../sim/generate';
 import { sats } from '../sim/money';
 import { devDays, MAX_DEV_RATING, RARITY_TRAITS, type DevProject } from '../sim/development';
+import { SKILLS, xpToNext } from '../sim/progression';
 import { PROGRAM_TYPES, programSize, type Program, type ProgramType } from '../sim/programs';
 
 /** A contract on offer: the job and the system it is in. */
@@ -30,6 +31,10 @@ export interface HomeActions {
   /** Jack in: start the run. */
   enter(choice: Choice): void;
   click(): void;
+  /** Your character: level, XP into it, skills, and level ups not picked yet. */
+  character(): { level: number; xp: number; skills: string[]; picks: number };
+  /** Opens the skill choice for the level ups not picked yet; `done` runs after. */
+  pickSkills(done: () => void): void;
   /** Software development: the project in progress, starting one, and working on it. */
   dev: {
     project(): DevProject | undefined;
@@ -48,7 +53,7 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
  */
 export class HomeScreen {
   private chosen: Choice | undefined;
-  private open: 'networks' | 'contracts' | 'dev' | null = null;
+  private open: 'networks' | 'contracts' | 'dev' | 'character' | null = null;
   /** What the last stretch of development did, shown under the project. */
   private devLines: string[] = [];
   private devDone: Program | undefined;
@@ -97,11 +102,12 @@ export class HomeScreen {
         <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">Known networks</button>
         <button type="button" class="home-btn${this.open === 'contracts' ? ' is-open' : ''}" data-act="contracts"${locked ? ` disabled title="Needs reputation ${CONTRACT_REPUTATION}"` : ''}>Choose contract${locked ? ` <span class="home-lock">(rep. ${CONTRACT_REPUTATION})</span>` : ''}</button>
         <button type="button" class="home-btn${this.open === 'dev' ? ' is-open' : ''}" data-act="dev">Software development</button>
+        <button type="button" class="home-btn${this.open === 'character' ? ' is-open' : ''}" data-act="character">Character${this.actions.character().picks ? ' <span class="home-lock">(skill to pick)</span>' : ''}</button>
         <button type="button" class="home-btn" data-act="enter"${this.chosen ? '' : ' disabled title="Pick a network or a contract first"'}>Enter the network</button>
       </nav>
       <div class="home-active">chosen network: ${this.label()}</div>
       <div class="home-list"></div>`;
-    for (const which of ['networks', 'contracts', 'dev'] as const) {
+    for (const which of ['networks', 'contracts', 'dev', 'character'] as const) {
       this.main.querySelector(`[data-act="${which}"]`)!.addEventListener('click', () => {
         this.actions.click();
         this.open = this.open === which ? null : which;
@@ -137,6 +143,8 @@ export class HomeScreen {
           <div class="cc-line home-dim">${net.location}. security level ${net.security}</div>
           ${s.skimmers.filter((k) => k.netId === net.id).map((k) => `<div class="cc-line cc-skim">${k.program.name} planted: +${sats(Math.round((net.income ?? 0.08) * (k.program.efficiency ?? 1) * 100) / 100)} a day</div>`).join('')}`, () => ({ kind: 'network', net }));
       }
+    } else if (this.open === 'character') {
+      this.renderCharacter(list);
     } else if (this.open === 'dev') {
       this.renderDev(list);
     } else if (this.open === 'contracts') {
@@ -149,6 +157,27 @@ export class HomeScreen {
           <div class="cc-line home-dim">${c.need} one file in the company's databases. security level ${sys.security ?? 1}</div>`, () => ({ kind: 'contract', offer }));
       }
     }
+  }
+
+  /** Character: level, the XP bar, the skills you have, and a pending skill choice. */
+  private renderCharacter(list: Element): void {
+    const c = this.actions.character();
+    const need = xpToNext(c.level);
+    const box = document.createElement('div');
+    box.className = 'contract-card';
+    const owned = c.skills.map((id) => SKILLS.find((s) => s.id === id)).filter((s) => s !== undefined);
+    box.innerHTML = `
+      <div class="cc-head"><span class="cc-title">level ${c.level}</span><span class="home-dim">${c.xp} / ${need} XP</span></div>
+      <div class="xp-bar"><div class="xp-fill" style="width:${(100 * c.xp) / need}%"></div></div>
+      <div class="cc-line home-dim">next level in ${need - c.xp} XP</div>
+      ${c.picks ? `<button type="button" class="home-btn cc-btn" data-pick>Choose a skill${c.picks > 1 ? ` (${c.picks})` : ''}</button>` : ''}
+      <div class="cc-line ch-head">skills</div>
+      ${owned.length ? owned.map((s) => `<div class="cc-line"><span class="ch-skill">${s.name}</span> <span class="home-dim">${s.text}</span></div>`).join('') : '<div class="cc-line home-dim">none yet. every level up lets you pick one of three</div>'}`;
+    box.querySelector('[data-pick]')?.addEventListener('click', () => {
+      this.actions.click();
+      this.actions.pickSkills(() => this.render());
+    });
+    list.appendChild(box);
   }
 
   /** Software development: a form for a new project, or the project in progress with its buttons. */

@@ -632,3 +632,19 @@ body {
 .pi-btns button:hover:not(:disabled) { background: var(--green-faint); }
 .pi-btns button:disabled { color: var(--grey); border-color: #4a564f; cursor: not-allowed; }
 .pi-note { margin-top: 8px; color: var(--yellow); font-size: 13px; }
+
+/* ---------- experience ---------- */
+.xp-row { display: flex; justify-content: space-between; margin-top: 10px; }
+.xp-level { color: var(--yellow); }
+.xp-bar { height: 12px; border: 1px solid var(--green-dim); margin-top: 6px; background: #031a0b; }
+.xp-fill { height: 100%; background: var(--green); width: 0; }
+.xp-up { margin-top: 8px; color: var(--yellow); font-weight: bold; letter-spacing: 1px; animation: xp-flash 0.5s ease-in-out 3 alternate; }
+@keyframes xp-flash { from { opacity: 1; } to { opacity: 0.45; } }
+.sp-panel { width: min(640px, calc(100vw - 32px)); }
+.sp-cards { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.rs-panel .sp-card { flex: 1 1 160px; display: flex; flex-direction: column; gap: 6px; text-align: left; background: #000; color: var(--green); border: 1px solid var(--green); padding: 12px; font: inherit; cursor: pointer; }
+.rs-panel .sp-card:hover { background: var(--green-faint); }
+.sp-name { color: var(--yellow); font-weight: bold; }
+.sp-text { color: #c8d4cc; }
+.ch-head { margin-top: 14px; color: var(--blue, #5ab4ff); }
+.ch-skill { color: var(--yellow); }
