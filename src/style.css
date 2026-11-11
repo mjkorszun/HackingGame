@@ -498,7 +498,8 @@ body {
   padding: 10px 16px;
   cursor: pointer;
 }
-.home-btn:hover, .home-btn.is-open { background: var(--green-faint); }
+.home-btn:hover:not(:disabled), .home-btn.is-open { background: var(--green-faint); }
+.home-btn:disabled { color: var(--grey); border-color: #4a564f; cursor: not-allowed; }
 .home-active { margin-top: 24px; color: var(--green); }
 .home-job { color: var(--yellow); }
 .home-dim { color: var(--grey); }
