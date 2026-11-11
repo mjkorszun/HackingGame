@@ -357,6 +357,8 @@ body {
 .file-guard circle, .file-guard path { fill: none; stroke: var(--fc); stroke-width: 1.4; }
 .file-guard line { stroke-width: 1.6; }
 .file-guard .guard-fill { fill: var(--fc); stroke: none; }
+.file-bar-bg { fill: #1f5a30; pointer-events: none; }
+.file-bar { fill: var(--green); pointer-events: none; }
 .file-price { fill: var(--fc); font: bold 7px monospace; letter-spacing: -0.6px; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .data-block:hover { --fc: #a8ffc0; }
 .data-block:hover rect { fill: #14502a; }
