@@ -1,5 +1,5 @@
 import { sats } from './money';
-import { codeName, versus, WARRIORS, type Agent } from './agents';
+import { codeName, typeNames, versus, WARRIORS, type Agent } from './agents';
 import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
@@ -149,10 +149,12 @@ export class Game {
     const job = system.contract;
     const target = job && this.files.get(job.node);
     if (job && target) target.push({ id: `f${target.length + 1}`, content: 'contract', scanned: false, need: job.need });
-    (system.agents ?? []).forEach((a, i) => {
-      const stats = WARRIORS[a.variant ?? 0] ?? WARRIORS[0];
+    const defs = system.agents ?? [];
+    const names = typeNames(system.id, defs.map((a) => a.type ?? 'balanced'));
+    defs.forEach((a, i) => {
+      const stats = WARRIORS[a.type ?? 'balanced'];
       this.agents.push({
-        id: `a${i + 1}`, name: codeName(`${system.id}/${i}`), stats, hp: stats.hp, node: a.node, hop: null,
+        id: `a${i + 1}`, typeName: names.get(stats.type)!, name: codeName(`${system.id}/${i}`), stats, hp: stats.hp, node: a.node, hop: null,
         stayLeft: stats.stay[0], queryLeft: stats.queryEvery, attackLeft: stats.attackEvery,
         mood: 'patrol', strikes: 0, silenced: false, known: 'none',
       });
@@ -326,14 +328,16 @@ export class Game {
       if (a.known === 'none') this.log(`${program.name}: could not read ${a.name}`, 'system');
       return;
     }
-    a.known = got;
-    this.log(`${program.name}: ${a.name} ${got === 'full' ? 'fully analyzed' : 'partly analyzed'} (hover it to see)`, 'info');
+    // Agents of one type share their stats: what you learn about one applies to every agent of that type here.
+    for (const b of this.agents) if (b.stats.type === a.stats.type && b.known !== 'full') b.known = got;
+    const others = this.agents.filter((b) => b !== a && b.stats.type === a.stats.type).length;
+    this.log(`${program.name}: ${a.name} (${a.typeName}) ${got === 'full' ? 'fully analyzed' : 'partly analyzed'}${others ? `. this applies to every ${a.typeName} here` : ''} (hover it to see)`, 'info');
   }
 
   private startQuery(a: Agent): void {
     this.query = { agentId: a.id };
     this.analyze(a);
-    this.log(`${a.name} (${a.stats.kind}) QUERIES YOU${a.strikes ? ' again' : ''}: who are you?`, 'alarm2');
+    this.log(`${a.name} (${a.typeName}) QUERIES YOU${a.strikes ? ' again' : ''}: who are you?`, 'alarm2');
     this.setPaused(true);
     this.events.push({ type: 'query', agentId: a.id });
   }

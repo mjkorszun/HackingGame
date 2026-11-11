@@ -3,8 +3,39 @@
 /** How an agent moves around its system. Only roam is built so far. */
 export type AgentAi = 'roam' | 'guard-entry' | 'path' | 'defend' | 'zone';
 
+/**
+ * Warrior archetypes: decide stats and colour. Each system gives every archetype it uses a name
+ * drawn from WARRIOR_NAMES, so a heavy warrior may be a "knight" in one system and a "rocket" in another.
+ * Agents of one type share their stats, so analyzing one reveals the others.
+ */
+export type WarriorType = 'balanced' | 'watchful' | 'heavy';
+
+/** Military names for warrior types, drawn when a system is created. */
+export const WARRIOR_NAMES = [
+  'musketeer', 'ranger', 'guardian', 'tank', 'knight', 'rocket', 'hussar', 'grenadier', 'sentinel', 'dragoon',
+  'lancer', 'sniper', 'cuirassier', 'legionnaire', 'centurion', 'trooper', 'marine', 'commando', 'gunner', 'sapper',
+  'scout', 'warden', 'paladin', 'halberdier', 'pikeman', 'cavalier', 'mortar', 'howitzer', 'artillery', 'bombardier',
+  'corsair', 'praetorian', 'janissary', 'samurai', 'ronin', 'spartan', 'hoplite', 'templar', 'crusader', 'vanguard',
+];
+
+/** Names for the warrior types a system uses: distinct, and the same every time for the same seed. */
+export function typeNames(seedText: string, types: WarriorType[]): Map<WarriorType, string> {
+  let s = 7;
+  for (const ch of seedText) s = (s * 31 + ch.charCodeAt(0)) >>> 0;
+  const pool = [...WARRIOR_NAMES];
+  const out = new Map<WarriorType, string>();
+  for (const t of types) {
+    if (out.has(t)) continue;
+    s = (s * 1664525 + 1013904223) >>> 0;
+    out.set(t, pool.splice(Math.floor((s / 2 ** 32) * pool.length), 1)[0]);
+  }
+  return out;
+}
+
 export interface AgentStats {
   kind: 'warrior';
+  /** Which type of warrior: decides its stats and colour. */
+  type: WarriorType;
   /** Detection: rolled against the player's hide when it queries. */
   detection: number;
   /** Ticks between query attempts while it shares a node with the player. */
@@ -32,6 +63,7 @@ export interface AgentStats {
 /** Placeholder warrior: detection 3, query every 3 s, hits 4 every 2 s (DPS 2), armour 2, 30 HP. */
 export const WARRIOR: AgentStats = {
   kind: 'warrior',
+  type: 'balanced',
   detection: 3,
   queryEvery: 30,
   damage: 4,
@@ -47,15 +79,15 @@ export const WARRIOR: AgentStats = {
 };
 
 /**
- * Three kinds of warrior (placeholder numbers):
- * 0 balanced; 1 watchful but fragile (asks often, easy to kill, hard to fool);
- * 2 heavy gun (rarely asks, hits hard, tough, hard to silence, easy to fool).
+ * Three archetypes of warrior (placeholder numbers):
+ * balanced; watchful but fragile (asks often, easy to kill, hard to fool);
+ * heavy gun (rarely asks, hits hard, tough, hard to silence, easy to fool).
  */
-export const WARRIORS: AgentStats[] = [
-  WARRIOR,
-  { ...WARRIOR, detection: 4, queryEvery: 20, damage: 3, attackEvery: 20, armor: 1, hp: 20, silenceResist: 1, deceiveResist: 3, scanResist: 1, stay: [40, 80] },
-  { ...WARRIOR, detection: 2, queryEvery: 60, damage: 8, attackEvery: 30, armor: 4, hp: 60, silenceResist: 4, deceiveResist: 1, scanResist: 3, stay: [80, 140], hopTicks: 20 },
-];
+export const WARRIORS: Record<WarriorType, AgentStats> = {
+  balanced: WARRIOR,
+  watchful: { ...WARRIOR, type: 'watchful', detection: 4, queryEvery: 20, damage: 3, attackEvery: 20, armor: 1, hp: 20, silenceResist: 1, deceiveResist: 3, scanResist: 1, stay: [40, 80] },
+  heavy: { ...WARRIOR, type: 'heavy', detection: 2, queryEvery: 60, damage: 8, attackEvery: 30, armor: 4, hp: 60, silenceResist: 4, deceiveResist: 1, scanResist: 3, stay: [80, 140], hopTicks: 20 },
+};
 
 /** A code name like Decker's: two letters, a dash, three digits (KX-271). Same seed, same name. */
 export function codeName(seedText: string): string {
@@ -74,6 +106,8 @@ export type Knowledge = 'none' | 'partial' | 'full';
 
 export interface Agent {
   id: string;
+  /** Its type's name in this system (e.g. knight). */
+  typeName: string;
   /** Short name used in the console: W1, W2... */
   name: string;
   stats: AgentStats;
@@ -104,7 +138,7 @@ export function dps(s: AgentStats): number {
 /** Lines describing an agent, as far as the player's Analyze revealed it. */
 export function agentInfo(a: Agent): string[] {
   const s = a.stats;
-  const lines = [`${a.name}: ${s.kind}`];
+  const lines = [`${a.name}: ${a.typeName} (${s.kind})`];
   if (a.known === 'none') return [...lines, 'not analyzed: stats unknown'];
   lines.push(`HP ${a.hp}/${s.hp}   hits ${s.damage} every ${s.attackEvery / TPS} s (DPS ${dps(s)})`);
   if (a.known === 'partial') return [...lines, 'partly analyzed'];

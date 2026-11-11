@@ -531,6 +531,19 @@ body {
 .agent.is-silenced .agent-body { stroke-dasharray: 3 2; }
 @keyframes agent-angry { from { stroke-width: 2.5; } to { stroke-width: 4.5; } }
 .mini-agent { fill: #ff6060; stroke: #000; stroke-width: 0.8; }
+/* warrior archetypes: balanced red (above), watchful amber, heavy steel blue */
+.agent.is-watchful .agent-body { fill: #ffcf6a; stroke: #8a5600; }
+.agent.is-watchful .agent-sword { stroke: #6b4200; }
+.agent.is-watchful .agent-name { fill: #ffcf6a; }
+.agent.is-watchful:hover .agent-body { fill: #ffe0a0; }
+.agent.is-heavy .agent-body { fill: #8fb8ff; stroke: #1d3f8f; }
+.agent.is-heavy .agent-sword { stroke: #13306e; }
+.agent.is-heavy .agent-name { fill: #8fb8ff; }
+.agent.is-heavy:hover .agent-body { fill: #b5d0ff; }
+.agent.is-hostile.is-watchful .agent-body { fill: #ffb020; stroke: #fff0c0; }
+.agent.is-hostile.is-heavy .agent-body { fill: #5a8cff; stroke: #d8e6ff; }
+.mini-agent.is-watchful { fill: #ffc040; }
+.mini-agent.is-heavy { fill: #6f9cff; }
 
 .query-box {
   position: absolute;

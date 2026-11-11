@@ -1,3 +1,4 @@
+import type { WarriorType } from './agents';
 /**
  * Kinds of nodes. 'hidden' is never a node's real kind: it is how a node looks
  * until it is identified (it was hidden on purpose). A 'honeypot' always shows as its disguise.
@@ -53,8 +54,8 @@ export interface SystemDef {
   /** Security level: how valuable the data kept here is (and, later, how hard it fights back). */
   security?: number;
   /** Agents that start in this system. */
-  /** variant: which of the warrior kinds (0-2). */
-  agents?: { kind: 'warrior'; node: string; variant?: number }[];
+  /** One entry per agent; several agents can share a type. */
+  agents?: { kind: 'warrior'; node: string; type?: WarriorType }[];
   /** The job the player was hired for in this system. */
   contract?: ContractDef;
 }
