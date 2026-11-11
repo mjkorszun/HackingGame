@@ -13,6 +13,13 @@ function run(game: Game, ticks: number) {
   for (let i = 0; i < ticks; i++) game.step();
 }
 
+/** Starts a file action and lets its loading bar fill. */
+function act(game: Game, action: import('./files').FileAction, fileId: string): boolean {
+  const ok = game.fileAction(action, fileId);
+  for (let i = 0; i < 1000 && game.isBusy; i++) game.step();
+  return ok;
+}
+
 describe('FixedClock', () => {
   it('turns elapsed time into whole ticks and keeps the remainder', () => {
     const c = new FixedClock(10);
@@ -361,24 +368,24 @@ describe('data files and scan', () => {
     const files = g.filesIn('orders');
     const valuable = files.find((f) => f.content === 'valuable')!;
     const worthless = files.find((f) => f.content === 'worthless')!;
-    expect(g.fileAction('download', worthless.id)).toBe(false);
-    expect(g.fileAction('evaluate', valuable.id)).toBe(true);
+    expect(act(g, 'download', worthless.id)).toBe(false);
+    expect(act(g, 'evaluate', valuable.id)).toBe(true);
     expect(valuable.evaluated).toBe(true);
-    expect(g.fileAction('download', valuable.id)).toBe(true);
+    expect(act(g, 'download', valuable.id)).toBe(true);
     expect(g.loot[0].price).toBe(valuable.price);
-    expect(g.fileAction('download', valuable.id)).toBe(false); // only once
+    expect(act(g, 'download', valuable.id)).toBe(false); // only once
     const software = files.find((f) => f.content === 'software');
     if (software) {
       const before = g.programs.length;
-      expect(g.fileAction('identify', software.id)).toBe(true);
-      expect(g.fileAction('download', software.id)).toBe(true);
+      expect(act(g, 'identify', software.id)).toBe(true);
+      expect(act(g, 'download', software.id)).toBe(true);
       expect(g.programs.length).toBe(before); // paid out only when the run ends
       expect(g.loot.at(-1)!.software!.name).toBe(software.software!.name);
     }
     const contract = files.find((f) => f.content === 'contract');
     if (contract) {
-      expect(g.fileAction(contract.need === 'alter' ? 'delete' : 'alter', contract.id)).toBe(false);
-      expect(g.fileAction(contract.need!, contract.id)).toBe(true);
+      expect(act(g, contract.need === 'alter' ? 'delete' : 'alter', contract.id)).toBe(false);
+      expect(act(g, contract.need!, contract.id)).toBe(true);
     }
   });
 
@@ -395,7 +402,7 @@ describe('data files and scan', () => {
     finish(fail);
     expect(f.detected).toBeFalsy();
     fail.drainEvents();
-    expect(fail.fileAction('download', f.id)).toBe(true);
+    expect(act(fail, 'download', f.id)).toBe(true);
     expect(fail.drainEvents().some((e) => e.type === 'log' && e.line.color === 'alarm3')).toBe(true);
     expect(fail.loot.length).toBe(0);
 
@@ -411,9 +418,9 @@ describe('data files and scan', () => {
     ok.scanCommand(h.id);
     finish(ok);
     expect(h.detected).toBeFalsy(); // scan alone doesn't tell
-    expect(ok.fileAction('evaluate', h.id)).toBe(true);
+    expect(act(ok, 'evaluate', h.id)).toBe(true);
     expect(h.detected).toBe(true); // evaluate sees through it
-    expect(ok.fileAction('download', h.id)).toBe(false);
+    expect(act(ok, 'download', h.id)).toBe(false);
   });
 
   it('protections: kill switch, seal, tracker, lock', () => {
@@ -426,18 +433,33 @@ describe('data files and scan', () => {
     finish(g);
     expect(fs[0].deleted).toBe(true); // scanned before defusing
     expect(g.scanCommand(fs[1].id)).toBe(false); // sealed
-    expect(g.fileAction('decrypt', fs[1].id)).toBe(true);
+    expect(act(g, 'decrypt', fs[1].id)).toBe(true);
     expect(g.scanCommand(fs[1].id)).toBe(true);
     finish(g);
     expect(fs[1].scanned).toBe(true);
     expect(g.scanCommand(fs[2].id)).toBe(false); // locked, no admin
-    expect(g.fileAction('forge', fs[2].id)).toBe(true);
+    expect(act(g, 'forge', fs[2].id)).toBe(true);
     expect(g.scanCommand(fs[2].id)).toBe(true);
     finish(g);
     const t = fs[3];
     t.protection = 'killswitch';
-    expect(g.fileAction('defuse', t.id)).toBe(true);
+    expect(act(g, 'defuse', t.id)).toBe(true);
     expect(t.protection).toBeUndefined();
+  });
+
+  it('a file action takes time: its effect lands when the bar is full, and it can be stopped', () => {
+    const g = inOrders();
+    const f = g.filesIn('orders')[0] as import('./files').DataFile;
+    Object.assign(f, { protection: 'seal' });
+    expect(g.fileAction('decrypt', f.id)).toBe(true);
+    expect(f.protection).toBe('seal');
+    expect(g.scanningFile?.fileId).toBe(f.id);
+    expect(g.fileAction('decrypt', f.id)).toBe(false); // busy
+    expect(g.cancelFileJob()).toBe(true);
+    expect(g.isBusy).toBe(false);
+    expect(f.protection).toBe('seal');
+    expect(act(g, 'decrypt', f.id)).toBe(true);
+    expect(f.protection).toBeUndefined();
   });
 
   it('a keyring gives a privilege or the keys', () => {
@@ -446,9 +468,9 @@ describe('data files and scan', () => {
     Object.assign(f, { content: 'keyring', grant: 'security' });
     g.scanCommand(f.id);
     finish(g);
-    expect(g.fileAction('extract', f.id)).toBe(true);
+    expect(act(g, 'extract', f.id)).toBe(true);
     expect(g.privileges.has('security')).toBe(true);
-    expect(g.fileAction('extract', f.id)).toBe(false);
+    expect(act(g, 'extract', f.id)).toBe(false);
   });
 
   it('evaluate needs an evaluate program', () => {
@@ -457,7 +479,7 @@ describe('data files and scan', () => {
     finish(g);
     g.programs.splice(g.programs.findIndex((p) => p.type === 'evaluate'), 1);
     const valuable = g.filesIn('orders').find((f) => f.content === 'valuable')!;
-    expect(g.fileAction('evaluate', valuable.id)).toBe(false);
+    expect(act(g, 'evaluate', valuable.id)).toBe(false);
   });
 
   it('there is nothing to scan outside databases', () => {
@@ -568,9 +590,9 @@ describe('run and contract', () => {
     const v = g.filesIn('orders').find((f) => f.content === 'valuable')!;
     Object.assign(v, { scanned: true, protection: undefined });
     expect(g.contractDone).toBe(false);
-    expect(g.fileAction('alter', c.id)).toBe(true);
+    expect(act(g, 'alter', c.id)).toBe(true);
     expect(g.contractDone).toBe(true);
-    expect(g.fileAction('download', v.id)).toBe(true);
+    expect(act(g, 'download', v.id)).toBe(true);
     const r = g.endRun();
     expect(r.success).toBe(true);
     expect(r.pay).toBe(50);
