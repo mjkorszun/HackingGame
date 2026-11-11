@@ -137,7 +137,7 @@ body {
 .kind-relay { --kc: #23a34a; } /* dark green */
 .kind-uplink { --kc: #1fc4a4; } /* sea green */
 .kind-database { --kc: #3fe0e0; } /* turquoise */
-.kind-monitoring { --kc: #8cbf3a; } /* olive, leaning green */
+.kind-monitoring { --kc: #9fba3a; } /* olive, leaning green */
 .kind-identity { --kc: #c3a2ff; } /* light violet */
 .kind-vault { --kc: #f0c330; } /* gold */
 .kind-overseer { --kc: #8a5cf0; } /* dark violet */
