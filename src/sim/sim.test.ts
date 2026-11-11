@@ -188,7 +188,7 @@ describe('node actions', () => {
     const g = at('trap');
     expect(g.kindOf('trap')).toBe('database');
     g.drainEvents();
-    expect(g.runAction('query')).toBe(true);
+    expect(g.decryptCommand('all')).toBe(true); // touching its files springs the trap
     expect(g.drainEvents().some((e) => e.type === 'log' && e.line.color === 'alarm3')).toBe(true);
   });
 });
@@ -298,12 +298,12 @@ describe('stub programs', () => {
   });
   it('each first-version program can be run and only prints for now', () => {
     const g = new Game(testSystem);
-    for (const t of ['attack', 'hide', 'decrypt'] as const) expect(g.runProgram(t)).toBe(true);
+    for (const t of ['attack', 'hide'] as const) expect(g.runProgram(t)).toBe(true);
     expect(g.isScouting).toBe(false);
   });
 });
 
-describe('data files and scan', () => {
+describe('data files and decrypt', () => {
   const inOrders = () => {
     const g = new Game(testSystem);
     g.autoPause = false;
@@ -312,6 +312,8 @@ describe('data files and scan', () => {
     g.travelTo('orders');
     run(g, MOVE_TICKS * 3);
     expect(g.currentNode).toBe('orders');
+    // Protections get their own tests.
+    for (const f of g.filesIn('orders') as import('./files').DataFile[]) f.protection = undefined;
     return g;
   };
   const finish = (g: Game) => {
@@ -326,30 +328,136 @@ describe('data files and scan', () => {
     expect(new Game(testSystem).filesIn('gw')).toEqual([]);
   });
 
-  it('scans one file', () => {
+  it('decrypts one file', () => {
     const g = inOrders();
-    expect(g.scanCommand('f2')).toBe(true);
+    expect(g.decryptCommand('f2')).toBe(true);
     expect(g.travelTo('edge')).toBe(false); // busy
     finish(g);
-    expect(g.filesIn('orders').filter((f) => f.scanned).map((f) => f.id)).toEqual(['f2']);
+    expect(g.filesIn('orders').filter((f) => f.decrypted).map((f) => f.id)).toEqual(['f2']);
   });
 
-  it('scan all starts at the chosen file, wraps around and skips scanned ones', () => {
+  it('decrypt all starts at the chosen file, wraps around and skips decrypted ones', () => {
     const g = inOrders();
-    g.scanCommand('f1');
+    g.decryptCommand('f1');
     finish(g);
     const n = g.filesIn('orders').length;
-    g.scanCommand('all f3');
-    expect(g.scanningFile?.fileId).toBe('f3');
+    g.decryptCommand('all f3');
+    expect(g.decryptingFile?.fileId).toBe('f3');
     finish(g);
-    expect(g.filesIn('orders').every((f) => f.scanned)).toBe(true);
+    expect(g.filesIn('orders').every((f) => f.decrypted)).toBe(true);
     expect(n).toBeGreaterThan(3);
-    expect(g.scanCommand('all')).toBe(false); // nothing left
+    expect(g.decryptCommand('all')).toBe(false); // nothing left
   });
 
-  it('there is nothing to scan outside databases', () => {
+  it('decrypted files offer actions by content; evaluate, identify and download work', () => {
+    const g = inOrders();
+    g.decryptCommand('all');
+    finish(g);
+    const files = g.filesIn('orders');
+    const valuable = files.find((f) => f.content === 'valuable')!;
+    const worthless = files.find((f) => f.content === 'worthless')!;
+    expect(g.fileAction('download', worthless.id)).toBe(false);
+    expect(g.fileAction('evaluate', valuable.id)).toBe(true);
+    expect(valuable.evaluated).toBe(true);
+    expect(g.fileAction('download', valuable.id)).toBe(true);
+    expect(g.downloads[0].price).toBe(valuable.price);
+    expect(g.fileAction('download', valuable.id)).toBe(false); // only once
+    const software = files.find((f) => f.content === 'software');
+    if (software) {
+      const before = g.programs.length;
+      expect(g.fileAction('identify', software.id)).toBe(true);
+      expect(g.fileAction('download', software.id)).toBe(true);
+      expect(g.programs.length).toBe(before + 1);
+      expect(g.programs[before].name).toBe(software.software!.name);
+    }
+    const contract = files.find((f) => f.content === 'contract');
+    if (contract) {
+      expect(g.fileAction(contract.need === 'alter' ? 'delete' : 'alter', contract.id)).toBe(false);
+      expect(g.fileAction(contract.need!, contract.id)).toBe(true);
+    }
+  });
+
+  it('a honeytoken looks valuable unless detected; downloading it springs the trap', () => {
+    const fail = new Game(testSystem, () => 0.99); // every detection roll fails
+    fail.revealMap();
+    fail.autoPause = false;
+    fail.setPaused(false);
+    fail.travelTo('orders');
+    run(fail, MOVE_TICKS * 3);
+    const f = fail.filesIn('orders')[0] as import('./files').DataFile;
+    Object.assign(f, { content: 'honeytoken', price: 500, protection: undefined });
+    fail.decryptCommand(f.id);
+    finish(fail);
+    expect(f.detected).toBeFalsy();
+    fail.drainEvents();
+    expect(fail.fileAction('download', f.id)).toBe(true);
+    expect(fail.drainEvents().some((e) => e.type === 'log' && e.line.color === 'alarm3')).toBe(true);
+    expect(fail.downloads.length).toBe(0);
+
+    const ok = new Game(testSystem, () => 0); // every detection roll succeeds
+    ok.revealMap();
+    ok.autoPause = false;
+    ok.setPaused(false);
+    ok.travelTo('orders');
+    run(ok, MOVE_TICKS * 3);
+    const h = ok.filesIn('orders')[0] as import('./files').DataFile;
+    Object.assign(h, { content: 'honeytoken', price: 500 });
+    h.protection = undefined;
+    ok.decryptCommand(h.id);
+    finish(ok);
+    expect(h.detected).toBeFalsy(); // decrypt alone doesn't tell
+    expect(ok.fileAction('evaluate', h.id)).toBe(true);
+    expect(h.detected).toBe(true); // evaluate sees through it
+    expect(ok.fileAction('download', h.id)).toBe(false);
+  });
+
+  it('protections: kill switch, seal, tracker, lock', () => {
+    const g = inOrders();
+    const fs = g.filesIn('orders') as import('./files').DataFile[];
+    Object.assign(fs[0], { protection: 'killswitch' });
+    Object.assign(fs[1], { protection: 'seal' });
+    Object.assign(fs[2], { protection: 'lock', lockPrivilege: 'admin' });
+    g.decryptCommand(fs[0].id);
+    finish(g);
+    expect(fs[0].deleted).toBe(true); // decrypted before defusing
+    expect(g.decryptCommand(fs[1].id)).toBe(false); // sealed
+    expect(g.fileAction('brute', fs[1].id)).toBe(true);
+    expect(g.decryptCommand(fs[1].id)).toBe(true);
+    finish(g);
+    expect(fs[1].decrypted).toBe(true);
+    expect(g.decryptCommand(fs[2].id)).toBe(false); // locked, no admin
+    expect(g.fileAction('forge', fs[2].id)).toBe(true);
+    expect(g.decryptCommand(fs[2].id)).toBe(true);
+    finish(g);
+    const t = fs[3];
+    t.protection = 'killswitch';
+    expect(g.fileAction('defuse', t.id)).toBe(true);
+    expect(t.protection).toBeUndefined();
+  });
+
+  it('a keyring gives a privilege or the keys', () => {
+    const g = inOrders();
+    const f = g.filesIn('orders')[0] as import('./files').DataFile;
+    Object.assign(f, { content: 'keyring', grant: 'security' });
+    g.decryptCommand(f.id);
+    finish(g);
+    expect(g.fileAction('extract', f.id)).toBe(true);
+    expect(g.privileges.has('security')).toBe(true);
+    expect(g.fileAction('extract', f.id)).toBe(false);
+  });
+
+  it('evaluate needs an evaluate program', () => {
+    const g = inOrders();
+    g.decryptCommand('all');
+    finish(g);
+    g.programs.splice(g.programs.findIndex((p) => p.type === 'evaluate'), 1);
+    const valuable = g.filesIn('orders').find((f) => f.content === 'valuable')!;
+    expect(g.fileAction('evaluate', valuable.id)).toBe(false);
+  });
+
+  it('there is nothing to decrypt outside databases', () => {
     const g = new Game(testSystem);
-    expect(g.scanCommand('')).toBe(false);
+    expect(g.decryptCommand('')).toBe(false);
   });
 });
 

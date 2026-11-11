@@ -7,7 +7,8 @@ import { renderDeck } from './ui/deckPanel';
 import { ContextMenu } from './ui/contextMenu';
 import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
-import { PROGRAM_TYPES, type ProgramType } from './sim/programs';
+import { fileActions } from './sim/files';
+import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from './sim/programs';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const game = new Game(testSystem);
@@ -86,8 +87,20 @@ function runCommand(raw: string): void {
       if (!arg) game.log('usage: do <action> (look lists the actions here)', 'system');
       else if (!game.runAction(arg)) sfx.play('error');
       break;
-    case 'scan':
-      if (!game.scanCommand(arg)) sfx.play('error');
+    case 'decrypt':
+      if (!game.decryptCommand(arg)) sfx.play('error');
+      break;
+    case 'evaluate':
+    case 'identify':
+    case 'defuse':
+    case 'brute':
+    case 'scrub':
+    case 'forge':
+    case 'download':
+    case 'alter':
+    case 'delete':
+    case 'extract':
+      if (!game.fileAction(cmd.name, arg)) sfx.play('error');
       break;
     case 'attack':
     case 'hide':
@@ -110,7 +123,7 @@ function runCommand(raw: string): void {
       game.setPaused(false);
       break;
     case 'stop':
-      if (game.cancelScout() || game.cancelScan()) break;
+      if (game.cancelScout() || game.cancelDecrypt()) break;
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
       break;
@@ -137,7 +150,14 @@ function ui(cmd: string): void {
 
 const nodeName = (id: string) => game.nameOf(id);
 
-renderDeck(document.getElementById('deck')!, game, (p) => ui(p.name));
+const deckEl = document.getElementById('deck')!;
+let deckVersion = -1;
+function updateDeck(): void {
+  if (game.deckVersion === deckVersion) return;
+  deckVersion = game.deckVersion;
+  renderDeck(deckEl, game, (p) => ui(p.name));
+}
+updateDeck();
 
 const term = new Console(document.getElementById('console')!, (cmd) => {
   sfx.play('command');
@@ -151,6 +171,8 @@ term.completer = (value) =>
     names: (kind) =>
       kind === 'action'
         ? game.currentActions.map((a) => a.id)
+        : kind === 'file' || (FILE_PROGRAMS as readonly string[]).includes(kind)
+          ? game.filesIn(game.currentNode).filter((f) => fileActions(f).length).map((f) => f.id)
         : (PROGRAM_TYPES as readonly string[]).includes(kind)
           ? game.programsOf(kind as ProgramType).map((p) => p.name)
           : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes.filter((n) => game.isKnown(n.id))).map((n) => game.nameOf(n.id)))],
@@ -160,8 +182,9 @@ const view = new NetworkView(document.getElementById('view')!, game, menu, {
   look: (id) => ui(`look ${nodeName(id)}`),
   act: (id) => ui(`do ${id}`),
   run: (p) => ui(p.name),
-  scanFile: (fileId, all) => ui(all ? `scan all ${fileId}` : `scan ${fileId}`),
-  scanAll: () => ui('scan all'),
+  decryptFile: (fileId, all) => ui(all ? `decrypt all ${fileId}` : `decrypt ${fileId}`),
+  decryptAll: () => ui('decrypt all'),
+  fileAction: (action, fileId) => ui(`${action} ${fileId}`),
   togglePause: () => ui(game.paused ? 'resume' : 'pause'),
   mute: () => ui('mute'),
   autoPause: () => ui('autopause'),
@@ -204,7 +227,7 @@ function flush(): void {
     else if (ev.type === 'hop') sfx.play('hop');
     else if (ev.type === 'moved') sfx.play('arrive');
     else if (ev.type === 'paused' && !ev.auto) sfx.play(ev.paused ? 'pause' : 'resume');
-    else if (ev.type === 'program' && (ev.programType === 'scout' || ev.programType === 'scan')) sfx.play(ev.programType);
+    else if (ev.type === 'program' && (ev.programType === 'scout' || ev.programType === 'decrypt')) sfx.play(ev.programType);
   }
 }
 
@@ -216,6 +239,7 @@ function frame(now: number): void {
   for (let i = 0; i < ticks; i++) game.step();
   flush();
   view.update();
+  updateDeck();
   requestAnimationFrame(frame);
 }
 flush();

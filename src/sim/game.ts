@@ -1,7 +1,7 @@
 import { actionsFor, type NodeAction, type Privilege } from './actions';
-import { CONTENT_LABEL, generateFiles, scanTicks, type DataFile } from './files';
+import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, decryptTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
-import { PROGRAM_STUBS, SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
+import { FILE_PROGRAMS, PROGRAM_STUBS, SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
 import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
 /** Unidentified nodes are called ?1, ?2, ... */
@@ -28,13 +28,14 @@ interface ScoutTask {
   progressId: number;
 }
 
-interface ScanTask {
+interface DecryptTask {
   nodeId: string;
-  /** Indexes of the files still to scan, the current one first. */
+  /** Indexes of the files still to decrypt, the current one first. */
   queue: number[];
   elapsed: number;
   ticksPerFile: number;
   name: string;
+  rating: number;
   progressId: number;
 }
 
@@ -73,14 +74,24 @@ export class Game {
     { id: 'p2', type: 'scout', name: 'Owl 1.0', rating: 1 },
     { id: 'p3', type: 'attack', name: 'Shooter V3', rating: 1 },
     { id: 'p4', type: 'hide', name: 'Ghost 1.2', rating: 1 },
-    { id: 'p5', type: 'scan', name: 'Sieve 2.0', rating: 1 },
     { id: 'p6', type: 'decrypt', name: 'Lockpick 1.0', rating: 1 },
+    { id: 'p7', type: 'evaluate', name: 'Appraiser 1.0', rating: 1 },
+    { id: 'p8', type: 'identify', name: 'Inspector 1.0', rating: 1 },
+    { id: 'p9', type: 'defuse', name: 'Sapper 1.0', rating: 1 },
+    { id: 'p10', type: 'brute', name: 'Battering Ram 2.0', rating: 1 },
+    { id: 'p11', type: 'scrub', name: 'Bleach 1.1', rating: 1 },
+    { id: 'p12', type: 'forge', name: 'Mimic 1.0', rating: 1 },
   ];
+  /** Valuable data the player downloaded. */
+  readonly downloads: { name: string; price?: number }[] = [];
+  /** Changes whenever the deck's contents change (programs or downloads). */
+  deckVersion = 0;
+  private nextProgramId = 100;
   /** Noise the player made in each node. Nothing reacts to it yet. */
   readonly noise = new Map<string, number>();
 
   private scout: ScoutTask | null = null;
-  private scan: ScanTask | null = null;
+  private decrypt: DecryptTask | null = null;
   /** Data files in each database (a honeypot posing as one has them too). */
   private readonly files = new Map<string, DataFile[]>();
   private nextProgressId = 1;
@@ -105,7 +116,7 @@ export class Game {
     this.tick++;
     this.updateMove();
     this.updateScout();
-    this.updateScan();
+    this.updateDecrypt();
   }
 
   setPaused(paused: boolean, auto = false): void {
@@ -264,7 +275,7 @@ export class Game {
   travelTo(target: string): boolean {
     if (!this.network.has(target) || !this.isKnown(target)) return false;
     if (this.isBusy) {
-      this.log(`${this.scout ? 'scout' : 'scan'} is running: wait for it or stop it first`, 'alarm1');
+      this.log(`${this.scout ? 'scout' : 'decrypt'} is running: wait for it or stop it first`, 'alarm1');
       return false;
     }
     const start = this.move ? this.move.to : this.currentNode;
@@ -361,13 +372,17 @@ export class Game {
       this.log('cannot run programs while connecting', 'alarm1');
       return false;
     }
-    if (program.type === 'scan') return this.startScan(program, 0, true);
-    if (program.type !== 'scout') {
+    if (program.type === 'decrypt') return this.startDecrypt(program, 0, true);
+    if ((FILE_PROGRAMS as readonly string[]).includes(program.type)) {
+      this.log(`${program.name}: pick a file, e.g. ${program.type} f3`, 'system');
+      return false;
+    }
+    if (program.type === 'attack' || program.type === 'hide') {
       this.log(`${program.name} (${program.type} ${program.rating}): ${PROGRAM_STUBS[program.type]}`, 'info');
       return true;
     }
     if (this.isBusy) {
-      this.log(`${this.scout ? 'scout' : 'scan'} is already running`, 'alarm1');
+      this.log(`${this.scout ? 'scout' : 'decrypt'} is already running`, 'alarm1');
       return false;
     }
     const here = this.currentNode;
@@ -392,7 +407,7 @@ export class Game {
 
   /** A program is running (the player can't travel meanwhile). */
   get isBusy(): boolean {
-    return this.scout !== null || this.scan !== null;
+    return this.scout !== null || this.decrypt !== null;
   }
 
   /** Data files in a node, as the player sees them (empty for other kinds). */
@@ -400,24 +415,24 @@ export class Game {
     return this.files.get(nodeId) ?? [];
   }
 
-  /** The file being scanned right now, if any. */
-  get scanningFile(): { nodeId: string; fileId: string; progress: number } | null {
-    const s = this.scan;
+  /** The file being decrypted right now, if any. */
+  get decryptingFile(): { nodeId: string; fileId: string; progress: number } | null {
+    const s = this.decrypt;
     if (!s) return null;
     return { nodeId: s.nodeId, fileId: this.files.get(s.nodeId)![s.queue[0]].id, progress: s.elapsed / s.ticksPerFile };
   }
 
   /** Changes whenever a file's look changes (for redrawing). */
   get filesKey(): string {
-    const scanned = this.filesIn(this.currentNode).filter((f) => f.scanned).length;
-    return `${scanned}:${this.scanningFile?.fileId ?? ''}`;
+    const decrypted = this.filesIn(this.currentNode).filter((f) => f.decrypted).length;
+    return `${decrypted}:${this.filesChanged}:${this.decryptingFile?.fileId ?? ''}`;
   }
 
   /**
-   * The scan command. "" or "all": every unscanned file here; "fN": that one file;
-   * "all fN": every unscanned file, starting at fN; anything else picks the scan program.
+   * The decrypt command. "" or "all": every encrypted file here; "fN": that one file;
+   * "all fN": every encrypted file, starting at fN; anything else picks the decrypt program.
    */
-  scanCommand(arg: string): boolean {
+  decryptCommand(arg: string): boolean {
     const words = arg.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const files = this.filesIn(this.currentNode);
     const fileIndex = (id: string) => files.findIndex((f) => f.id === id);
@@ -432,9 +447,9 @@ export class Game {
     } else {
       programQuery = arg;
     }
-    const program = this.findProgram('scan', programQuery);
+    const program = this.findProgram('decrypt', programQuery);
     if (!program) {
-      this.log(programQuery ? `no scan program "${programQuery}" in your deck` : 'no scan program in your deck', 'alarm1');
+      this.log(programQuery ? `no decrypt program "${programQuery}" in your deck` : 'no decrypt program in your deck', 'alarm1');
       return false;
     }
     if (from < 0) {
@@ -445,71 +460,210 @@ export class Game {
       this.log('cannot run programs while connecting', 'alarm1');
       return false;
     }
-    return this.startScan(program, from, all);
+    return this.startDecrypt(program, from, all);
   }
 
-  private startScan(program: Program, from: number, all: boolean): boolean {
+  private startDecrypt(program: Program, from: number, all: boolean): boolean {
     const here = this.currentNode;
     const files = this.filesIn(here);
     if (!files.length) {
-      this.log(`${program.name}: nothing to scan here (files live in databases)`, 'alarm1');
+      this.log(`${program.name}: nothing to decrypt here (files live in databases)`, 'alarm1');
       return false;
     }
     if (this.isBusy) {
-      this.log(`${this.scout ? 'scout' : 'scan'} is already running`, 'alarm1');
+      this.log(`${this.scout ? 'scout' : 'decrypt'} is already running`, 'alarm1');
       return false;
     }
     if (this.network.node(here).kind === 'honeypot') {
       this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
       return true;
     }
-    // Start at the chosen file and wrap around, skipping files already scanned.
+    // Start at the chosen file and wrap around, skipping files already decrypted.
     const order = all ? files.map((_, i) => (from + i) % files.length) : [from];
-    const queue = order.filter((i) => !files[i].scanned);
+    const queue = order.filter((i) => {
+      const f = files[i];
+      if (f.decrypted || f.deleted) return false;
+      // Seals and locks stop decrypt before it starts; a kill switch only bites when it finishes.
+      if (f.protection === 'seal' || (f.protection === 'lock' && !this.privileges.has(f.lockPrivilege!))) {
+        this.log(`${f.id}: ${f.protection === 'seal' ? 'sealed, needs brute' : `locked, needs ${f.lockPrivilege} privilege or forge`}`, 'alarm1');
+        return false;
+      }
+      return true;
+    });
     if (!queue.length) {
-      this.log(all ? 'every file here is already scanned' : `${files[from].id} is already scanned`, 'system');
+      this.log(all ? 'every file here is already decrypted' : `${files[from].id} is already decrypted`, 'system');
       return false;
     }
-    this.events.push({ type: 'program', programType: 'scan' });
-    this.log(`${program.name} (scan ${program.rating}): scanning ${queue.length === 1 ? files[queue[0]].id : `${queue.length} files`}`, 'system');
-    this.scan = { nodeId: here, queue, elapsed: 0, ticksPerFile: scanTicks(program.rating), name: program.name, progressId: this.nextProgressId++ };
-    this.scanProgress(false);
+    this.events.push({ type: 'program', programType: 'decrypt' });
+    this.log(`${program.name} (decrypt ${program.rating}): decrypting ${queue.length === 1 ? files[queue[0]].id : `${queue.length} files`}`, 'system');
+    this.decrypt = { nodeId: here, queue, elapsed: 0, ticksPerFile: Math.max(2, Math.round(decryptTicks(program.rating) / (this.keysFound ? 2 : 1))), name: program.name, rating: program.rating, progressId: this.nextProgressId++ };
+    this.decryptProgress(false);
     this.actionStarted();
     return true;
   }
 
-  private scanProgress(done: boolean): void {
-    const s = this.scan!;
+  private decryptProgress(done: boolean): void {
+    const s = this.decrypt!;
     const file = this.files.get(s.nodeId)![s.queue[0]];
-    this.events.push({ type: 'progress', line: { id: s.progressId, label: `scan ${file.id}`, progress: s.elapsed / s.ticksPerFile, done } });
+    this.events.push({ type: 'progress', line: { id: s.progressId, label: `decrypt ${file.id}`, progress: s.elapsed / s.ticksPerFile, done } });
   }
 
-  private updateScan(): void {
-    const s = this.scan;
+  private updateDecrypt(): void {
+    const s = this.decrypt;
     if (!s) return;
     s.elapsed++;
-    this.scanProgress(s.elapsed >= s.ticksPerFile);
+    this.decryptProgress(s.elapsed >= s.ticksPerFile);
     if (s.elapsed < s.ticksPerFile) return;
     const file = this.files.get(s.nodeId)![s.queue.shift()!];
-    file.scanned = true;
-    this.log(`${file.id}: ${CONTENT_LABEL[file.content]}`, file.content === 'worthless' ? 'system' : 'info');
+    if (file.protection === 'killswitch') {
+      file.deleted = true;
+      this.filesChanged++;
+      this.log(`${file.id}: KILL SWITCH. the archive destroyed itself`, 'alarm2');
+    } else {
+      file.decrypted = true;
+      const seen = apparentContent(file);
+      this.log(`${file.id}: ${CONTENT_LABEL[seen]}`, seen === 'worthless' ? 'system' : 'info');
+    }
     if (s.queue.length) {
       s.elapsed = 0;
       s.progressId = this.nextProgressId++;
-      this.scanProgress(false);
+      this.decryptProgress(false);
       return;
     }
-    this.scan = null;
-    this.log('scan finished', 'info');
+    this.decrypt = null;
+    this.log('decrypt finished', 'info');
     this.actionEnded();
   }
 
-  /** Stops a running scan; files already scanned stay scanned. */
-  cancelScan(): boolean {
-    if (!this.scan) return false;
-    this.scanProgress(true);
-    this.scan = null;
-    this.log('scan stopped', 'system');
+  /**
+   * An action on a decrypted file here: evaluate (needs an evaluate program), identify
+   * (needs an identify program), download, alter or delete. Instant for now.
+   */
+  fileAction(action: FileAction, fileId: string): boolean {
+    const id = fileId.trim().toLowerCase();
+    const file = this.filesIn(this.currentNode).find((f) => f.id === id);
+    if (!id || !file || file.deleted) {
+      this.log(id ? `no file "${id}" here` : `usage: ${action} <file>, e.g. ${action} f3`, 'alarm1');
+      return false;
+    }
+    const guard = file.protection ? PROTECTION_PROGRAM[file.protection] : null;
+    if (!file.decrypted && action !== guard) {
+      this.log(`${file.id} is not decrypted yet`, 'alarm1');
+      return false;
+    }
+    if (!fileActions(file).includes(action)) {
+      this.log(`${file.id} (${CONTENT_LABEL[apparentContent(file)]}): cannot ${action}`, 'alarm1');
+      return false;
+    }
+    if (this.move || this.isBusy) {
+      this.log('busy: wait for the current action to finish', 'alarm1');
+      return false;
+    }
+    if (this.network.node(this.currentNode).kind === 'honeypot') {
+      this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
+      return true;
+    }
+    if (action === guard) {
+      const program = this.findProgram(action);
+      if (!program) {
+        this.log(`${action} needs a ${action} program in your deck`, 'alarm1');
+        return false;
+      }
+      const was = file.protection!;
+      file.protection = undefined;
+      const done = { killswitch: 'kill switch defused', seal: 'seal cracked', tracker: 'tracker scrubbed', lock: 'lock forged open' }[was];
+      this.log(`${program.name}: ${file.id} ${done}`, 'info');
+      this.filesChanged++;
+      return true;
+    }
+    if (action === 'evaluate' || action === 'identify') {
+      const program = this.findProgram(action);
+      if (!program) {
+        this.log(`${action} needs an ${action} program in your deck`, 'alarm1');
+        return false;
+      }
+      if (action === 'evaluate' && file.content === 'honeytoken' && this.d100() <= this.trapChance(program.rating)) {
+        file.detected = true;
+        this.log(`${program.name}: ${file.id} is a ${CONTENT_LABEL.honeytoken}. good catch: leave it alone`, 'alarm2');
+      } else if (action === 'evaluate') {
+        file.evaluated = true;
+        this.log(`${program.name}: ${file.id} is worth ${file.price} cr`, 'info');
+      } else {
+        file.identified = true;
+        const sw = file.software!;
+        this.log(`${program.name}: ${file.id} is ${sw.name} (${sw.type} ${sw.rating})`, 'info');
+      }
+      this.filesChanged++;
+      return true;
+    }
+    if (action === 'download') {
+      if (file.downloaded) {
+        this.log(`${file.id} is already downloaded`, 'system');
+        return false;
+      }
+      file.downloaded = true;
+      if (file.protection === 'tracker') this.log(`TRACKER: ${file.id} tagged you on the way out (attribution comes later)`, 'alarm2');
+      if (file.content === 'honeytoken') {
+        this.log(`HONEYTOKEN: ${file.id} was a trap. it phoned home with your trace (alarms come later)`, 'alarm3');
+        file.detected = true;
+      } else if (file.content === 'software') {
+        const sw = file.software!;
+        this.programs.push({ id: `p${this.nextProgramId++}`, ...sw });
+        this.log(`${file.id} downloaded: ${sw.name} (${sw.type} ${sw.rating}) added to your software`, 'info');
+      } else {
+        this.downloads.push({ name: `${this.nameOf(this.currentNode)} ${file.id}`, price: file.evaluated ? file.price : undefined });
+        this.log(`${file.id} downloaded to your deck`, 'info');
+      }
+      this.deckVersion++;
+      this.filesChanged++;
+      return true;
+    }
+    if (action === 'extract') {
+      file.extracted = true;
+      const grant = file.grant!;
+      if (grant === 'keys') {
+        this.keysFound = true;
+        this.log(`${file.id}: encryption keys extracted. decrypting in this system is now twice as fast`, 'info');
+      } else {
+        this.privileges.add(grant);
+        this.log(`${file.id}: ${grant} privilege extracted`, 'info');
+      }
+      this.deckVersion++;
+      this.filesChanged++;
+      return true;
+    }
+    if (action === 'alter') {
+      file.altered = true;
+      this.log(`${file.id} altered (contracts come later)`, 'info');
+    } else {
+      file.deleted = true;
+      this.log(`${file.id} deleted (contracts come later)`, 'info');
+    }
+    this.filesChanged++;
+    return true;
+  }
+
+  /** The system's encryption keys were extracted: decrypting here is twice as fast. */
+  keysFound = false;
+
+  /**
+   * d100 chance that evaluate sees through a honeytoken: high, so a careful player is
+   * safe; the trap is meant for whoever downloads blind. Evaluate 1 vs encryption 2: 80%.
+   */
+  private trapChance(rating: number): number {
+    const e = Math.max(1, this.network.def.encryption ?? 1);
+    return (100 * rating) / (rating + e / 8);
+  }
+
+  /** Bumped when a file changes in a way the view shows. */
+  private filesChanged = 0;
+
+  /** Stops a running scan; files already decrypted stay decrypted. */
+  cancelDecrypt(): boolean {
+    if (!this.decrypt) return false;
+    this.decryptProgress(true);
+    this.decrypt = null;
+    this.log('decrypt stopped', 'system');
     return true;
   }
 

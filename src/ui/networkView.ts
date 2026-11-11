@@ -1,5 +1,6 @@
-import { CONTENT_LABEL } from '../sim/files';
-import type { Program } from '../sim/programs';
+import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
+import { Tooltip, type TipLine } from './tooltip';
+import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
 import type { Game } from '../sim/game';
 import { TICKS_PER_SECOND } from '../sim/game';
 import type { NodeDef, NodeKind } from '../sim/types';
@@ -92,6 +93,51 @@ const ICON_AUTO_PAUSE = icon(
   '<circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 2.5h4M12 2.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="9" y="10" width="2.2" height="7" fill="currentColor"/><rect x="12.8" y="10" width="2.2" height="7" fill="currentColor"/>',
 );
 
+/** The symbol drawn on an archive in place of its two lines, one per kind of protection. */
+function drawProtection(p: Protection, cx: number, cy: number, parent: Element): void {
+  const g = svg('g', { class: 'file-guard' }, parent);
+  switch (p) {
+    case 'killswitch': // exclamation mark
+      svg('line', { x1: cx, y1: cy - 6, x2: cx, y2: cy + 1.5 }, g);
+      svg('circle', { cx, cy: cy + 5, r: 1.3, class: 'guard-fill' }, g);
+      break;
+    case 'seal': // two rings
+      svg('circle', { cx, cy, r: 5.5 }, g);
+      svg('circle', { cx, cy, r: 2.2 }, g);
+      break;
+    case 'tracker': // crosshair
+      svg('circle', { cx, cy, r: 4 }, g);
+      svg('line', { x1: cx - 7, y1: cy, x2: cx + 7, y2: cy }, g);
+      svg('line', { x1: cx, y1: cy - 7, x2: cx, y2: cy + 7 }, g);
+      break;
+    case 'lock': // keyhole
+      svg('circle', { cx, cy: cy - 2, r: 2.6, class: 'guard-fill' }, g);
+      svg('path', { d: `M ${cx - 1.6} ${cy} L ${cx - 2.6} ${cy + 5.5} L ${cx + 2.6} ${cy + 5.5} L ${cx + 1.6} ${cy} Z`, class: 'guard-fill' }, g);
+      break;
+  }
+}
+
+/** What the game tooltip says about a data file. */
+function fileTip(f: DataFile): TipLine[] {
+  const lines: TipLine[] = [{ text: f.id, cls: 'tip-title' }];
+  if (f.protection) lines.push({ text: PROTECTION_LABEL[f.protection] + (f.protection === 'lock' ? `: ${f.lockPrivilege}` : ''), cls: 'tip-protection' });
+  if (!f.decrypted) {
+    const hint = f.protection === 'seal' ? 'brute it first' : f.protection === 'lock' ? 'needs the privilege, or forge' : f.protection === 'killswitch' ? 'defuse it first, or it is lost' : 'click to decrypt';
+    return [...lines, { text: 'encrypted', cls: 'c-system' }, { text: hint, cls: 'c-system' }];
+  }
+  const seen = apparentContent(f);
+  lines.push({ text: CONTENT_LABEL[seen], cls: `tip-${seen}` });
+  if (seen === 'keyring') lines.push({ text: f.extracted ? `extracted: ${f.grant === 'keys' ? 'encryption keys' : `${f.grant} privilege`}` : 'extract to see what it opens' });
+  if (seen === 'valuable') lines.push({ text: f.evaluated ? `worth ${f.price} cr` : 'value unknown (evaluate)' });
+  if (f.content === 'software') {
+    const sw = f.software!;
+    lines.push({ text: f.identified ? `${sw.name}  ${sw.type} ${sw.rating}` : 'unknown program (identify)' });
+  }
+  if (f.content === 'contract') lines.push({ text: f.altered ? 'altered' : `the contract wants it ${f.need === 'alter' ? 'altered' : 'deleted'}` });
+  if (f.downloaded) lines.push({ text: 'downloaded', cls: 'c-info' });
+  return lines;
+}
+
 function formatTime(tick: number): string {
   const total = Math.floor(tick / TICKS_PER_SECOND);
   const m = Math.floor(total / 60);
@@ -105,9 +151,10 @@ export interface ViewActions {
   look(nodeId: string): void;
   act(actionId: string): void;
   run(program: Program): void;
-  /** Scan one file, or all unscanned files starting at it. */
-  scanFile(fileId: string, all: boolean): void;
-  scanAll(): void;
+  /** Decrypt one file, or all encrypted files starting at it. */
+  decryptFile(fileId: string, all: boolean): void;
+  decryptAll(): void;
+  fileAction(action: FileAction, fileId: string): void;
   togglePause(): void;
   mute(): void;
   autoPause(): void;
@@ -135,6 +182,7 @@ export class NetworkView {
   /** Outline of the current room, used to find where links leave it. */
   private roomShape: SVGGeometryElement | null = null;
   private roomR = ROOM_R;
+  private readonly tip = new Tooltip();
   /** Layers redrawn every frame with the scout's eyes. */
   private scoutLayer: SVGGElement | null = null;
   private miniScoutLayer: SVGGElement | null = null;
@@ -422,7 +470,7 @@ export class NetworkView {
     const y0 = CY - span;
     const cols = Math.floor((2 * span) / CELL);
     const files = this.game.filesIn(nodeId);
-    const scanning = this.game.scanningFile;
+    const decrypting = this.game.decryptingFile;
     const taken = new Set<string>();
     for (let i = 0, tries = 0; i < files.length && tries < 2000; tries++) {
       const c = Math.floor(rand() * cols);
@@ -436,26 +484,40 @@ export class NetworkView {
       if (!inside || nearAvatar || taken.has(key)) continue;
       taken.add(key);
       const file = files[i++];
-      const cls = ['data-block', file.scanned ? `is-${file.content}` : 'is-unscanned'];
-      if (scanning?.fileId === file.id) cls.push('is-scanning');
+      if (file.deleted) continue;
+      const cls = ['data-block', file.decrypted ? `is-${apparentContent(file)}` : 'is-encrypted'];
+      if (decrypting?.fileId === file.id) cls.push('is-decrypting');
+      if (file.downloaded || file.altered || file.extracted) cls.push('is-done');
       const blk = svg('g', { class: cls.join(' '), 'data-file': file.id }, parent);
       const pad = 5;
       svg('rect', { x: x + pad, y: y + pad, width: CELL - 2 * pad, height: CELL - 2 * pad }, blk);
       const mid = y + CELL / 2;
-      svg('line', { x1: x + pad + 4, y1: mid - 2.5, x2: x + CELL - pad - 4, y2: mid - 2.5 }, blk);
-      svg('line', { x1: x + pad + 4, y1: mid + 2.5, x2: x + CELL - pad - 7, y2: mid + 2.5 }, blk);
-      const tip = svg('title', {}, blk);
-      tip.textContent = `${file.id}: ${file.scanned ? CONTENT_LABEL[file.content] : 'not scanned'}`;
+      if (file.protection) {
+        drawProtection(file.protection, x + CELL / 2, mid, blk);
+      } else {
+        svg('line', { x1: x + pad + 4, y1: mid - 2.5, x2: x + CELL - pad - 4, y2: mid - 2.5 }, blk);
+        svg('line', { x1: x + pad + 4, y1: mid + 2.5, x2: x + CELL - pad - 7, y2: mid + 2.5 }, blk);
+      }
+      this.tip.attach(blk, () => fileTip(file));
       blk.addEventListener('mouseenter', () => this.actions.hover());
-      blk.addEventListener('click', () => this.actions.scanFile(file.id, false));
+      blk.addEventListener('click', () => {
+        if (!file.decrypted) this.actions.decryptFile(file.id, false);
+      });
       blk.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const busy = this.game.isBusy;
-        this.menu.show(e.clientX, e.clientY, `${file.id}${file.scanned ? `: ${CONTENT_LABEL[file.content]}` : ''}`, [
-          { label: 'Scan', hint: 'click', disabled: busy || file.scanned, action: () => this.actions.scanFile(file.id, false) },
-          { label: 'Scan all', hint: 'from this file', disabled: busy, action: () => this.actions.scanFile(file.id, true) },
-        ]);
+        const items = [];
+        if (!file.decrypted) items.push({ label: 'Decrypt', hint: 'click', disabled: busy, action: () => this.actions.decryptFile(file.id, false) });
+        for (const act of fileActions(file)) {
+          const needs = (FILE_PROGRAMS as readonly string[]).includes(act) && !this.game.findProgram(act as FileProgram);
+          const done = act === 'download' && file.downloaded;
+          items.push({ label: act, hint: needs ? `needs ${act}` : done ? 'done' : undefined, disabled: busy || needs || done, action: () => this.actions.fileAction(act, file.id) });
+        }
+        if (this.game.filesIn(nodeId).some((f) => !f.decrypted)) {
+          items.push({ label: 'Decrypt all', hint: 'starting from this file', disabled: busy, action: () => this.actions.decryptFile(file.id, true) });
+        }
+        this.menu.show(e.clientX, e.clientY, `${file.id}${file.decrypted ? `: ${CONTENT_LABEL[apparentContent(file)]}` : ''}`, items);
       });
     }
   }
@@ -590,9 +652,9 @@ export class NetworkView {
       const busy = this.game.isBusy;
       const scout = this.game.findProgram('scout');
       if (scout) items.push({ label: 'Scout', hint: scout.name, disabled: busy, action: () => this.actions.run(scout) });
-      const scan = this.game.findProgram('scan');
-      if (scan && this.game.filesIn(node.id).some((f) => !f.scanned)) {
-        items.push({ label: 'Scan all', hint: scan.name, disabled: busy, action: () => this.actions.scanAll() });
+      const decrypt = this.game.findProgram('decrypt');
+      if (decrypt && this.game.filesIn(node.id).some((f) => !f.decrypted)) {
+        items.push({ label: 'Decrypt all', hint: decrypt.name, disabled: busy, action: () => this.actions.decryptAll() });
       }
     }
     this.menu.show(x, y, this.game.nameOf(node.id), items);

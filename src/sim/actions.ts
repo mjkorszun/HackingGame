@@ -30,12 +30,6 @@ export const NODE_ACTIONS: Partial<Record<NodeKind, NodeAction[]>> = {
     a('sniff', 'listen to the traffic and learn about the other system', 'nothing useful in the traffic yet'),
     a('isolate', 'cut traffic to the other system: no alarms and no agents get through', 'uplink isolated: alarms and agents will not pass through (alarms and agents come later)'),
   ],
-  database: [
-    a('query', 'search the data for something valuable', 'nothing valuable found (files come later)'),
-    a('download', 'copy data out', 'nothing to download yet'),
-    a('delete', 'destroy data', 'nothing to delete yet'),
-    a('alter', 'change a record', 'nothing to alter yet'),
-  ],
   vault: [a('extract-keys', 'take the keys: decrypting in this system gets easier', 'no keys yet (encryption comes later)')],
   overseer: [
     a('download-map', 'get the map of the whole system', ''),
