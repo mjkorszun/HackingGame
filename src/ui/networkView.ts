@@ -479,7 +479,7 @@ export class NetworkView {
     }
     const target = g.moveTarget;
     for (const n of nodes) {
-      const cls = ['mini-node'];
+      const cls = ['mini-node', `kind-${g.kindOf(n.id)}`];
       if (n.id === g.currentNode) cls.push('mini-current');
       if (n.id === target) cls.push('mini-target');
       const dot = drawNodeShape(g.kindOf(n.id), sx(n.x), sy(n.y), n.id === g.currentNode ? 6 : 4.5, cls.join(' '), mini);

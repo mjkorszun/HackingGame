@@ -7,7 +7,7 @@
   --yellow: #ffe14a;
   --orange: #ff9a2e;
   --red: #ff4040;
-  --grey: #7a8a80;
+  --grey: #a9b9af;
   --font: 'Consolas', 'Menlo', 'DejaVu Sans Mono', monospace;
 }
 
@@ -132,14 +132,31 @@ body {
 .link-active { stroke: var(--blue); stroke-dasharray: 6 6; animation: flow 0.6s linear infinite; }
 @keyframes flow { to { stroke-dashoffset: -12; } }
 
+/* Node colours: every type has its own colour (and its own shape). */
+.kind-gateway, .kind-unknown { --kc: #33ff66; } /* green */
+.kind-relay { --kc: #23a34a; } /* dark green */
+.kind-uplink { --kc: #1fc4a4; } /* sea green */
+.kind-database { --kc: #3fe0e0; } /* turquoise */
+.kind-monitoring { --kc: #9fba3a; } /* olive, leaning green */
+.kind-identity { --kc: #c3a2ff; } /* light violet */
+.kind-vault { --kc: #f0c330; } /* gold */
+.kind-overseer { --kc: #8a5cf0; } /* dark violet */
+.kind-orchestrator { --kc: #93c3ff; } /* light blue */
+.kind-compute { --kc: #3d6bff; } /* dark blue */
+.kind-camera { --kc: #eef3f0; } /* white */
+.kind-ads { --kc: #ff6b6b; } /* light red */
+.kind-security { --kc: #d03a3a; } /* dark red */
+.kind-physical { --kc: #b07a45; } /* brown */
+.kind-vehicle { --kc: #ff9a2e; } /* orange */
+
 .node { cursor: pointer; outline: none; }
 .node-current { cursor: default; }
-.node-body { fill: #000; stroke: var(--green); stroke-width: 2; }
+.node-body { fill: #000; stroke: var(--kc, var(--green)); stroke-width: 2; }
 .node-current .node-body { stroke-width: 3; fill: var(--green-faint); }
 .node-neighbour:hover .node-body,
-.node-neighbour:focus .node-body { fill: var(--green-faint); stroke: #8dffad; }
-.node-targeted .node-body { stroke: var(--blue); }
-.node-tag { fill: var(--green); text-anchor: middle; font-family: var(--font); font-weight: bold; }
+.node-neighbour:focus .node-body { fill: var(--green-faint); stroke-width: 3; }
+.node-targeted .node-body { stroke-dasharray: 7 4; animation: flow 0.6s linear infinite; stroke-width: 3; }
+.node-tag { fill: var(--kc, var(--green)); text-anchor: middle; font-family: var(--font); font-weight: bold; }
 .node-name { fill: var(--green); text-anchor: middle; font-family: var(--font); font-size: 13px; }
 .node-current .node-name { font-size: 15px; font-weight: bold; }
 .node-kind { fill: var(--grey); text-anchor: middle; font-family: var(--font); font-size: 12px; }
@@ -148,10 +165,11 @@ body {
 .minimap-frame { fill: #000; stroke: var(--green-faint); }
 .minimap-label { fill: var(--grey); font-family: var(--font); font-size: 10px; }
 .mini-link { stroke: var(--green-dim); stroke-width: 1; }
-.mini-node { fill: #000; stroke: var(--green); stroke-width: 1.5; cursor: pointer; }
+.mini-node { fill: #000; stroke: var(--kc, var(--green)); stroke-width: 1.5; cursor: pointer; }
 .mini-node:hover { fill: var(--green-dim); }
-.mini-current { fill: var(--green); }
-.mini-target { stroke: var(--blue); fill: var(--blue); }
+.mini-current { fill: var(--kc, var(--green)); }
+.mini-target { animation: blink 0.8s steps(2, start) infinite; stroke-width: 2.5; }
+@keyframes blink { to { visibility: hidden; } }
 
 /* ---------- context menu ---------- */
 .ctx-menu {
@@ -222,7 +240,6 @@ body {
   bottom: 4px;
   font-size: 10px;
   color: var(--grey);
-  opacity: 0.7;
   pointer-events: none;
 }
 
@@ -250,13 +267,13 @@ body {
 }
 
 /* ---------- current node as a room ---------- */
-.room-body { fill: #020c05; stroke: var(--green); stroke-width: 3; }
+.room-body { fill: #020c05; stroke: var(--kc, var(--green)); stroke-width: 3; }
 .room-grid line { stroke: var(--green-faint); stroke-width: 1; }
 .room-head { fill: #000; stroke: var(--green-faint); }
 .room-icon { stroke-width: 2; }
 .room-title { fill: var(--green); font-family: var(--font); font-size: 15px; font-weight: bold; }
 .room-kind { fill: var(--grey); font-family: var(--font); font-size: 12px; }
-.room-door { fill: var(--green); }
+.room-door { fill: var(--kc, var(--green)); }
 .room text, .room-door, .data-block, .room-icon { pointer-events: none; }
 .data-block rect { fill: #0d3318; stroke: #5dff8a; stroke-width: 1.5; }
 .data-block line { stroke: #5dff8a; stroke-width: 1.2; }
