@@ -1,11 +1,20 @@
-import type { Game } from '../sim/game';
+import type { LootItem } from '../sim/game';
+import type { Privilege } from '../sim/actions';
 import type { Program } from '../sim/programs';
 import { SATS, sats } from '../sim/money';
 
-/** The panel under the console: your own hardware and programs. Click a program to run it. */
-export function renderDeck(root: HTMLElement, game: Game, balance: number, run: (program: Program) => void): void {
+/** What the gear panel shows: in a run it is the Game itself; on the main screen, the account. */
+export interface GearSource {
+  programs: Program[];
+  loot: LootItem[];
+  privileges: Set<Privilege>;
+  keysFound: boolean;
+}
+
+/** The "your gear" panel: hardware, programs, and what this run has taken. Click a program to run it (in a run). */
+export function renderDeck(root: HTMLElement, game: GearSource, balance: number, run?: (program: Program) => void): void {
   root.innerHTML = `
-    <div class="deck-title">YOUR DECK <span class="deck-balance">${sats(balance)}</span></div>
+    <div class="deck-title">YOUR GEAR <span class="deck-balance">${sats(balance)}</span></div>
     <div class="deck-cols">
       <div>
         <h3>hardware</h3>
@@ -40,12 +49,12 @@ export function renderDeck(root: HTMLElement, game: Game, balance: number, run: 
   }
   const list = root.querySelector('.deck-programs')!;
   for (const p of game.programs) {
-    const n = game.programsOf(p.type).indexOf(p) + 1;
+    const n = game.programs.filter((q) => q.type === p.type).indexOf(p) + 1;
     const li = document.createElement('li');
-    li.className = 'deck-program';
+    li.className = run ? 'deck-program' : 'deck-program is-static';
     li.textContent = `${p.name.padEnd(18)} ${p.type} ${p.rating}`;
     li.title = `${p.name}  /  ${p.type} ${n}`;
-    li.addEventListener('click', () => run(p));
+    if (run) li.addEventListener('click', () => run(p));
     list.appendChild(li);
   }
 }

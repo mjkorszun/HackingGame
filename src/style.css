@@ -460,3 +460,54 @@ body {
   cursor: pointer;
 }
 .rs-panel button:hover { background: var(--green-faint); }
+
+/* ---------- main screen ---------- */
+#home {
+  display: grid;
+  grid-template-columns: 35fr 65fr;
+  height: 100vh;
+  overflow: hidden;
+  font-family: var(--font);
+  position: relative;
+}
+#home[hidden], #app[hidden] { display: none; }
+.home-gear {
+  padding: 8px 10px;
+  border-right: 1px solid var(--green-faint);
+  overflow-y: auto;
+  line-height: 1.35;
+}
+.home-gear .deck-cols { flex-wrap: wrap; }
+.deck-program.is-static { cursor: default; }
+.deck-program.is-static:hover { color: inherit; text-decoration: none; }
+.home-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 16px 16px;
+  overflow-y: auto;
+}
+.home-title { color: var(--green); letter-spacing: 0.4em; font-size: 34px; margin: 0 0 40px; }
+.home-menu { display: flex; flex-direction: column; gap: 14px; width: 280px; }
+.home-btn {
+  background: transparent;
+  color: var(--green);
+  border: 1px solid var(--green);
+  font: inherit;
+  font-size: 16px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+.home-btn:hover, .home-btn.is-open { background: var(--green-faint); }
+.home-active { margin-top: 24px; color: var(--green); }
+.home-job { color: var(--yellow); }
+.home-dim { color: var(--grey); }
+.home-list { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; width: min(460px, 100%); }
+.contract-card { border: 1px solid var(--green-dim); padding: 12px 14px; color: var(--green); }
+.contract-card.is-taken { border-color: var(--yellow); }
+.cc-head { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.cc-title { font-weight: bold; }
+.cc-pay { color: var(--yellow); }
+.cc-line { margin-top: 2px; }
+.cc-btn { margin-top: 10px; font-size: 14px; padding: 5px 18px; }
+.contract-card.is-taken .cc-btn { color: var(--yellow); border-color: var(--yellow); }

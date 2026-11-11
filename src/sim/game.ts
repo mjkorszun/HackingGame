@@ -417,7 +417,7 @@ export class Game {
   runProgram(type: ProgramType, query = ''): boolean {
     const program = this.findProgram(type, query);
     if (!program) {
-      this.log(query ? `no ${type} program "${query}" in your deck` : `no ${type} program in your deck`, 'alarm1');
+      this.log(query ? `no ${type} program "${query}" in your gear` : `no ${type} program in your gear`, 'alarm1');
       return false;
     }
     if (this.move) {
@@ -501,7 +501,7 @@ export class Game {
     }
     const program = this.findProgram('decrypt', programQuery);
     if (!program) {
-      this.log(programQuery ? `no decrypt program "${programQuery}" in your deck` : 'no decrypt program in your deck', 'alarm1');
+      this.log(programQuery ? `no decrypt program "${programQuery}" in your gear` : 'no decrypt program in your gear', 'alarm1');
       return false;
     }
     if (from < 0) {
@@ -618,7 +618,7 @@ export class Game {
     if (action === guard) {
       const program = this.findProgram(action);
       if (!program) {
-        this.log(`${action} needs a ${action} program in your deck`, 'alarm1');
+        this.log(`${action} needs a ${action} program in your gear`, 'alarm1');
         return false;
       }
       const was = file.protection!;
@@ -631,7 +631,7 @@ export class Game {
     if (action === 'evaluate' || action === 'identify') {
       const program = this.findProgram(action);
       if (!program) {
-        this.log(`${action} needs an ${action} program in your deck`, 'alarm1');
+        this.log(`${action} needs an ${action} program in your gear`, 'alarm1');
         return false;
       }
       if (action === 'evaluate' && file.content === 'honeytoken' && this.d100() <= this.trapChance(program.rating)) {
@@ -664,7 +664,7 @@ export class Game {
         this.log(`${file.id} downloaded: ${file.identified ? sw.name : 'a program'}. it joins your software when you leave the net`, 'info');
       } else {
         this.loot.push({ name: `${this.nameOf(this.currentNode)} ${file.id}`, label: CONTENT_LABEL.valuable, price: file.price ?? 0, evaluated: !!file.evaluated });
-        this.log(`${file.id} downloaded to your deck. it pays out when you leave the net`, 'info');
+        this.log(`${file.id} downloaded to your gear. it pays out when you leave the net`, 'info');
       }
       this.deckVersion++;
       this.filesChanged++;
