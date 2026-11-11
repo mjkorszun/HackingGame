@@ -1,4 +1,5 @@
 import { actionsFor, type NodeAction, type Privilege } from './actions';
+import { CONTENT_LABEL, generateFiles, scanTicks, type DataFile } from './files';
 import { Network } from './network';
 import { PROGRAM_STUBS, SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
 import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
@@ -24,6 +25,16 @@ interface ScoutTask {
   elapsed: number;
   identify: number;
   extend: number;
+  progressId: number;
+}
+
+interface ScanTask {
+  nodeId: string;
+  /** Indexes of the files still to scan, the current one first. */
+  queue: number[];
+  elapsed: number;
+  ticksPerFile: number;
+  name: string;
   progressId: number;
 }
 
@@ -69,6 +80,9 @@ export class Game {
   readonly noise = new Map<string, number>();
 
   private scout: ScoutTask | null = null;
+  private scan: ScanTask | null = null;
+  /** Data files in each database (a honeypot posing as one has them too). */
+  private readonly files = new Map<string, DataFile[]>();
   private nextProgressId = 1;
   private readonly d100: () => number;
 
@@ -77,6 +91,9 @@ export class Game {
     this.network = new Network(system);
     this.currentNode = system.entry;
     for (const n of system.nodes) if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
+    for (const n of system.nodes) {
+      if (n.kind === 'database' || (n.kind === 'honeypot' && (n.disguise ?? 'database') === 'database')) this.files.set(n.id, generateFiles(n.id));
+    }
     this.discoverAround(this.currentNode);
     this.log(`link up: ${system.name} (${system.location})`, 'system');
     this.log(`you are at ${this.nameOf(this.currentNode)}`);
@@ -88,6 +105,7 @@ export class Game {
     this.tick++;
     this.updateMove();
     this.updateScout();
+    this.updateScan();
   }
 
   setPaused(paused: boolean, auto = false): void {
@@ -245,8 +263,8 @@ export class Game {
    */
   travelTo(target: string): boolean {
     if (!this.network.has(target) || !this.isKnown(target)) return false;
-    if (this.scout) {
-      this.log('scout is running: wait for it or stop it first', 'alarm1');
+    if (this.isBusy) {
+      this.log(`${this.scout ? 'scout' : 'scan'} is running: wait for it or stop it first`, 'alarm1');
       return false;
     }
     const start = this.move ? this.move.to : this.currentNode;
@@ -343,12 +361,13 @@ export class Game {
       this.log('cannot run programs while connecting', 'alarm1');
       return false;
     }
+    if (program.type === 'scan') return this.startScan(program, 0, true);
     if (program.type !== 'scout') {
       this.log(`${program.name} (${program.type} ${program.rating}): ${PROGRAM_STUBS[program.type]}`, 'info');
       return true;
     }
-    if (this.scout) {
-      this.log('scout is already running', 'alarm1');
+    if (this.isBusy) {
+      this.log(`${this.scout ? 'scout' : 'scan'} is already running`, 'alarm1');
       return false;
     }
     const here = this.currentNode;
@@ -368,6 +387,129 @@ export class Game {
     };
     this.scoutProgress(false);
     this.actionStarted();
+    return true;
+  }
+
+  /** A program is running (the player can't travel meanwhile). */
+  get isBusy(): boolean {
+    return this.scout !== null || this.scan !== null;
+  }
+
+  /** Data files in a node, as the player sees them (empty for other kinds). */
+  filesIn(nodeId: string): readonly DataFile[] {
+    return this.files.get(nodeId) ?? [];
+  }
+
+  /** The file being scanned right now, if any. */
+  get scanningFile(): { nodeId: string; fileId: string; progress: number } | null {
+    const s = this.scan;
+    if (!s) return null;
+    return { nodeId: s.nodeId, fileId: this.files.get(s.nodeId)![s.queue[0]].id, progress: s.elapsed / s.ticksPerFile };
+  }
+
+  /** Changes whenever a file's look changes (for redrawing). */
+  get filesKey(): string {
+    const scanned = this.filesIn(this.currentNode).filter((f) => f.scanned).length;
+    return `${scanned}:${this.scanningFile?.fileId ?? ''}`;
+  }
+
+  /**
+   * The scan command. "" or "all": every unscanned file here; "fN": that one file;
+   * "all fN": every unscanned file, starting at fN; anything else picks the scan program.
+   */
+  scanCommand(arg: string): boolean {
+    const words = arg.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const files = this.filesIn(this.currentNode);
+    const fileIndex = (id: string) => files.findIndex((f) => f.id === id);
+    let all = true;
+    let from = 0;
+    let programQuery = '';
+    if (words[0] === 'all') {
+      if (words[1]) from = fileIndex(words[1]);
+    } else if (words.length === 1 && /^f\d+$/.test(words[0])) {
+      all = false;
+      from = fileIndex(words[0]);
+    } else {
+      programQuery = arg;
+    }
+    const program = this.findProgram('scan', programQuery);
+    if (!program) {
+      this.log(programQuery ? `no scan program "${programQuery}" in your deck` : 'no scan program in your deck', 'alarm1');
+      return false;
+    }
+    if (from < 0) {
+      this.log(`no file "${words[words.length - 1]}" here`, 'alarm1');
+      return false;
+    }
+    if (this.move) {
+      this.log('cannot run programs while connecting', 'alarm1');
+      return false;
+    }
+    return this.startScan(program, from, all);
+  }
+
+  private startScan(program: Program, from: number, all: boolean): boolean {
+    const here = this.currentNode;
+    const files = this.filesIn(here);
+    if (!files.length) {
+      this.log(`${program.name}: nothing to scan here (files live in databases)`, 'alarm1');
+      return false;
+    }
+    if (this.isBusy) {
+      this.log(`${this.scout ? 'scout' : 'scan'} is already running`, 'alarm1');
+      return false;
+    }
+    if (this.network.node(here).kind === 'honeypot') {
+      this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
+      return true;
+    }
+    // Start at the chosen file and wrap around, skipping files already scanned.
+    const order = all ? files.map((_, i) => (from + i) % files.length) : [from];
+    const queue = order.filter((i) => !files[i].scanned);
+    if (!queue.length) {
+      this.log(all ? 'every file here is already scanned' : `${files[from].id} is already scanned`, 'system');
+      return false;
+    }
+    this.events.push({ type: 'program', programType: 'scan' });
+    this.log(`${program.name} (scan ${program.rating}): scanning ${queue.length === 1 ? files[queue[0]].id : `${queue.length} files`}`, 'system');
+    this.scan = { nodeId: here, queue, elapsed: 0, ticksPerFile: scanTicks(program.rating), name: program.name, progressId: this.nextProgressId++ };
+    this.scanProgress(false);
+    this.actionStarted();
+    return true;
+  }
+
+  private scanProgress(done: boolean): void {
+    const s = this.scan!;
+    const file = this.files.get(s.nodeId)![s.queue[0]];
+    this.events.push({ type: 'progress', line: { id: s.progressId, label: `scan ${file.id}`, progress: s.elapsed / s.ticksPerFile, done } });
+  }
+
+  private updateScan(): void {
+    const s = this.scan;
+    if (!s) return;
+    s.elapsed++;
+    this.scanProgress(s.elapsed >= s.ticksPerFile);
+    if (s.elapsed < s.ticksPerFile) return;
+    const file = this.files.get(s.nodeId)![s.queue.shift()!];
+    file.scanned = true;
+    this.log(`${file.id}: ${CONTENT_LABEL[file.content]}`, file.content === 'worthless' ? 'system' : 'info');
+    if (s.queue.length) {
+      s.elapsed = 0;
+      s.progressId = this.nextProgressId++;
+      this.scanProgress(false);
+      return;
+    }
+    this.scan = null;
+    this.log('scan finished', 'info');
+    this.actionEnded();
+  }
+
+  /** Stops a running scan; files already scanned stay scanned. */
+  cancelScan(): boolean {
+    if (!this.scan) return false;
+    this.scanProgress(true);
+    this.scan = null;
+    this.log('scan stopped', 'system');
     return true;
   }
 

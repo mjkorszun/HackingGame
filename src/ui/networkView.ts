@@ -1,3 +1,4 @@
+import { CONTENT_LABEL } from '../sim/files';
 import type { Program } from '../sim/programs';
 import type { Game } from '../sim/game';
 import { TICKS_PER_SECOND } from '../sim/game';
@@ -104,6 +105,9 @@ export interface ViewActions {
   look(nodeId: string): void;
   act(actionId: string): void;
   run(program: Program): void;
+  /** Scan one file, or all unscanned files starting at it. */
+  scanFile(fileId: string, all: boolean): void;
+  scanAll(): void;
   togglePause(): void;
   mute(): void;
   autoPause(): void;
@@ -214,7 +218,7 @@ export class NetworkView {
     this.autoBtn.classList.toggle('is-on', this.game.autoPause);
     this.muteBtn.classList.toggle('is-muted', this.actions.sound.muted);
     this.header.classList.toggle('is-paused', this.game.paused);
-    const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}|${this.game.knownCount}`;
+    const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}|${this.game.knownCount}|${this.game.filesKey}`;
     if (key !== this.lastKey) this.render();
     this.updateAvatar();
     this.updateScout();
@@ -222,7 +226,7 @@ export class NetworkView {
 
   private render(): void {
     const g = this.game;
-    this.lastKey = `${g.currentNode}|${g.moveTarget}|${g.paused}|${g.identifiedCount}|${g.knownCount}`;
+    this.lastKey = `${g.currentNode}|${g.moveTarget}|${g.paused}|${g.identifiedCount}|${g.knownCount}|${g.filesKey}`;
     this.stage.innerHTML = '';
     const current = g.network.node(g.currentNode);
     const neighbours = g.network.neighbours(current.id);
@@ -383,7 +387,7 @@ export class NetworkView {
       svg('circle', { cx: d.x, cy: d.y, r: 5, class: 'room-door' }, grp);
     }
 
-    if (kind === 'database') this.drawDataBlocks(node.id, grp);
+    if (this.game.filesIn(node.id).length) this.drawDataFiles(node.id, grp);
 
     // Name and type in the top-left corner of the view, with the type's small shape as an icon.
     const hud = svg('g', { class: `room-hud kind-${kind}` }, this.stage);
@@ -401,35 +405,58 @@ export class NetworkView {
     });
   }
 
-  /** Placeholder data blocks: a fixed, id-based scatter so each database looks the same every visit. */
-  private drawDataBlocks(seedText: string, parent: Element): void {
+  /**
+   * The node's data files, each in its own grid cell (a fixed, id-based scatter so a
+   * database looks the same every visit). Hover and click them; right-click for a menu.
+   */
+  private drawDataFiles(nodeId: string, parent: Element): void {
     let seed = 0;
-    for (const ch of seedText) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    for (const ch of nodeId) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
     const rand = () => {
       seed = (seed * 1664525 + 1013904223) >>> 0;
       return seed / 2 ** 32;
     };
-    const cols = Math.floor((2 * ROOM_R) / CELL);
-    const left = CX - (cols * CELL) / 2;
-    const top = CY - (cols * CELL) / 2;
+    // Cells line up with the room grid, whose lines sit at x0 + k * CELL.
+    const span = this.roomR * 1.6;
+    const x0 = CX - span;
+    const y0 = CY - span;
+    const cols = Math.floor((2 * span) / CELL);
+    const files = this.game.filesIn(nodeId);
+    const scanning = this.game.scanningFile;
     const taken = new Set<string>();
-    const count = 6 + Math.floor(rand() * 7);
-    for (let i = 0, tries = 0; i < count && tries < 300; tries++) {
+    for (let i = 0, tries = 0; i < files.length && tries < 2000; tries++) {
       const c = Math.floor(rand() * cols);
       const row = Math.floor(rand() * cols);
       const key = `${c},${row}`;
-      const x = left + c * CELL;
-      const y = top + row * CELL;
+      const x = x0 + c * CELL;
+      const y = y0 + row * CELL;
       const inside = [[x + 3, y + 3], [x + CELL - 3, y + 3], [x + 3, y + CELL - 3], [x + CELL - 3, y + CELL - 3]].every(([px, py]) => this.inRoom(px, py));
       // Keep clear of the avatar's spot in the middle and of cells already used.
       const nearAvatar = Math.abs(x + CELL / 2 - CX) < CELL * 1.5 && Math.abs(y + CELL / 2 - (CY + 30)) < CELL * 1.5;
       if (!inside || nearAvatar || taken.has(key)) continue;
       taken.add(key);
-      i++;
-      const blk = svg('g', { class: 'data-block' }, parent);
-      svg('rect', { x: x + 5, y: y + 5, width: CELL - 10, height: CELL - 10 }, blk);
-      svg('line', { x1: x + 9, y1: y + 12, x2: x + CELL - 9, y2: y + 12 }, blk);
-      svg('line', { x1: x + 9, y1: y + 17, x2: x + CELL - 12, y2: y + 17 }, blk);
+      const file = files[i++];
+      const cls = ['data-block', file.scanned ? `is-${file.content}` : 'is-unscanned'];
+      if (scanning?.fileId === file.id) cls.push('is-scanning');
+      const blk = svg('g', { class: cls.join(' '), 'data-file': file.id }, parent);
+      const pad = 5;
+      svg('rect', { x: x + pad, y: y + pad, width: CELL - 2 * pad, height: CELL - 2 * pad }, blk);
+      const mid = y + CELL / 2;
+      svg('line', { x1: x + pad + 4, y1: mid - 2.5, x2: x + CELL - pad - 4, y2: mid - 2.5 }, blk);
+      svg('line', { x1: x + pad + 4, y1: mid + 2.5, x2: x + CELL - pad - 7, y2: mid + 2.5 }, blk);
+      const tip = svg('title', {}, blk);
+      tip.textContent = `${file.id}: ${file.scanned ? CONTENT_LABEL[file.content] : 'not scanned'}`;
+      blk.addEventListener('mouseenter', () => this.actions.hover());
+      blk.addEventListener('click', () => this.actions.scanFile(file.id, false));
+      blk.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const busy = this.game.isBusy;
+        this.menu.show(e.clientX, e.clientY, `${file.id}${file.scanned ? `: ${CONTENT_LABEL[file.content]}` : ''}`, [
+          { label: 'Scan', hint: 'click', disabled: busy || file.scanned, action: () => this.actions.scanFile(file.id, false) },
+          { label: 'Scan all', hint: 'from this file', disabled: busy, action: () => this.actions.scanFile(file.id, true) },
+        ]);
+      });
     }
   }
 
@@ -556,11 +583,16 @@ export class NetworkView {
     }
     items.push({ label: 'Look', action: () => this.actions.look(node.id) });
     if (isCurrent) {
-      for (const prog of this.game.programs) {
-        items.push({ label: `Run ${prog.name}`, hint: `${prog.type} ${prog.rating}`, disabled: this.game.isScouting, action: () => this.actions.run(prog) });
-      }
       for (const act of this.game.currentActions) {
         items.push({ label: act.id, hint: act.requires ? `${act.requires} priv.` : undefined, action: () => this.actions.act(act.id) });
+      }
+      // After the node's own actions: only programs that make sense here.
+      const busy = this.game.isBusy;
+      const scout = this.game.findProgram('scout');
+      if (scout) items.push({ label: 'Scout', hint: scout.name, disabled: busy, action: () => this.actions.run(scout) });
+      const scan = this.game.findProgram('scan');
+      if (scan && this.game.filesIn(node.id).some((f) => !f.scanned)) {
+        items.push({ label: 'Scan all', hint: scan.name, disabled: busy, action: () => this.actions.scanAll() });
       }
     }
     this.menu.show(x, y, this.game.nameOf(node.id), items);

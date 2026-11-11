@@ -86,10 +86,12 @@ function runCommand(raw: string): void {
       if (!arg) game.log('usage: do <action> (look lists the actions here)', 'system');
       else if (!game.runAction(arg)) sfx.play('error');
       break;
+    case 'scan':
+      if (!game.scanCommand(arg)) sfx.play('error');
+      break;
     case 'attack':
     case 'hide':
     case 'scout':
-    case 'scan':
     case 'decrypt':
       if (!game.runProgram(cmd.name, arg)) sfx.play('error');
       break;
@@ -108,7 +110,7 @@ function runCommand(raw: string): void {
       game.setPaused(false);
       break;
     case 'stop':
-      if (game.cancelScout()) break;
+      if (game.cancelScout() || game.cancelScan()) break;
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
       break;
@@ -158,6 +160,8 @@ const view = new NetworkView(document.getElementById('view')!, game, menu, {
   look: (id) => ui(`look ${nodeName(id)}`),
   act: (id) => ui(`do ${id}`),
   run: (p) => ui(p.name),
+  scanFile: (fileId, all) => ui(all ? `scan all ${fileId}` : `scan ${fileId}`),
+  scanAll: () => ui('scan all'),
   togglePause: () => ui(game.paused ? 'resume' : 'pause'),
   mute: () => ui('mute'),
   autoPause: () => ui('autopause'),
@@ -179,7 +183,7 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
   } else if (e.key === 'Escape') {
     if (menu.open) menu.dismiss();
-    else if (game.isMoving || game.isScouting) ui('stop');
+    else if (game.isMoving || game.isBusy) ui('stop');
   } else if (e.key === 'm' || e.key === 'M') {
     ui('mute');
   } else if (e.key === 'a' || e.key === 'A') {
@@ -200,7 +204,7 @@ function flush(): void {
     else if (ev.type === 'hop') sfx.play('hop');
     else if (ev.type === 'moved') sfx.play('arrive');
     else if (ev.type === 'paused' && !ev.auto) sfx.play(ev.paused ? 'pause' : 'resume');
-    else if (ev.type === 'program' && ev.programType === 'scout') sfx.play('scout');
+    else if (ev.type === 'program' && (ev.programType === 'scout' || ev.programType === 'scan')) sfx.play(ev.programType);
   }
 }
 

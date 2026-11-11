@@ -3,10 +3,9 @@ export const PROGRAM_TYPES = ['attack', 'hide', 'scout', 'scan', 'decrypt'] as c
 export type ProgramType = (typeof PROGRAM_TYPES)[number];
 
 /** Placeholder results for programs whose systems don't exist yet. */
-export const PROGRAM_STUBS: Record<Exclude<ProgramType, 'scout'>, string> = {
+export const PROGRAM_STUBS: Record<Exclude<ProgramType, 'scout' | 'scan'>, string> = {
   attack: 'no agent here to attack (agents come later)',
   hide: 'you blend into the normal traffic (hiding comes later)',
-  scan: 'no files found here (files come later)',
   decrypt: 'nothing encrypted here (encryption comes later)',
 };
 

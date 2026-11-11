@@ -19,7 +19,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'look', aliases: ['l'], arg: 'node', usage: 'look [node]', help: 'describe the current node, or another one' },
   { name: 'do', arg: 'action', usage: 'do <action>', help: "use an action of the current node (look lists them)" },
   ...PROGRAM_TYPES.map(
-    (t): CommandSpec => ({ name: t, arg: t, usage: `${t} [n|name]`, help: `run your best ${t} program, or the Nth one, or one by name` }),
+    (t): CommandSpec => ({ name: t, arg: t, usage: `${t} [n|name]`, help: t === 'scan' ? 'scan files here: scan [all] [fN], or pick the program by name' : `run your best ${t} program, or the Nth one, or one by name` }),
   ),
   { name: 'map', arg: 'none', usage: 'map', help: 'list all nodes' },
   { name: 'pause', arg: 'none', usage: 'pause', help: 'stop time (Space)' },
