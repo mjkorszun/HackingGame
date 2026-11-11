@@ -3,7 +3,7 @@ import type { NetworkSeed } from '../sim/generate';
 import { sats } from '../sim/money';
 import { devDays, MAX_DEV_RATING, RARITY_TRAITS, type DevProject } from '../sim/development';
 import { cleanGameCode, SKILLS, xpToNext } from '../sim/progression';
-import { ICON_POOLS, iconSvg, programIcon } from './icons';
+import { programIcon } from './icons';
 import { PROGRAM_TYPES, programSize, type Program, type ProgramType } from '../sim/programs';
 
 /** A contract on offer: the job and the system it is in. */
@@ -216,7 +216,7 @@ export class HomeScreen {
       box.innerHTML = `
         ${result}
         <div class="cc-head"><span class="cc-title">new program</span><span class="home-dim">${devDays(f.rating)} days of work</span></div>
-        <label class="dev-row">type ${iconSvg(ICON_POOLS[f.type][0], 'dev-icon')}<select class="dev-type">${PROGRAM_TYPES.map((t) => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label class="dev-row">type <select class="dev-type">${PROGRAM_TYPES.map((t) => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
         <label class="dev-row">rating <select class="dev-rating">${Array.from({ length: MAX_DEV_RATING }, (_, i) => `<option${i + 1 === f.rating ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></label>
         <label class="dev-row">name <input class="dev-name" maxlength="20" value="${esc(name)}"></label>
         <div class="cc-line home-dim">size ${programSize(f)} GB. bugs can make it take longer. rarity and traits are rolled when it is done: common ${RARITY_TRAITS.common} traits, uncommon ${RARITY_TRAITS.uncommon}, rare ${RARITY_TRAITS.rare}, epic ${RARITY_TRAITS.epic}, legendary ${RARITY_TRAITS.legendary} and your name</div>

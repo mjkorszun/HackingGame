@@ -237,7 +237,8 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
   dev: {
     project: () => account.project,
     start: (type, rating, name) => {
-      account.project = newProject(type, rating, name);
+      // The icon is drawn when the project starts, so the card shows what the program will look like.
+      account.project = { ...newProject(type, rating, name), icon: randomIcon(type) };
       saveAccount(account);
     },
     work: (mode) => {
@@ -252,7 +253,7 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       let program: Program | undefined;
       if (r.done) {
         program = finishProgram(p, `p${nextProgramId(account)}`, 'you');
-        program.icon = randomIcon(program.type);
+        program.icon = p.icon ?? randomIcon(program.type);
         account.programs.push(program);
         account.project = undefined;
         lines.push(`${p.name} is done`);
