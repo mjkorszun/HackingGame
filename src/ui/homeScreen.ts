@@ -52,9 +52,9 @@ export class HomeScreen {
       <h1 class="home-title">CYBERHACK</h1>
       <nav class="home-menu">
         <button type="button" class="home-btn${this.listOpen ? ' is-open' : ''}" data-act="contracts">Choose contract</button>
-        <button type="button" class="home-btn" data-act="enter">Enter the network</button>
+        <button type="button" class="home-btn" data-act="enter"${job ? '' : ' disabled title="Choose a contract first"'}>Enter the network</button>
       </nav>
-      <div class="home-active">active contract: ${job ? `<span class="home-job">${job.title}</span> <span class="home-dim">(${this.chosen!.system.name}, pays ${sats(job.pay)})</span>` : '<span class="home-dim">none</span>'}</div>
+      <div class="home-active">active contract: ${job ? `<span class="home-job">${job.title}</span> <span class="home-dim">(${this.chosen!.system.name}, pays ${sats(job.pay)})</span>` : '<span class="home-dim">none. choose one to enter the network</span>'}</div>
       <div class="home-list"></div>`;
     this.main.querySelector('[data-act="contracts"]')!.addEventListener('click', () => {
       this.actions.click();
@@ -62,6 +62,7 @@ export class HomeScreen {
       this.render();
     });
     this.main.querySelector('[data-act="enter"]')!.addEventListener('click', () => {
+      if (!this.chosen) return;
       this.actions.click();
       this.actions.enter();
     });
@@ -80,6 +81,7 @@ export class HomeScreen {
       card.querySelector('button')!.addEventListener('click', () => {
         this.actions.click();
         this.chosen = taken ? undefined : offer;
+        if (this.chosen) this.listOpen = false;
         this.actions.choose(this.chosen);
         this.render();
       });
