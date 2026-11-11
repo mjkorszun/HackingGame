@@ -19,6 +19,7 @@ const PROGRAM_HELP: Partial<Record<ProgramType, string>> = {
   deceive: 'answer a query with a lie',
   hide: 'passive: agents roll detection against it',
   analyze: 'passive: reads agents that deal with you',
+  skimmer: 'plant a skimmer in a database of a local business: it skims a little every day',
   scan: 'scan files here: scan [all] [fN], or pick the program by name',
   evaluate: 'price of a valuable file (needs an evaluate program)',
   identify: 'what software a file holds (needs an identify program)',

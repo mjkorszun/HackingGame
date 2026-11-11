@@ -1,5 +1,5 @@
 /** A program in the player's deck. */
-export const PROGRAM_TYPES = ['attack', 'silence', 'deceive', 'hide', 'analyze', 'scout', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
+export const PROGRAM_TYPES = ['attack', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'scout', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
 
 /** Programs used on one data file: evaluate f3, defuse f3, ... */
 export const FILE_PROGRAMS = ['evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
@@ -24,6 +24,10 @@ export interface Program {
   /** Its own name, like "Hawkeye V2". Programs of one type can have any names. */
   name: string;
   rating: number;
+  /** Skimmer: how much of the base daily take it gets (1 = standard, 2 = twice as much). */
+  efficiency?: number;
+  /** Skimmer: chance per day, in %, that the business finds and removes it (5 is a poor skimmer). */
+  detection?: number;
 }
 
 /** How long the scout's eyes take to reach the next ring of nodes. */

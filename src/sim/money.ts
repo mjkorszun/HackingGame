@@ -2,5 +2,6 @@
 export const SATS = '§';
 
 export function sats(n: number): string {
-  return `${n} ${SATS}`;
+  const shown = Number.isInteger(n) ? String(n) : n.toFixed(2);
+  return `${shown} ${SATS}`;
 }

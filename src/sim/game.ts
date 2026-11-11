@@ -175,6 +175,30 @@ export class Game {
     return job.need === 'alter' ? !!f.altered && !f.deleted : !!f.deleted;
   }
 
+  /** The skimmer planted in this run, if any: it leaves your gear and keeps paying out day after day. */
+  planted: Program | null = null;
+
+  /** Plants a skimmer in a database of a local business. */
+  plantSkimmer(program: Program): boolean {
+    if (!this.network.def.local) {
+      this.log(`${program.name}: skimmers go into local businesses, not contract targets`, 'alarm1');
+      return false;
+    }
+    if (this.kindOf(this.currentNode) !== 'database') {
+      this.log(`${program.name}: plant it in a database (where the money moves)`, 'alarm1');
+      return false;
+    }
+    if (this.planted) {
+      this.log('a skimmer is already planted here', 'alarm1');
+      return false;
+    }
+    this.planted = program;
+    this.programs.splice(this.programs.indexOf(program), 1);
+    this.deckVersion++;
+    this.log(`${program.name} planted in ${this.nameOf(this.currentNode)}. it will skim a little every day (x${program.efficiency ?? 1}, ${program.detection ?? 5}% a day to be found)`, 'info');
+    return true;
+  }
+
   /** Loads a downloaded program from this run's data into a free memory slot, so it can be used at once. */
   loadProgram(name: string): boolean {
     const q = name.trim().toLowerCase();
@@ -738,6 +762,7 @@ export class Game {
       this.log(`${program.name} (${program.type} ${program.rating}): ${PROGRAM_STUBS[program.type]}`, 'info');
       return true;
     }
+    if (program.type === 'skimmer') return this.plantSkimmer(program);
     if (program.type === 'attack' || program.type === 'silence' || program.type === 'deceive') {
       return this.agentCommand(program.type, '', program);
     }
@@ -1119,4 +1144,5 @@ export const STARTING_PROGRAMS: Program[] = [
   { id: 'p13', type: 'silence', name: 'Hush 1.0', rating: 1 },
   { id: 'p14', type: 'deceive', name: 'Mirage 1.0', rating: 1 },
   { id: 'p15', type: 'analyze', name: 'Profiler 1.0', rating: 1 },
+  { id: 'p16', type: 'skimmer', name: 'Skimmer 1.0', rating: 1, efficiency: 1, detection: 2 },
 ];

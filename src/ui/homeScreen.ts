@@ -19,6 +19,9 @@ export interface HomeState {
   reputation: number;
   networks: NetworkSeed[];
   offers: ContractOffer[];
+  skimmers: { netId: string; program: { name: string; efficiency?: number } }[];
+  /** What happened on the last day. */
+  news: string[];
 }
 
 export interface HomeActions {
@@ -67,6 +70,7 @@ export class HomeScreen {
     this.main.innerHTML = `
       <h1 class="home-title">CYBERHACK</h1>
       <div class="home-stats">day ${s.day} · reputation ${s.reputation}</div>
+      ${s.news.length ? `<div class="home-news">${s.news.map((n) => `<div>${n}</div>`).join('')}</div>` : ''}
       <nav class="home-menu">
         <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">Known networks</button>
         <button type="button" class="home-btn${this.open === 'contracts' ? ' is-open' : ''}" data-act="contracts"${locked ? ` disabled title="Needs reputation ${CONTRACT_REPUTATION}"` : ''}>Choose contract${locked ? ` <span class="home-lock">(rep. ${CONTRACT_REPUTATION})</span>` : ''}</button>
@@ -105,7 +109,8 @@ export class HomeScreen {
         const taken = this.chosen?.kind === 'network' && this.chosen.net.id === net.id;
         card(taken, `
           <div class="cc-head"><span class="cc-title">${net.name}</span><span class="home-dim">local network</span></div>
-          <div class="cc-line home-dim">${net.location}. security level ${net.security}</div>`, () => ({ kind: 'network', net }));
+          <div class="cc-line home-dim">${net.location}. security level ${net.security}</div>
+          ${s.skimmers.filter((k) => k.netId === net.id).map((k) => `<div class="cc-line cc-skim">${k.program.name} planted: +${sats(Math.round((net.income ?? 0.08) * (k.program.efficiency ?? 1) * 100) / 100)} a day</div>`).join('')}`, () => ({ kind: 'network', net }));
       }
     } else if (this.open === 'contracts') {
       for (const offer of s.offers) {

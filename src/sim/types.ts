@@ -46,6 +46,8 @@ export interface SystemDef {
   gates?: [string, string][];
   /** How well the system hides itself; programs like Scout roll against it. */
   encryption?: number;
+  /** A local business network (not a contract): a skimmer can be planted here. */
+  local?: boolean;
   /** Seeds the files in a generated network (so two pizzerias hold different files). */
   fileSeed?: string;
   /** Security level: how valuable the data kept here is (and, later, how hard it fights back). */

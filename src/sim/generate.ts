@@ -14,6 +14,8 @@ export interface NetworkSeed {
   name: string;
   location: string;
   security: number;
+  /** What a standard skimmer takes from this business each day, in sats. */
+  income?: number;
 }
 
 /** Small seeded generator (same seed, same sequence). */
@@ -33,7 +35,7 @@ export function newPizzeria(seed: number): NetworkSeed {
   const r = rng(seed);
   const name = PIZZERIA_NAMES[Math.floor(r() * PIZZERIA_NAMES.length)];
   const location = CITIES[Math.floor(r() * CITIES.length)];
-  return { id: `pz${seed.toString(36)}`, template: 'pizzeria', seed, name, location, security: 1 };
+  return { id: `pz${seed.toString(36)}`, template: 'pizzeria', seed, name, location, security: 1, income: 0.08 };
 }
 
 /**
@@ -80,6 +82,7 @@ export function generate(seed: NetworkSeed): SystemDef {
     security: seed.security,
     encryption: 1,
     fileSeed: seed.id,
+    local: true,
     nodes,
     links,
   };

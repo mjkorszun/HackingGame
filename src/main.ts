@@ -9,7 +9,7 @@ import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
 import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from './sim/programs';
-import { loadAccount, loadedPrograms, nextProgramId, saveAccount, toggleLoaded } from './ui/account';
+import { loadAccount, loadedPrograms, nextProgramId, passDay, saveAccount, toggleLoaded } from './ui/account';
 import { showRunSummary } from './ui/runSummary';
 import { HomeScreen, type Choice, type ContractOffer } from './ui/homeScreen';
 import { generate } from './sim/generate';
@@ -66,6 +66,12 @@ function leaveNet(): void {
   const report = game.endRun();
   account.sats += report.total;
   account.reputation += report.reputation;
+  if (game.planted) {
+    const sk = game.planted;
+    account.programs = account.programs.filter((p) => p.id !== sk.id);
+    account.loaded = account.loaded.filter((id) => id !== sk.id);
+    account.skimmers.push({ netId: game.network.def.id, program: sk });
+  }
   account.programs = [...account.programs, ...report.software];
   // Programs loaded mid-run stay loaded.
   for (const l of game.loot) if (l.loaded && l.software && account.loaded.length < account.memory) account.loaded.push(l.software.id);
@@ -135,6 +141,7 @@ function runCommand(raw: string): void {
       break;
     case 'hide':
     case 'analyze':
+    case 'skimmer':
     case 'scout':
     case 'scan':
       if (!game.runProgram(cmd.name, arg)) sfx.play('error');
@@ -196,7 +203,7 @@ function updateDeck(): void {
 }
 
 const offers: ContractOffer[] = testSystem.contract ? [{ contract: testSystem.contract, system: testSystem }] : [];
-const home = new HomeScreen(document.getElementById('home')!, { day: account.day, reputation: account.reputation, networks: account.networks, offers }, {
+const home = new HomeScreen(document.getElementById('home')!, { day: account.day, reputation: account.reputation, networks: account.networks, offers, skimmers: account.skimmers, news: account.news }, {
   enter: (choice) => enterNetwork(choice),
   click: () => sfx.play('menuItem'),
 });
@@ -218,8 +225,9 @@ renderHomeGear();
 /** Leaves the main screen and starts the run: the console, the network view and the clock. */
 function enterNetwork(choice: Choice): void {
   const system = choice.kind === 'contract' ? { ...choice.offer.system, contract: choice.offer.contract } : generate(choice.net);
-  // Every trip into the net is one day.
+  // Every trip into the net is one day: skimmers pay out, and may be found.
   account.day++;
+  passDay(account);
   saveAccount(account);
   game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account) });
   home.hide();
