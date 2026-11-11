@@ -297,9 +297,10 @@ describe('stub programs', () => {
   it('starts paused', () => {
     expect(new Game(testSystem).paused).toBe(true);
   });
-  it('each first-version program can be run and only prints for now', () => {
+  it('passive programs only explain themselves; attack needs an agent here', () => {
     const g = new Game(testSystem);
-    for (const t of ['attack', 'hide'] as const) expect(g.runProgram(t)).toBe(true);
+    for (const t of ['hide', 'analyze'] as const) expect(g.runProgram(t)).toBe(true);
+    expect(g.runProgram('attack')).toBe(false);
     expect(g.isScouting).toBe(false);
   });
 });
@@ -587,5 +588,84 @@ describe('run and contract', () => {
       expect(p).toBeGreaterThanOrEqual(21);
       expect(p).toBeLessThanOrEqual(50);
     }
+  });
+});
+
+describe('agents', () => {
+  /** A game with one warrior parked in the player's node, time running, rolls fixed. */
+  const setup = (roll: number) => {
+    const g = new Game({ ...testSystem, agents: [{ kind: 'warrior', node: 'gw' }] });
+    g.autoPause = false;
+    g.setPaused(false);
+    (g as unknown as { d100: () => number }).d100 = () => roll;
+    const a = g.agents[0];
+    a.stayLeft = 10_000;
+    return { g, a };
+  };
+  const tick = (g: Game, n: number) => { for (let i = 0; i < n; i++) g.step(); };
+
+  it('a warrior in your node queries you and the game pauses', () => {
+    const { g, a } = setup(1);
+    tick(g, a.stats.queryEvery);
+    expect(g.query?.agentId).toBe(a.id);
+    expect(g.paused).toBe(true);
+    g.setPaused(false);
+    expect(g.paused).toBe(true); // must answer first
+  });
+
+  it('ignoring twice: yellow and a second query, then red and hostile', () => {
+    const { g, a } = setup(1);
+    tick(g, a.stats.queryEvery);
+    expect(g.answerQuery('ignore')).toBe(true);
+    expect(g.alarm).toBe(1);
+    g.setPaused(false);
+    tick(g, 25);
+    expect(g.query?.agentId).toBe(a.id);
+    g.answerQuery('ignore');
+    expect(g.alarm).toBe(3);
+    expect(a.mood).toBe('hostile');
+  });
+
+  it('a successful deceive leaves you alone until you leave the node', () => {
+    const { g, a } = setup(1);
+    tick(g, a.stats.queryEvery);
+    expect(g.agentCommand('deceive', '')).toBe(true);
+    expect(a.mood).toBe('trusting');
+    g.setPaused(false);
+    tick(g, 100);
+    expect(g.query).toBeNull();
+  });
+
+  it('a silenced agent turns hostile but raises no alarm', () => {
+    const { g, a } = setup(1);
+    expect(g.agentCommand('silence', 'W1')).toBe(true);
+    expect(a.silenced).toBe(true);
+    expect(a.mood).toBe('hostile');
+    expect(g.alarm).toBe(0);
+  });
+
+  it('an attack that does not kill makes it hostile and the alarm red; hostile agents wear down integrity until you are kicked', () => {
+    const { g, a } = setup(1);
+    g.agentCommand('attack', 'W1');
+    expect(a.hp).toBe(a.stats.hp - 10);
+    expect(g.alarm).toBe(3);
+    tick(g, a.stats.attackEvery * 5);
+    expect(g.integrity).toBe(0);
+    expect(g.kicked).toBe(true);
+    expect(g.endRun().success).toBe(false);
+  });
+
+  it('a strong enough attack kills in one blow, quietly', () => {
+    const { g, a } = setup(1);
+    g.programs.push({ id: 'big', type: 'attack', name: 'Rocket Launcher V007', rating: 3 });
+    g.agentCommand('attack', 'W1');
+    expect(g.agents).not.toContain(a);
+    expect(g.alarm).toBe(0);
+  });
+
+  it('a high roll misses the query', () => {
+    const { g, a } = setup(100);
+    tick(g, a.stats.queryEvery * 3);
+    expect(g.query).toBeNull();
   });
 });

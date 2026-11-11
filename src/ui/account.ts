@@ -33,7 +33,14 @@ export function saveAccount(a: Account): void {
 /** Saves from before the rename: old "decrypt" read archives (now scan), old "brute" cracked seals (now decrypt). */
 function migrate(a: Account): Account {
   const programs = a.programs as { type: string; name: string }[];
-  if (!programs.some((p) => p.type === 'brute')) return a;
+  renameOld(programs);
+  // New starting programs reach old saves too.
+  for (const p of STARTING_PROGRAMS) if (!a.programs.some((q) => q.type === p.type)) a.programs.push({ ...p, id: `p${p.id}x` });
+  return a;
+}
+
+function renameOld(programs: { type: string; name: string }[]): void {
+  if (!programs.some((p) => p.type === 'brute')) return;
   for (const p of programs) {
     if (p.type === 'decrypt') {
       p.type = 'scan';
@@ -43,5 +50,4 @@ function migrate(a: Account): Account {
       if (p.name === 'Battering Ram 2.0') p.name = 'Lockpick 1.0';
     }
   }
-  return a;
 }

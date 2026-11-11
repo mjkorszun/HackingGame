@@ -2,7 +2,7 @@
 
 import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from '../sim/programs';
 
-export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'file' | ProgramType;
+export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'file' | 'agent' | ProgramType;
 
 export interface CommandSpec {
   name: string;
@@ -14,6 +14,11 @@ export interface CommandSpec {
 }
 
 const PROGRAM_HELP: Partial<Record<ProgramType, string>> = {
+  attack: 'attack an agent here: attack [W1]. a kill in one blow is quiet',
+  silence: 'silence an agent here: its messages cannot leave the node',
+  deceive: 'answer a query with a lie',
+  hide: 'passive: agents roll detection against it',
+  analyze: 'passive: reads agents that deal with you',
   scan: 'scan files here: scan [all] [fN], or pick the program by name',
   evaluate: 'price of a valuable file (needs an evaluate program)',
   identify: 'what software a file holds (needs an identify program)',
@@ -29,8 +34,10 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'look', aliases: ['l'], arg: 'node', usage: 'look [node]', help: 'describe the current node, or another one' },
   { name: 'do', arg: 'action', usage: 'do <action>', help: "use an action of the current node (look lists them)" },
   ...PROGRAM_TYPES.map(
-    (t): CommandSpec => ({ name: t, arg: t, usage: (FILE_PROGRAMS as readonly string[]).includes(t) ? `${t} <file>` : `${t} [n|name]`, help: PROGRAM_HELP[t] ?? `run your best ${t} program, or the Nth one, or one by name` }),
+    (t): CommandSpec => ({ name: t, arg: t === 'attack' || t === 'silence' ? 'agent' : t, usage: (FILE_PROGRAMS as readonly string[]).includes(t) ? `${t} <file>` : t === 'attack' || t === 'silence' ? `${t} [agent]` : `${t} [n|name]`, help: PROGRAM_HELP[t] ?? `run your best ${t} program, or the Nth one, or one by name` }),
   ),
+  { name: 'present', arg: 'none', usage: 'present', help: 'answer a query by showing a privilege you hold' },
+  { name: 'ignore', arg: 'none', usage: 'ignore', help: 'ignore a query (the agent grows suspicious)' },
   { name: 'download', arg: 'file', usage: 'download <file>', help: 'copy a scanned file (valuable data or software) into your gear' },
   { name: 'alter', arg: 'file', usage: 'alter <file>', help: 'change contract data' },
   { name: 'delete', arg: 'file', usage: 'delete <file>', help: 'destroy contract data' },
