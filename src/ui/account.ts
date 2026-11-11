@@ -23,6 +23,12 @@ export interface Account {
   news: string[];
   /** The program you are writing, if any. */
   project?: DevProject;
+  /** Character level, XP into the current level, and the skills learned. */
+  level: number;
+  xp: number;
+  skills: string[];
+  /** Level ups whose skill has not been picked yet. */
+  skillPicks: number;
 }
 
 /**
@@ -57,7 +63,7 @@ const START_STORED = ['Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mimic 1.0', 'Skimm
 
 function fresh(): Account {
   const programs = STARTING_PROGRAMS.map((p) => ({ ...p }));
-  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [] };
+  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0 };
 }
 
 function randomSeed(): number {
@@ -119,6 +125,10 @@ function migrate(a: Account): Account {
   if (!Array.isArray(a.networks) || !a.networks.length) a.networks = [newPizzeria(randomSeed())];
   if (!Array.isArray(a.skimmers)) a.skimmers = [];
   if (!Array.isArray(a.news)) a.news = [];
+  if (typeof a.level !== 'number') a.level = 1;
+  if (typeof a.xp !== 'number') a.xp = 0;
+  if (!Array.isArray(a.skills)) a.skills = [];
+  if (typeof a.skillPicks !== 'number') a.skillPicks = 0;
   if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id);
   // Unload from the end until what is loaded fits.
   while (a.loaded.length && usedMemory(loadedPrograms(a)) > a.memory) a.loaded.pop();
