@@ -177,14 +177,14 @@ export class NetworkView {
     this.muteBtn.textContent = this.actions.sound.muted ? 'SND OFF' : 'SND ON';
     this.muteBtn.classList.toggle('is-muted', this.actions.sound.muted);
     this.header.classList.toggle('is-paused', this.game.paused);
-    const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}`;
+    const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}|${this.game.knownCount}`;
     if (key !== this.lastKey) this.render();
     this.updateAvatar();
   }
 
   private render(): void {
     const g = this.game;
-    this.lastKey = `${g.currentNode}|${g.moveTarget}|${g.paused}|${g.identifiedCount}`;
+    this.lastKey = `${g.currentNode}|${g.moveTarget}|${g.paused}|${g.identifiedCount}|${g.knownCount}`;
     this.stage.innerHTML = '';
     const current = g.network.node(g.currentNode);
     const neighbours = g.network.neighbours(current.id);
@@ -506,6 +506,7 @@ export class NetworkView {
     const label = svg('text', { x: ox + 6, y: oy - 5, class: 'minimap-label' }, mini);
     label.textContent = 'MAP';
     for (const [a, b] of g.network.def.links) {
+      if (!g.isKnown(a) || !g.isKnown(b)) continue;
       const na = g.network.node(a);
       const nb = g.network.node(b);
       svg('line', { x1: sx(na.x), y1: sy(na.y), x2: sx(nb.x), y2: sy(nb.y), class: 'mini-link' }, mini);
@@ -513,6 +514,7 @@ export class NetworkView {
     }
     const target = g.moveTarget;
     for (const n of nodes) {
+      if (!g.isKnown(n.id)) continue;
       const cls = ['mini-node', `kind-${g.kindOf(n.id)}`];
       if (n.id === g.currentNode) cls.push('mini-current');
       if (n.id === target) cls.push('mini-target');
