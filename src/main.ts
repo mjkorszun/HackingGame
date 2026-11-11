@@ -9,9 +9,12 @@ import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
 import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from './sim/programs';
+import { loadAccount, saveAccount } from './ui/account';
+import { showRunSummary } from './ui/runSummary';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
-const game = new Game(testSystem);
+const account = loadAccount();
+const game = new Game(testSystem, Math.random, account.programs);
 const menu = new ContextMenu();
 const sfx = new Sound(import.meta.env.BASE_URL);
 // Browsers block audio until the first click or key, so the link-up sound plays then.
@@ -53,7 +56,20 @@ const HELP = [
   'keys: Space pause, A auto-pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
 ];
 
+/** Ends the run: pays out what was taken and shows the report. OK starts the next run. */
+function leaveNet(): void {
+  if (game.ended) return;
+  sfx.play('pause');
+  const report = game.endRun();
+  account.sats += report.total;
+  account.programs = [...game.programs, ...report.software];
+  saveAccount(account);
+  flush();
+  showRunSummary(report, account.sats, () => location.reload());
+}
+
 function runCommand(raw: string): void {
+  if (game.ended) return;
   // A program's own name works as a command: "Hawkeye V2".
   const program = game.programByName(raw);
   if (program) {
@@ -137,6 +153,9 @@ function runCommand(raw: string): void {
     case 'clear':
       term.clear();
       break;
+    case 'exit':
+      leaveNet();
+      break;
   }
 }
 
@@ -155,7 +174,7 @@ let deckVersion = -1;
 function updateDeck(): void {
   if (game.deckVersion === deckVersion) return;
   deckVersion = game.deckVersion;
-  renderDeck(deckEl, game, (p) => ui(p.name));
+  renderDeck(deckEl, game, account.sats, (p) => ui(p.name));
 }
 updateDeck();
 
@@ -189,6 +208,7 @@ const view = new NetworkView(document.getElementById('view')!, game, menu, {
   mute: () => ui('mute'),
   autoPause: () => ui('autopause'),
   hover: () => sfx.play('hover'),
+  exit: () => ui('exit'),
   sound: sfx,
 });
 
@@ -200,7 +220,7 @@ buildTag.textContent = __BUILD_LABEL__;
 document.getElementById('view')!.appendChild(buildTag);
 
 document.addEventListener('keydown', (e) => {
-  if (term.inputFocused) return;
+  if (term.inputFocused || game.ended) return;
   if (e.code === 'Space') {
     ui(game.paused ? 'resume' : 'pause');
     e.preventDefault();

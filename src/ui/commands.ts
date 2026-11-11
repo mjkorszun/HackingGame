@@ -41,6 +41,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'stop', arg: 'none', usage: 'stop', help: 'stop travelling after this hop, or stop a running scout (Esc)' },
   { name: 'autopause', arg: 'none', usage: 'autopause', help: 'auto-pause on / off: time stops after every action (A)' },
   { name: 'mute', arg: 'none', usage: 'mute', help: 'sound on / off (M)' },
+  { name: 'exit', aliases: ['disconnect', 'logout'], arg: 'none', usage: 'exit', help: 'leave the net: the run ends and you get paid' },
   { name: 'clear', arg: 'none', usage: 'clear', help: 'clear the console' },
 ];
 

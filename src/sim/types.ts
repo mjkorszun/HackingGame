@@ -46,6 +46,21 @@ export interface SystemDef {
   gates?: [string, string][];
   /** How well the system hides itself; programs like Scout roll against it. */
   encryption?: number;
+  /** Security level: how valuable the data kept here is (and, later, how hard it fights back). */
+  security?: number;
+  /** The job the player was hired for in this system. */
+  contract?: ContractDef;
+}
+
+/** A contract: one task in one system, paid on success. */
+export interface ContractDef {
+  title: string;
+  /** What must be done with the target file. */
+  need: 'alter' | 'delete';
+  /** Database that holds the target file. */
+  node: string;
+  /** Pay in sats on success. */
+  pay: number;
 }
 
 import type { ProgramType } from './programs';

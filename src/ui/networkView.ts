@@ -1,3 +1,4 @@
+import { sats } from '../sim/money';
 import { apparentContent, clickAction, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
 import { Tooltip, type TipLine } from './tooltip';
 import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
@@ -89,6 +90,10 @@ const SPEAKER = '<path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>';
 const ICON_SPEAKER_ON = icon(`${SPEAKER}<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`);
 const ICON_SPEAKER_OFF = icon(`${SPEAKER}<path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`);
 /** Stopwatch with pause bars: time that stops by itself. */
+const ICON_POWER = icon(
+  '<path d="M7.5 6.5a8 8 0 1 0 9 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 3v8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+);
+
 const ICON_AUTO_PAUSE = icon(
   '<circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 2.5h4M12 2.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="9" y="10" width="2.2" height="7" fill="currentColor"/><rect x="12.8" y="10" width="2.2" height="7" fill="currentColor"/>',
 );
@@ -143,7 +148,7 @@ function fileTip(f: DataFile): TipLine[] {
   const seen = apparentContent(f);
   lines.push({ text: CONTENT_LABEL[seen], cls: `tip-${seen}` });
   if (seen === 'keyring') lines.push({ text: f.extracted ? `extracted: ${f.grant === 'keys' ? 'encryption keys' : `${f.grant} privilege`}` : 'extract to see what it opens' });
-  if (seen === 'valuable') lines.push({ text: f.evaluated ? `worth ${f.price} cr` : 'value unknown (evaluate)' });
+  if (seen === 'valuable') lines.push({ text: f.evaluated ? `worth ${sats(f.price!)}` : 'value unknown (evaluate)' });
   if (f.content === 'software') {
     const sw = f.software!;
     lines.push({ text: f.identified ? `${sw.name}  ${sw.type} ${sw.rating}` : 'unknown program (identify)' });
@@ -176,6 +181,8 @@ export interface ViewActions {
   mute(): void;
   autoPause(): void;
   hover(): void;
+  /** Leave the net: ends the run. */
+  exit(): void;
   sound: Sound;
 }
 
@@ -262,7 +269,14 @@ export class NetworkView {
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
     this.miniSvg = svg('svg', { viewBox: '0 0 220 120', class: 'minimap-svg' });
     this.miniSvg.addEventListener('contextmenu', (e) => e.preventDefault());
-    root.append(this.header, this.stage, this.miniSvg);
+    const exitBtn = document.createElement('button');
+    exitBtn.type = 'button';
+    exitBtn.className = 'icon-btn exit-btn';
+    exitBtn.title = 'Leave the net: end the run and get paid';
+    exitBtn.setAttribute('aria-label', 'Leave the net');
+    exitBtn.innerHTML = ICON_POWER;
+    exitBtn.addEventListener('click', () => actions.exit());
+    root.append(this.header, this.stage, this.miniSvg, exitBtn);
     this.render();
   }
 

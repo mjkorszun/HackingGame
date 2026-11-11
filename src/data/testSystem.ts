@@ -9,6 +9,8 @@ export const testSystem: SystemDef = {
   name: 'Halcyon Logistics',
   location: 'Frankfurt, DE',
   entry: 'gw',
+  security: 1,
+  contract: { title: 'Alter File', need: 'alter', node: 'orders', pay: 50 },
   nodes: [
     { id: 'gw', name: 'Public Gateway', kind: 'gateway', x: 0, y: 2 },
     { id: 'edge', name: 'Edge Relay', kind: 'relay', x: 1, y: 2 },

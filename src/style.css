@@ -403,3 +403,60 @@ body {
 .tip-honeytoken { color: #ff4d4d; }
 .tip-keyring { color: #d2a67a; }
 .tip-protection { color: var(--orange); }
+
+/* ---------- leaving the net ---------- */
+.exit-btn {
+  position: absolute;
+  right: 280px;
+  bottom: 22px;
+  padding: 6px;
+  color: var(--red);
+  border-color: var(--red);
+}
+.exit-btn svg { width: 26px; height: 26px; }
+.exit-btn:hover { background: #3a0d0d; }
+.deck-balance { color: var(--yellow); margin-left: 12px; letter-spacing: 0; }
+
+.run-summary {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  font-family: var(--font);
+}
+.rs-panel {
+  background: #030d06;
+  border: 2px solid var(--green);
+  color: var(--green);
+  padding: 20px 28px;
+  min-width: 460px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+.rs-panel h2 { margin: 0 0 14px; font-size: 20px; letter-spacing: 2px; }
+.rs-panel h3 { margin: 16px 0 6px; font-size: 13px; color: var(--blue, #5ab4ff); font-weight: normal; }
+.rs-grid, .rs-sum { display: grid; grid-template-columns: auto auto; gap: 4px 28px; justify-content: start; }
+.rs-sum { margin-top: 18px; padding-top: 10px; border-top: 1px solid var(--green-faint); }
+.rs-panel table { border-collapse: collapse; }
+.rs-panel td { padding: 2px 24px 2px 0; }
+.rs-panel ul { list-style: none; margin: 0; padding: 0; }
+.rs-num { text-align: right; color: var(--yellow); }
+.rs-dim { color: #9aa8a0; }
+.rs-ok { color: var(--green); font-weight: bold; }
+.rs-fail { color: var(--red); font-weight: bold; }
+.rs-total { font-weight: bold; }
+.rs-panel button {
+  display: block;
+  margin: 20px auto 0;
+  background: transparent;
+  color: var(--green);
+  border: 1px solid var(--green);
+  font: inherit;
+  padding: 6px 36px;
+  cursor: pointer;
+}
+.rs-panel button:hover { background: var(--green-faint); }

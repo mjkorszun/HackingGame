@@ -124,17 +124,23 @@ function seeded(text: string): () => number {
   };
 }
 
-/** Placeholder content: 6-12 files, mostly worthless, some valuable, a few programs, rarely contract data. */
-export function generateFiles(nodeId: string): DataFile[] {
+/** Price of a valuable file in a system of this security level: d30+20 sats at level 1, scaled up with the level. */
+export function filePrice(security: number, rand: () => number): number {
+  const level = Math.max(1, security);
+  return level * (20 + 1 + Math.floor(rand() * 30));
+}
+
+/** Placeholder content: 6-12 files, mostly worthless, some valuable, a few programs and keyrings. Contract data comes from the contract. */
+export function generateFiles(nodeId: string, security = 1): DataFile[] {
   const rand = seeded(nodeId);
   const count = 6 + Math.floor(rand() * 7);
   return Array.from({ length: count }, (_, i) => {
     const r = rand();
     const content: FileContent =
-      r < 0.5 ? 'worthless' : r < 0.75 ? 'valuable' : r < 0.84 ? 'software' : r < 0.91 ? 'keyring' : r < 0.96 ? 'honeytoken' : 'contract';
+      r < 0.5 ? 'worthless' : r < 0.75 ? 'valuable' : r < 0.84 ? 'software' : r < 0.93 ? 'keyring' : 'honeytoken';
     const file: DataFile = { id: `f${i + 1}`, content, decrypted: false };
     // A honeytoken carries a believable price too: that is the bait.
-    if (content === 'valuable' || content === 'honeytoken') file.price = 100 * (1 + Math.floor(rand() * 40));
+    if (content === 'valuable' || content === 'honeytoken') file.price = filePrice(security, rand);
     if (content === 'keyring') {
       const g = rand();
       file.grant = g < 0.5 ? 'worker' : g < 0.8 ? 'keys' : g < 0.95 ? 'security' : 'admin';
@@ -145,7 +151,6 @@ export function generateFiles(nodeId: string): DataFile[] {
       const names = SOFTWARE_NAMES[type];
       file.software = { type, name: names[Math.floor(rand() * names.length)], rating: 1 + Math.floor(rand() * 4) };
     }
-    if (content === 'contract') file.need = rand() < 0.5 ? 'alter' : 'delete';
     // About one archive in four that is worth anything carries an extra protection.
     if (content !== 'worthless' && rand() < 0.25) {
       const kinds: Protection[] = ['killswitch', 'seal', 'tracker', 'lock'];

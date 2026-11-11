@@ -1,3 +1,4 @@
+import { sats } from './money';
 import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, decryptTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
@@ -14,6 +15,29 @@ export const MOVE_TICKS = 10;
 
 /** A d100 roll: 1..100. Success when roll <= chance. */
 export type Rng = () => number;
+
+/** Something taken in this run. A program is paid out into the deck, a file in sats. */
+export interface LootItem {
+  /** Where it came from: node name and file id. */
+  name: string;
+  /** What it is, in a few words. */
+  label: string;
+  price: number;
+  /** The player knew its price when taking it. */
+  evaluated: boolean;
+  software?: Program;
+}
+
+/** The summary shown when a run ends. */
+export interface RunReport {
+  contract?: { title: string; pay: number };
+  success: boolean;
+  files: { name: string; label: string; price: number }[];
+  software: Program[];
+  pay: number;
+  filesTotal: number;
+  total: number;
+}
 
 interface ScoutTask {
   /** Hop number: 1 = neighbours, 2 = two links away, ... */
@@ -69,24 +93,14 @@ export class Game {
   /** Privileges the player holds in this system. */
   readonly privileges = new Set<Privilege>();
   /** Programs in the player's deck. */
-  readonly programs: Program[] = [
-    { id: 'p1', type: 'scout', name: 'Hawkeye V2', rating: 3 },
-    { id: 'p2', type: 'scout', name: 'Owl 1.0', rating: 1 },
-    { id: 'p3', type: 'attack', name: 'Shooter V3', rating: 1 },
-    { id: 'p4', type: 'hide', name: 'Ghost 1.2', rating: 1 },
-    { id: 'p6', type: 'decrypt', name: 'Lockpick 1.0', rating: 1 },
-    { id: 'p7', type: 'evaluate', name: 'Appraiser 1.0', rating: 1 },
-    { id: 'p8', type: 'identify', name: 'Inspector 1.0', rating: 1 },
-    { id: 'p9', type: 'defuse', name: 'Sapper 1.0', rating: 1 },
-    { id: 'p10', type: 'brute', name: 'Battering Ram 2.0', rating: 1 },
-    { id: 'p11', type: 'scrub', name: 'Bleach 1.1', rating: 1 },
-    { id: 'p12', type: 'forge', name: 'Mimic 1.0', rating: 1 },
-  ];
-  /** Valuable data the player downloaded. */
-  readonly downloads: { name: string; price?: number }[] = [];
-  /** Changes whenever the deck's contents change (programs or downloads). */
+  readonly programs: Program[];
+  /** What the player took in this run: paid out (sats, programs) only when the run ends. */
+  readonly loot: LootItem[] = [];
+  /** The run is over: the player left the net. */
+  ended = false;
+  /** Changes whenever the deck's contents change (programs or loot). */
   deckVersion = 0;
-  private nextProgramId = 100;
+  private nextProgramId: number;
   /** Noise the player made in each node. Nothing reacts to it yet. */
   readonly noise = new Map<string, number>();
 
@@ -97,22 +111,60 @@ export class Game {
   private nextProgressId = 1;
   private readonly d100: () => number;
 
-  constructor(system: SystemDef, rng: Rng = Math.random) {
+  constructor(system: SystemDef, rng: Rng = Math.random, programs: Program[] = STARTING_PROGRAMS) {
     this.d100 = () => Math.floor(rng() * 100) + 1;
+    this.programs = programs.map((p) => ({ ...p }));
+    this.nextProgramId = Math.max(100, ...this.programs.map((p) => Number(p.id.slice(1)) + 1 || 0));
     this.network = new Network(system);
     this.currentNode = system.entry;
     for (const n of system.nodes) if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
     for (const n of system.nodes) {
-      if (n.kind === 'database' || (n.kind === 'honeypot' && (n.disguise ?? 'database') === 'database')) this.files.set(n.id, generateFiles(n.id));
+      if (n.kind === 'database' || (n.kind === 'honeypot' && (n.disguise ?? 'database') === 'database')) this.files.set(n.id, generateFiles(n.id, system.security ?? 1));
     }
+    const job = system.contract;
+    const target = job && this.files.get(job.node);
+    if (job && target) target.push({ id: `f${target.length + 1}`, content: 'contract', decrypted: false, need: job.need });
     this.discoverAround(this.currentNode);
     this.log(`link up: ${system.name} (${system.location})`, 'system');
     this.log(`you are at ${this.nameOf(this.currentNode)}`);
+    if (job) this.log(`contract: ${job.title}. find the contract file in one of the databases and ${job.need} it. pays ${job.pay} sats`, 'system');
   }
+
+  /** The contract's file, once it exists. */
+  private get contractFile(): DataFile | undefined {
+    const job = this.network.def.contract;
+    return job ? this.files.get(job.node)?.find((f) => f.content === 'contract') : undefined;
+  }
+
+  /** The contract's task is done. */
+  get contractDone(): boolean {
+    const f = this.contractFile;
+    const job = this.network.def.contract;
+    if (!f || !job) return false;
+    return job.need === 'alter' ? !!f.altered && !f.deleted : !!f.deleted;
+  }
+
+  /** Leaves the net: the run ends and its report says what the player earned. */
+  endRun(): RunReport {
+    this.ended = true;
+    this.move = null;
+    this.route = [];
+    this.scout = null;
+    this.decrypt = null;
+    const job = this.network.def.contract;
+    const success = this.contractDone;
+    const files = this.loot.filter((l) => !l.software).map((l) => ({ name: l.name, label: l.label, price: l.price }));
+    const software = this.loot.filter((l) => l.software).map((l) => l.software!);
+    const pay = job && success ? job.pay : 0;
+    const filesTotal = files.reduce((sum, f) => sum + f.price, 0);
+    this.log('link down: you left the net', 'system');
+    return { contract: job ? { title: job.title, pay: job.pay } : undefined, success, files, software, pay, filesTotal, total: pay + filesTotal };
+  }
+
 
   /** Advances the simulation by one tick, unless paused. */
   step(): void {
-    if (this.paused) return;
+    if (this.paused || this.ended) return;
     this.tick++;
     this.updateMove();
     this.updateScout();
@@ -587,7 +639,7 @@ export class Game {
         this.log(`${program.name}: ${file.id} is a ${CONTENT_LABEL.honeytoken}. good catch: leave it alone`, 'alarm2');
       } else if (action === 'evaluate') {
         file.evaluated = true;
-        this.log(`${program.name}: ${file.id} is worth ${file.price} cr`, 'info');
+        this.log(`${program.name}: ${file.id} is worth ${sats(file.price!)}`, 'info');
       } else {
         file.identified = true;
         const sw = file.software!;
@@ -608,11 +660,11 @@ export class Game {
         file.detected = true;
       } else if (file.content === 'software') {
         const sw = file.software!;
-        this.programs.push({ id: `p${this.nextProgramId++}`, ...sw });
-        this.log(`${file.id} downloaded: ${sw.name} (${sw.type} ${sw.rating}) added to your software`, 'info');
+        this.loot.push({ name: `${this.nameOf(this.currentNode)} ${file.id}`, label: sw.name, price: 0, evaluated: true, software: { id: `p${this.nextProgramId++}`, ...sw } });
+        this.log(`${file.id} downloaded: ${file.identified ? sw.name : 'a program'}. it joins your software when you leave the net`, 'info');
       } else {
-        this.downloads.push({ name: `${this.nameOf(this.currentNode)} ${file.id}`, price: file.evaluated ? file.price : undefined });
-        this.log(`${file.id} downloaded to your deck`, 'info');
+        this.loot.push({ name: `${this.nameOf(this.currentNode)} ${file.id}`, label: CONTENT_LABEL.valuable, price: file.price ?? 0, evaluated: !!file.evaluated });
+        this.log(`${file.id} downloaded to your deck. it pays out when you leave the net`, 'info');
       }
       this.deckVersion++;
       this.filesChanged++;
@@ -634,11 +686,12 @@ export class Game {
     }
     if (action === 'alter') {
       file.altered = true;
-      this.log(`${file.id} altered (contracts come later)`, 'info');
+      this.log(`${file.id} altered`, 'info');
     } else {
       file.deleted = true;
-      this.log(`${file.id} deleted (contracts come later)`, 'info');
+      this.log(`${file.id} deleted`, 'info');
     }
+    if (file.content === 'contract') this.log(this.contractDone ? 'contract task done. leave the net to get paid' : 'that is not what the contract asked for', this.contractDone ? 'info' : 'alarm1');
     this.filesChanged++;
     return true;
   }
@@ -734,3 +787,18 @@ export class Game {
     this.events.push({ type: 'log', line: { text, color } });
   }
 }
+
+/** The deck a new player starts with. */
+export const STARTING_PROGRAMS: Program[] = [
+  { id: 'p1', type: 'scout', name: 'Hawkeye V2', rating: 3 },
+  { id: 'p2', type: 'scout', name: 'Owl 1.0', rating: 1 },
+  { id: 'p3', type: 'attack', name: 'Shooter V3', rating: 1 },
+  { id: 'p4', type: 'hide', name: 'Ghost 1.2', rating: 1 },
+  { id: 'p6', type: 'decrypt', name: 'Lockpick 1.0', rating: 1 },
+  { id: 'p7', type: 'evaluate', name: 'Appraiser 1.0', rating: 1 },
+  { id: 'p8', type: 'identify', name: 'Inspector 1.0', rating: 1 },
+  { id: 'p9', type: 'defuse', name: 'Sapper 1.0', rating: 1 },
+  { id: 'p10', type: 'brute', name: 'Battering Ram 2.0', rating: 1 },
+  { id: 'p11', type: 'scrub', name: 'Bleach 1.1', rating: 1 },
+  { id: 'p12', type: 'forge', name: 'Mimic 1.0', rating: 1 },
+];
