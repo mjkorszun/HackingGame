@@ -717,3 +717,6 @@ body {
 .ally.is-shield { transition: none; }
 .ally.is-shield .ally-body { stroke: #3de0ff; fill: #021a22; }
 .ally.is-shield .ally-hp { fill: #3de0ff; }
+.ally.is-resident .ally-body { stroke: #ffd84a; fill: #1f1a02; }
+.ally.is-resident .ally-hp, .ally.is-resident .ally-hp-bg { display: none; }
+.ally.is-resident .ally-name { fill: #ffd84a; }

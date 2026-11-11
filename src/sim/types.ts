@@ -9,6 +9,7 @@ export type NodeKind =
   | 'identity'
   | 'uplink'
   | 'database'
+  | 'payment'
   | 'vault'
   | 'overseer'
   | 'orchestrator'

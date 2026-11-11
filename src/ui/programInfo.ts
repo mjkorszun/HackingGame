@@ -10,7 +10,7 @@ const TYPE_INFO: Record<ProgramType, string> = {
   deceive: 'answers an agent\'s query with a lie. it trusts you until you leave the node',
   hide: 'works on its own: agents roll their detection against it when they query you',
   analyze: 'works on its own: every agent that deals with you gets analyzed',
-  skimmer: 'planted in a database of a local business, it takes a small cut every day',
+  skimmer: 'planted in the payment gateway of a local business, it stays there as your agent and takes a small cut every day',
   mapper: 'maps the network around you: finds and identifies nearby nodes. loud, and needs a long time to recharge',
   scan: 'reads archives: shows what each file holds and how it is protected',
   evaluate: 'tells what a valuable file is worth',
