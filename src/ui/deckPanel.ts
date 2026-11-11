@@ -1,12 +1,13 @@
 import type { LootItem } from '../sim/game';
 import type { Privilege } from '../sim/actions';
-import type { Program } from '../sim/programs';
+import { programSize, usedMemory, type Program } from '../sim/programs';
 import { SATS, sats } from '../sim/money';
 
 /** What the gear panel shows: in a run it is the Game itself; on the main screen, the account. */
 export interface GearSource {
   /** Programs loaded in memory. */
   programs: Program[];
+  /** Memory size in GB. */
   memorySlots: number;
   loot: LootItem[];
   privileges: Set<Privilege>;
@@ -25,13 +26,14 @@ export interface GearOptions {
 
 /** The "your gear" panel: hardware (memory), programs, and what this run has taken. */
 export function renderDeck(root: HTMLElement, game: GearSource, balance: number, opts: GearOptions = {}): void {
-  const used = game.programs.length;
+  const used = usedMemory(game.programs);
+  const fits = (p: Program) => used + programSize(p) <= game.memorySlots;
   root.innerHTML = `
     <div class="deck-title">YOUR GEAR <span class="deck-balance">${sats(balance)}</span></div>
     <div class="deck-cols">
       <div>
         <h3>hardware</h3>
-        <ul class="deck-hw"><li>memory</li><li class="deck-mem${used >= game.memorySlots ? ' is-full' : ''}">${used}/${game.memorySlots} programs</li></ul>
+        <ul class="deck-hw"><li>memory</li><li class="deck-mem${used >= game.memorySlots * 0.9 ? ' is-full' : ''}">${used}/${game.memorySlots} GB</li></ul>
       </div>
       <div>
         <h3>software</h3>
@@ -61,9 +63,9 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
       li.textContent = `${d.software.name}${d.loaded ? '  (loaded)' : ''}`;
       li.className = 'deck-loot-sw';
       if (!d.loaded && opts.load) {
-        const full = used >= game.memorySlots;
+        const full = !fits(d.software);
         li.classList.add(full ? 'is-blocked' : 'is-loadable');
-        li.title = full ? 'memory full' : 'click to load it into memory';
+        li.title = full ? `not enough memory (${programSize(d.software)} GB)` : `click to load it into memory (${programSize(d.software)} GB)`;
         if (!full) li.addEventListener('click', () => opts.load!(d.software!));
       }
     } else {
@@ -75,11 +77,11 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
   const row = (p: Program, stored: boolean) => {
     const li = document.createElement('li');
     li.className = 'deck-program';
-    li.textContent = `${p.name.padEnd(18)} ${p.type} ${p.rating}`;
+    li.textContent = `${p.name.padEnd(18)} ${`${p.type} ${p.rating}`.padEnd(11)} ${String(programSize(p)).padStart(3)} GB`;
     if (opts.toggle) {
       li.classList.add(stored ? 'is-stored' : 'is-loaded');
-      const full = stored && used >= game.memorySlots;
-      li.title = stored ? (full ? 'in storage: memory full' : 'in storage: click to load into memory') : 'loaded: click to unload';
+      const full = stored && !fits(p);
+      li.title = stored ? (full ? 'in storage: not enough memory' : 'in storage: click to load into memory') : 'loaded: click to unload';
       if (!full) li.addEventListener('click', () => opts.toggle!(p));
       else li.classList.add('is-blocked');
     } else if (opts.run) {

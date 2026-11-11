@@ -580,3 +580,5 @@ body {
 .file-swname { fill: #9fe4ff; font: 8px var(--font); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: #000; stroke-width: 2.5px; }
 .home-stats { color: var(--grey); margin: -28px 0 28px; letter-spacing: 0.05em; }
 .home-lock { color: var(--grey); font-size: 13px; }
+.home-news { color: var(--yellow); margin: -16px 0 22px; text-align: center; line-height: 1.5; }
+.cc-skim { color: var(--yellow); }

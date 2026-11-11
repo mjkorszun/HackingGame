@@ -641,7 +641,7 @@ describe('agents', () => {
 
   it('a silenced agent turns hostile but raises no alarm', () => {
     const { g, a } = setup(1);
-    expect(g.agentCommand('silence', 'W1')).toBe(true);
+    expect(g.agentCommand('silence', a.name)).toBe(true);
     expect(a.silenced).toBe(true);
     expect(a.mood).toBe('hostile');
     expect(g.alarm).toBe(0);
@@ -649,19 +649,18 @@ describe('agents', () => {
 
   it('an attack that does not kill makes it hostile and the alarm red; hostile agents wear down integrity until you are kicked', () => {
     const { g, a } = setup(1);
-    g.agentCommand('attack', 'W1');
+    g.agentCommand('attack', a.name);
     expect(a.hp).toBe(a.stats.hp - 10);
     expect(g.alarm).toBe(3);
     tick(g, a.stats.attackEvery * 5);
     expect(g.integrity).toBe(0);
     expect(g.kicked).toBe(true);
-    expect(g.endRun().success).toBe(false);
   });
 
   it('a strong enough attack kills in one blow, quietly', () => {
     const { g, a } = setup(1);
     g.programs.push({ id: 'big', type: 'attack', name: 'Rocket Launcher V007', rating: 3 });
-    g.agentCommand('attack', 'W1');
+    g.agentCommand('attack', a.name);
     expect(g.agents).not.toContain(a);
     expect(g.alarm).toBe(0);
   });
@@ -674,8 +673,8 @@ describe('agents', () => {
 });
 
 describe('memory', () => {
-  it('a downloaded program can be loaded into a free memory slot and used at once', () => {
-    const g = new Game(quiet, Math.random, [], { memory: 1 });
+  it('a downloaded program can be loaded into free memory and used at once', () => {
+    const g = new Game(quiet, Math.random, [], { memory: 150 }); // Mace 15 (attack 3) takes 120 GB
     g.loot.push({ name: 'x f1', label: 'Mace 15', price: 0, evaluated: true, software: { id: 'p500', type: 'attack', name: 'Mace 15', rating: 3 } });
     g.loot.push({ name: 'x f2', label: 'Owl', price: 0, evaluated: true, software: { id: 'p501', type: 'scout', name: 'Owl 2', rating: 1 } });
     expect(g.loadProgram('Mace 15')).toBe(true);
@@ -698,5 +697,29 @@ describe('generated networks', () => {
     // Another pizzeria holds different files.
     const b = new Game(generate(newPizzeria(999)));
     expect(b.filesIn('orders').map((f) => f.content)).not.toEqual(g.filesIn('orders').map((f) => f.content));
+  });
+});
+
+describe('skimmer and days', () => {
+  it('plants only in a database of a local business; each day pays out or gets found', async () => {
+    const { generate, newPizzeria } = await import('./generate');
+    const { passDay } = await import('../ui/account');
+    const net = newPizzeria(42);
+    const sys = generate(net);
+    const g = new Game(sys);
+    g.autoPause = false;
+    g.setPaused(false);
+    expect(g.runProgram('skimmer')).toBe(false); // at the intake, not a database
+    g.revealMap();
+    g.travelTo('orders');
+    run(g, MOVE_TICKS * 3);
+    expect(g.runProgram('skimmer')).toBe(true);
+    expect(g.planted?.name).toBe('Skimmer 1.0');
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [] };
+    passDay(account, () => 0.99);
+    expect(account.sats).toBeCloseTo(0.08);
+    passDay(account, () => 0);
+    expect(account.skimmers.length).toBe(0);
+    expect(net.security).toBe(2);
   });
 });

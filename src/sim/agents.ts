@@ -46,6 +46,29 @@ export const WARRIOR: AgentStats = {
   ai: 'roam',
 };
 
+/**
+ * Three kinds of warrior (placeholder numbers):
+ * 0 balanced; 1 watchful but fragile (asks often, easy to kill, hard to fool);
+ * 2 heavy gun (rarely asks, hits hard, tough, hard to silence, easy to fool).
+ */
+export const WARRIORS: AgentStats[] = [
+  WARRIOR,
+  { ...WARRIOR, detection: 4, queryEvery: 20, damage: 3, attackEvery: 20, armor: 1, hp: 20, silenceResist: 1, deceiveResist: 3, scanResist: 1, stay: [40, 80] },
+  { ...WARRIOR, detection: 2, queryEvery: 60, damage: 8, attackEvery: 30, armor: 4, hp: 60, silenceResist: 4, deceiveResist: 1, scanResist: 3, stay: [80, 140], hopTicks: 20 },
+];
+
+/** A code name like Decker's: two letters, a dash, three digits (KX-271). Same seed, same name. */
+export function codeName(seedText: string): string {
+  let s = 0;
+  for (const ch of seedText) s = (s * 31 + ch.charCodeAt(0)) >>> 0;
+  const next = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 2 ** 32;
+  };
+  const L = 'ABCDEFGHJKLMNPRSTVWXZ';
+  return `${L[Math.floor(next() * L.length)]}${L[Math.floor(next() * L.length)]}-${100 + Math.floor(next() * 900)}`;
+}
+
 /** How much the player's Analyze revealed about an agent. */
 export type Knowledge = 'none' | 'partial' | 'full';
 
