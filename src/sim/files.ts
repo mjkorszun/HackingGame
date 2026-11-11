@@ -102,6 +102,7 @@ function contentActions(f: DataFile): FileAction[] {
 }
 
 const SOFTWARE_NAMES: Record<string, string[]> = {
+  scout: ['Swift 2', 'Nighthawk 1.5'],
   shield: ['Aegis 2', 'Bulwark 1.3'],
   warrior: ['Mace 15', 'Charge 2.1', 'Rocket Launcher V007'],
   hide: ['Shade 3.0', 'Mirage V2'],

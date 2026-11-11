@@ -96,9 +96,17 @@ export interface Ally {
   attackLeft: number;
   /** The enemy agent it was told to fight, if any. */
   target: string | null;
+  /** Scout: the node it was sent to. */
+  dest?: string | null;
+  /** Scout: nodes it has been to. */
+  visited?: Set<string>;
 }
 
-export type AllyOrder = 'stay' | 'follow' | 'unload';
+/** explore: a scout flies on to unknown nodes by itself. */
+export type AllyOrder = 'stay' | 'follow' | 'unload' | 'explore';
+
+/** Placeholder scout numbers: it spends 1.5 s reading each node it reaches. */
+export const SCOUT_DWELL = 15;
 
 /** Placeholder warrior numbers: HP 20 + 10 per rating, hits 6 per rating every 1.5 s, hops in 1.2 s. */
 export const ALLY_HOP_TICKS = 12;
@@ -609,7 +617,7 @@ export class Game {
       return false;
     }
     ally.order = order;
-    const what = { stay: 'holds its node', follow: 'follows you', unload: 'comes back to you' }[order];
+    const what = { stay: 'holds its node', follow: 'follows you', unload: 'comes back to you', explore: 'explores on its own' }[order];
     this.log(`${ally.program.name} ${what}`, 'system');
     if (order === 'unload') this.tryUnload(ally);
     return true;
@@ -639,10 +647,15 @@ export class Game {
         if (++ally.hop.elapsed >= ALLY_HOP_TICKS) {
           ally.node = ally.hop.to;
           ally.hop = null;
+          if (ally.order === 'explore') this.scoutArrives(ally);
         }
         continue;
       }
       if (ally.order === 'unload' && this.tryUnload(ally)) continue;
+      if (ally.order === 'explore') {
+        this.scoutStep(ally);
+        continue;
+      }
       if (ally.order !== 'stay' && ally.node !== this.playerTarget) {
         const path = this.network.path(ally.node, this.playerTarget);
         if (path.length) {
@@ -657,6 +670,106 @@ export class Game {
       ally.attackLeft = WARRIOR_ATTACK_EVERY;
       this.allyHits(ally, enemy);
     }
+  }
+
+  /**
+   * scout [node]: sends your best free scout from here, to that node or (with no node) to explore.
+   * The argument can also name the scout program.
+   */
+  scoutCommand(arg: string): boolean {
+    if (this.move) {
+      this.log('cannot release an agent while connecting', 'alarm1');
+      return false;
+    }
+    const q = arg.trim().toLowerCase();
+    const byName = q ? this.findProgram('scout', q) : undefined;
+    const program = byName ?? this.findProgram('scout');
+    if (!program) {
+      this.log(this.programs.some((p) => p.type === 'scout') ? 'every scout is already out' : 'no scout program in your gear', 'alarm1');
+      return false;
+    }
+    let dest: string | null = null;
+    if (q && !byName) {
+      const node = this.network.def.nodes.find((n) => this.isKnown(n.id) && (this.nameOf(n.id).toLowerCase() === q || n.id === q));
+      if (!node) {
+        this.log(`unknown node: ${arg}`, 'alarm1');
+        return false;
+      }
+      dest = node.id === this.currentNode ? null : node.id;
+    }
+    const ally: Ally = { id: `y${this.nextAllyId++}`, program, hp: 10 + 5 * program.rating, maxHp: 10 + 5 * program.rating, node: this.currentNode, hop: null, order: 'explore', attackLeft: 0, target: null, dest, visited: new Set([this.currentNode]) };
+    this.allies.push(ally);
+    this.released.add(program.id);
+    this.deckVersion++;
+    this.events.push({ type: 'program', programType: 'scout' });
+    this.outcome({ kind: 'ally', id: ally.id }, true, 'SCOUT OUT');
+    this.log(`${program.name} sent${dest ? ` to ${this.nameOf(dest)}` : ' to explore'}. it flies on until an agent catches it`, 'info');
+    this.actionStarted();
+    return true;
+  }
+
+  /** A scout reads its node for a moment, then flies on: to where it was sent, then to the nearest node not yet identified. */
+  private scoutStep(ally: Ally): void {
+    if (ally.attackLeft > 0) {
+      ally.attackLeft--;
+      return;
+    }
+    let next: string | undefined;
+    if (ally.dest && ally.dest !== ally.node) next = this.network.path(ally.node, ally.dest)[0];
+    if (!next) {
+      ally.dest = null;
+      // Breadth-first to the nearest node it has not been to and you have not identified.
+      const seen = new Set([ally.node]);
+      let ring = [ally.node];
+      const first = new Map<string, string>();
+      while (ring.length && !next) {
+        const out: string[] = [];
+        for (const id of ring) for (const n of this.network.neighbours(id)) {
+          if (seen.has(n.id) || n.kind === 'honeypot' && this.isIdentified(n.id)) continue;
+          seen.add(n.id);
+          first.set(n.id, first.get(id) ?? n.id);
+          if (!this.isIdentified(n.id) && !ally.visited!.has(n.id)) {
+            next = first.get(n.id);
+            break;
+          }
+          out.push(n.id);
+        }
+        ring = out;
+      }
+    }
+    if (!next) {
+      ally.order = 'stay';
+      this.log(`${ally.program.name}: nothing left to find around here. it waits (follow / unload)`, 'system');
+      return;
+    }
+    ally.hop = { to: next, elapsed: 0 };
+  }
+
+  /** A scout reaches a node: an agent may catch it; otherwise it identifies the node and reads the agents there. */
+  private scoutArrives(ally: Ally): void {
+    const id = ally.node;
+    ally.visited!.add(id);
+    ally.attackLeft = SCOUT_DWELL;
+    const r = ally.program.rating;
+    const trap = this.network.node(id).kind === 'honeypot';
+    for (const a of trap ? [null] : this.agentsIn(id)) {
+      if (a && (a.mood === 'trusting' || this.d100() > versus(this.detectionOf(a), r))) continue;
+      this.outcome({ kind: 'ally', id: ally.id }, false, trap ? 'HONEYPOT!' : 'CAUGHT');
+      this.allies.splice(this.allies.indexOf(ally), 1);
+      this.released.delete(ally.program.id);
+      this.lost.add(ally.program.id);
+      this.deckVersion++;
+      this.log(`${a ? a.name : 'a honeypot'} caught your ${ally.program.name} in ${this.nameOf(id)}. it is lost for this run`, 'alarm2');
+      this.raiseAlarm(1);
+      return;
+    }
+    const isNew = !this.isIdentified(id);
+    this.identified.add(id);
+    this.discoverAround(id);
+    const agents = this.agentsIn(id);
+    for (const a of agents) if (a.known === 'none') a.known = 'partial';
+    if (isNew) this.outcome({ kind: 'ally', id: ally.id }, true, 'FOUND');
+    this.log(`${ally.program.name}: ${this.nameOf(id)} (${this.kindOf(id)})${agents.length ? `, agents: ${agents.map((a) => `${a.name} (${a.typeName})`).join(', ')}` : ', no agents'}`, 'info');
   }
 
   private allyHits(ally: Ally, a: Agent): void {
@@ -1052,6 +1165,11 @@ export class Game {
     }
     if (program.type === 'skimmer') return this.plantSkimmer(program);
     if (program.type === 'warrior') return this.releaseWarrior(program, null);
+    if (program.type === 'scout') return this.scoutCommand(program.name);
+    if (program.type === 'shield') {
+      this.log(`${program.name} (shield ${program.rating}): waits inside you and jumps out when you are attacked`, 'info');
+      return true;
+    }
     if (program.type === 'silence' || program.type === 'deceive') {
       return this.agentCommand(program.type, '', program);
     }
@@ -1509,4 +1627,5 @@ export const STARTING_PROGRAMS: Program[] = [
   { id: 'p15', type: 'analyze', name: 'Profiler 1.0', rating: 1 },
   { id: 'p16', type: 'skimmer', name: 'Skimmer 1.0', rating: 1, efficiency: 1, detection: 2 },
   { id: 'p17', type: 'shield', name: 'Aegis 1.0', rating: 1 },
+  { id: 'p18', type: 'scout', name: 'Sparrow 1.0', rating: 1 },
 ];

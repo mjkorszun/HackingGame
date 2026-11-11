@@ -15,6 +15,7 @@ export interface CommandSpec {
 
 const PROGRAM_HELP: Partial<Record<ProgramType, string>> = {
   warrior: 'release a warrior as your agent here: warrior [n|name]',
+  scout: 'send a scout agent: scout [node]. it explores on its own until caught',
   shield: 'passive: jumps out and takes the hits when you are attacked',
   silence: 'silence an agent here: its messages cannot leave the node',
   deceive: 'answer a query with a lie',
@@ -36,11 +37,12 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'look', aliases: ['l'], arg: 'node', usage: 'look [node]', help: 'describe the current node, or another one' },
   { name: 'do', arg: 'action', usage: 'do <action>', help: "use an action of the current node (look lists them)" },
   ...PROGRAM_TYPES.map(
-    (t): CommandSpec => ({ name: t, arg: t === 'silence' ? 'agent' : t, usage: (FILE_PROGRAMS as readonly string[]).includes(t) ? `${t} <file>` : t === 'silence' ? `${t} [agent]` : `${t} [n|name]`, help: PROGRAM_HELP[t] ?? `run your best ${t} program, or the Nth one, or one by name` }),
+    (t): CommandSpec => ({ name: t, arg: t === 'silence' ? 'agent' : t === 'scout' ? 'node' : t, usage: (FILE_PROGRAMS as readonly string[]).includes(t) ? `${t} <file>` : t === 'silence' ? `${t} [agent]` : `${t} [n|name]`, help: PROGRAM_HELP[t] ?? `run your best ${t} program, or the Nth one, or one by name` }),
   ),
   { name: 'attack', arg: 'agent', usage: 'attack [agent]', help: 'your warriors here attack an agent (releases one if none is here)' },
   { name: 'stay', arg: 'ally', usage: 'stay <agent>', help: 'your agent stays where it is' },
   { name: 'follow', arg: 'ally', usage: 'follow <agent>', help: 'your agent follows you between nodes' },
+  { name: 'explore', arg: 'ally', usage: 'explore <scout>', help: 'your scout flies on to unknown nodes by itself' },
   { name: 'unload', arg: 'ally', usage: 'unload <agent>', help: 'your agent comes back to you and is loaded again' },
   { name: 'load', arg: 'loot', usage: 'load <program>', help: 'load a program you downloaded in this run into a free memory slot' },
   { name: 'present', arg: 'none', usage: 'present', help: 'answer a query by showing a privilege you hold' },
