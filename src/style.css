@@ -160,7 +160,7 @@ body {
   cursor: pointer;
 }
 .pause-btn:hover { background: var(--green-faint); }
-.pause-btn { display: flex; align-items: center; gap: 8px; }
+.pause-btn { display: flex; align-items: center; padding: 3px 7px; }
 .time-spinner { animation: time-spin 1s linear infinite; }
 .view-header.is-paused .time-spinner { animation-play-state: paused; }
 @keyframes time-spin { to { transform: rotate(360deg); } }

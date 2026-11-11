@@ -329,13 +329,24 @@ describe('auto-pause', () => {
 
   it('without auto-pause a route set while paused waits', () => {
     const g = new Game(testSystem);
+    g.autoPause = false;
     g.setPaused(true);
     g.travelTo('edge');
     expect(g.paused).toBe(true);
   });
 
-  it('is off by default', () => {
+  it('is on by default, and its pauses are marked automatic', () => {
     const g = new Game(testSystem);
+    g.travelTo('edge');
+    run(g, MOVE_TICKS);
+    expect(g.paused).toBe(true);
+    const ev = g.drainEvents().find((e) => e.type === 'paused');
+    expect(ev).toMatchObject({ paused: true, auto: true });
+  });
+
+  it('when off, time keeps running after an action', () => {
+    const g = new Game(testSystem);
+    g.autoPause = false;
     g.travelTo('edge');
     run(g, MOVE_TICKS);
     expect(g.paused).toBe(false);

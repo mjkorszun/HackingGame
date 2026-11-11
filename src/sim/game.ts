@@ -42,7 +42,7 @@ export class Game {
   tick = 0;
   paused = false;
   /** Half-turn mode: time stops by itself whenever a lasting action ends. */
-  autoPause = false;
+  autoPause = true;
   currentNode: string;
 
   private move: MoveTask | null = null;
@@ -85,10 +85,10 @@ export class Game {
     this.updateScout();
   }
 
-  setPaused(paused: boolean): void {
+  setPaused(paused: boolean, auto = false): void {
     if (this.paused === paused) return;
     this.paused = paused;
-    this.events.push({ type: 'paused', paused });
+    this.events.push({ type: 'paused', paused, auto });
     this.log(paused ? 'paused' : 'resumed', 'system');
   }
 
@@ -103,12 +103,12 @@ export class Game {
 
   /** In auto-pause mode, choosing a new lasting action lets time run again. */
   private actionStarted(): void {
-    if (this.autoPause && this.paused) this.setPaused(false);
+    if (this.autoPause && this.paused) this.setPaused(false, true);
   }
 
   /** A lasting action (travel, a program) has ended. */
   private actionEnded(): void {
-    if (this.autoPause) this.setPaused(true);
+    if (this.autoPause) this.setPaused(true, true);
   }
 
   /** Whether the player knows this node exists (it is drawn and can be targeted). */
