@@ -1,6 +1,6 @@
 import type { Rarity } from './development';
 /** A program in the player's deck. */
-export const PROGRAM_TYPES = ['attack', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'scout', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
+export const PROGRAM_TYPES = ['attack', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'mapper', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
 
 /** Programs used on one data file: evaluate f3, defuse f3, ... */
 export const FILE_PROGRAMS = ['evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
@@ -42,7 +42,7 @@ export interface Program {
 
 /** Base size in GB of a rating-1 program of each type (placeholder numbers). */
 const BASE_SIZE: Record<ProgramType, number> = {
-  attack: 60, silence: 40, deceive: 50, hide: 40, analyze: 30, skimmer: 30, scout: 50, scan: 30,
+  attack: 60, silence: 40, deceive: 50, hide: 40, analyze: 30, skimmer: 30, mapper: 50, scan: 30,
   evaluate: 20, identify: 20, defuse: 30, decrypt: 50, scrub: 30, forge: 40,
 };
 
@@ -56,25 +56,28 @@ export function usedMemory(list: Pick<Program, 'type' | 'rating'>[]): number {
   return list.reduce((sum, p) => sum + programSize(p), 0);
 }
 
-/** How long the scout's eyes take to reach the next ring of nodes. */
-export const SCOUT_HOP_TICKS = 15;
+/** How long the mapper's eyes take to reach the next ring of nodes. */
+export const MAPPER_HOP_TICKS = 15;
 
-/** Placeholder: noise Scout makes in the node it runs from. Nothing reacts to noise yet. */
-export const SCOUT_NOISE = 40;
+/** Ticks before the mapper can run again (placeholder: 60 s), so it is used once at the start and rarely after. */
+export const MAPPER_COOLDOWN = 600;
+
+/** Placeholder: noise Mapper makes in the node it runs from. Nothing reacts to noise yet. */
+export const MAPPER_NOISE = 40;
 
 /**
- * Scout's d100 chances against a system's encryption.
+ * Mapper's d100 chances against a system's encryption.
  * identify: chance to identify each hidden node it reaches.
  * extend: chance to look one more link further after each hop. Only a strong
  * program gets this: a very high rating in a weakly encrypted system can see the whole map.
  */
-export function scoutChances(rating: number, encryption: number): { identify: number; extend: number } {
+export function mapperChances(rating: number, encryption: number): { identify: number; extend: number } {
   const e = Math.max(1, encryption);
   // Identifying a node next to you is easy; looking further is hard.
-  const identify = (100 * rating) / (rating + e / SCOUT_EASE);
-  const extend = (100 * rating) / (rating + e * SCOUT_EASE);
+  const identify = (100 * rating) / (rating + e / MAPPER_EASE);
+  const extend = (100 * rating) / (rating + e * MAPPER_EASE);
   return { identify, extend };
 }
 
-/** Scout 3 vs encryption 2: 90% to identify, 20% to look one link further. */
-const SCOUT_EASE = 6;
+/** Mapper 3 vs encryption 2: 90% to identify, 20% to look one link further. */
+const MAPPER_EASE = 6;

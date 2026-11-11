@@ -342,11 +342,11 @@ body {
 .gate line { stroke: var(--grey); stroke-width: 1.5; }
 .mini-gate { fill: var(--grey); }
 
-/* ---------- scout eyes ---------- */
-.scout-layer { pointer-events: none; }
-.scout-eye-white { fill: #021a10; stroke: #eaffef; stroke-width: 1.6; }
-.scout-eye-pupil { fill: #33ff66; }
-.minimap .scout-eye-white { stroke-width: 2.4; }
+/* ---------- mapper eyes ---------- */
+.mapper-layer { pointer-events: none; }
+.mapper-eye-white { fill: #021a10; stroke: #eaffef; stroke-width: 1.6; }
+.mapper-eye-pupil { fill: #33ff66; }
+.minimap .mapper-eye-white { stroke-width: 2.4; }
 
 .deck-program { cursor: pointer; white-space: pre; }
 .deck-program:hover { color: #d4ffe0; text-decoration: underline; }
@@ -517,7 +517,29 @@ body {
 .contract-card.is-taken .cc-btn { color: var(--yellow); border-color: var(--yellow); }
 
 /* ---------- agents ---------- */
-.agent { cursor: pointer; }
+.agent { cursor: pointer; transition: transform 0.1s linear; }
+.mini-agent { transition: cx 0.1s linear, cy 0.1s linear; }
+.agent-alert { display: none; fill: #ff2020; font: bold 26px var(--font); text-anchor: middle; paint-order: stroke; stroke: #000; stroke-width: 4px; }
+.agent.is-querying .agent-alert { display: inline; animation: alert-pulse 0.5s ease-in-out infinite alternate; }
+@keyframes alert-pulse { from { opacity: 1; } to { opacity: 0.55; } }
+
+/* ---------- shots and outcome texts ---------- */
+.fx-layer { pointer-events: none; }
+.fx-bolt { transition: transform 0.22s linear; }
+.fx-bolt.is-mine { fill: #eaffef; filter: drop-shadow(0 0 4px #33ff66); }
+.fx-bolt.is-hostile { fill: #ffe0e0; filter: drop-shadow(0 0 4px #ff3030); }
+.fx-trail { stroke-width: 2; stroke-linecap: round; animation: fx-fade 0.22s linear forwards; }
+.fx-trail.is-mine { stroke: #33ff66; }
+.fx-trail.is-hostile { stroke: #ff4040; }
+.fx-burst { fill: none; stroke-width: 3; transform-box: fill-box; transform-origin: center; animation: fx-burst 0.4s ease-out forwards; }
+.fx-burst.is-mine { stroke: #b6ffcb; }
+.fx-burst.is-hostile { stroke: #ff6060; }
+.fx-text { font: bold 14px var(--font); text-anchor: middle; paint-order: stroke; stroke: #000; stroke-width: 4px; animation: fx-rise 1.5s ease-out forwards; }
+.fx-text.is-ok { fill: #33ff66; }
+.fx-text.is-fail { fill: #ff4040; }
+@keyframes fx-fade { from { opacity: 0.9; } to { opacity: 0; } }
+@keyframes fx-burst { from { transform: scale(0.3); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+@keyframes fx-rise { 0% { transform: translateY(6px); opacity: 0; } 12% { transform: translateY(0); opacity: 1; } 75% { opacity: 1; } 100% { transform: translateY(-22px); opacity: 0; } }
 .agent-body { fill: #ff8a8a; stroke: #8b1010; stroke-width: 2.5; }
 .agent-sword { stroke: #6e0b0b; stroke-width: 2; stroke-linecap: round; }
 .agent-name { fill: #ff8a8a; font: 10px var(--font); text-anchor: middle; paint-order: stroke; stroke: #000; stroke-width: 3px; }

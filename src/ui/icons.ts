@@ -13,7 +13,7 @@ export const ICON_POOLS: Record<ProgramType, string[]> = {
   hide: ['hooded-figure', 'cloak', 'ninja-head', 'invisible', 'fog', 'ghost', 'shadow-follower', 'hood', 'two-shadows'],
   analyze: ['microscope', 'dna1', 'brain', 'atom', 'spectacles', 'test-tubes', 'microscope-lens', 'pie-chart'],
   skimmer: ['tap', 'coins-pile', 'money-stack', 'wallet', 'banknote', 'eyedropper', 'droplets', 'receive-money'],
-  scout: ['barn-owl', 'binoculars', 'radar-sweep', 'delivery-drone', 'crow-dive', 'beam-satellite', 'spyglass', 'all-seeing-eye'],
+  mapper: ['barn-owl', 'binoculars', 'radar-sweep', 'delivery-drone', 'crow-dive', 'beam-satellite', 'spyglass', 'all-seeing-eye'],
   scan: ['magnifying-glass', 'open-book', 'archive-research', 'scroll-unfurled', 'read', 'spell-book', 'protection-glasses'],
   evaluate: ['two-coins', 'scales', 'gems', 'gold-bar', 'price-tag', 'cut-diamond', 'weight-scale', 'gold-stack'],
   identify: ['cyber-eye', 'id-card', 'eye-target', 'third-eye', 'octogonal-eye', 'info', 'eyeball', 'crystal-eye'],

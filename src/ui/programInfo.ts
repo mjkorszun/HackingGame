@@ -9,7 +9,7 @@ const TYPE_INFO: Record<ProgramType, string> = {
   hide: 'works on its own: agents roll their detection against it when they query you',
   analyze: 'works on its own: every agent that deals with you gets analyzed',
   skimmer: 'planted in a database of a local business, it takes a small cut every day',
-  scout: 'sends its eyes along the links: finds and identifies nearby nodes. loud',
+  mapper: 'maps the network around you: finds and identifies nearby nodes. loud, and needs a long time to recharge',
   scan: 'reads archives: shows what each file holds and how it is protected',
   evaluate: 'tells what a valuable file is worth',
   identify: 'tells what program an archive holds',

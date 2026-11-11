@@ -172,7 +172,7 @@ function runCommand(raw: string): void {
     case 'hide':
     case 'analyze':
     case 'skimmer':
-    case 'scout':
+    case 'mapper':
     case 'scan':
       if (!game.runProgram(cmd.name, arg)) sfx.play('error');
       break;
@@ -191,7 +191,7 @@ function runCommand(raw: string): void {
       game.setPaused(false);
       break;
     case 'stop':
-      if (game.cancelScout() || game.cancelScan() || game.cancelFileJob()) break;
+      if (game.cancelMapper() || game.cancelScan() || game.cancelFileJob()) break;
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
       break;
@@ -404,7 +404,8 @@ function flush(): void {
     else if (ev.type === 'paused' && !ev.auto) sfx.play(ev.paused ? 'pause' : 'resume');
     else if (ev.type === 'query') sfx.play('error');
     else if (ev.type === 'kicked') setTimeout(leaveNet, 600);
-    else if (ev.type === 'program' && (ev.programType === 'scout' || ev.programType === 'scan')) sfx.play(ev.programType);
+    else if (ev.type === 'shot' || ev.type === 'outcome') view.fx(ev);
+    else if (ev.type === 'program' && (ev.programType === 'mapper' || ev.programType === 'scan')) sfx.play(ev.programType);
   }
 }
 

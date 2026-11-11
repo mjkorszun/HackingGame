@@ -5,7 +5,7 @@ import { Tooltip, type TipLine } from './tooltip';
 import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
 import type { Game } from '../sim/game';
 import { TICKS_PER_SECOND } from '../sim/game';
-import type { NodeDef, NodeKind } from '../sim/types';
+import type { FxTarget, NodeDef, NodeKind, SimEvent } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
 import type { Sound } from './sound';
 import { drawNodeShape, halfHeight, hasTag } from './shapes';
@@ -80,11 +80,11 @@ function svg<K extends keyof SVGElementTagNameMap>(
   return el;
 }
 
-/** The scout's eye: an almond with a pupil, centred on (x, y). */
+/** The mapper's eye: an almond with a pupil, centred on (x, y). */
 function drawEye(x: number, y: number, scale: number, opacity: number, parent: Element): void {
-  const g = svg('g', { class: 'scout-eye', transform: `translate(${x} ${y}) scale(${scale})`, opacity: Math.max(0, opacity) }, parent);
-  svg('path', { d: 'M -9 0 Q 0 -8 9 0 Q 0 8 -9 0 Z', class: 'scout-eye-white' }, g);
-  svg('circle', { cx: 0, cy: 0, r: 3, class: 'scout-eye-pupil' }, g);
+  const g = svg('g', { class: 'mapper-eye', transform: `translate(${x} ${y}) scale(${scale})`, opacity: Math.max(0, opacity) }, parent);
+  svg('path', { d: 'M -9 0 Q 0 -8 9 0 Q 0 8 -9 0 Z', class: 'mapper-eye-white' }, g);
+  svg('circle', { cx: 0, cy: 0, r: 3, class: 'mapper-eye-pupil' }, g);
 }
 
 const icon = (body: string) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${body}</svg>`;
@@ -213,8 +213,8 @@ export class NetworkView {
   private roomShape: SVGGeometryElement | null = null;
   private roomR = ROOM_R;
   private readonly tip = new Tooltip();
-  /** Layers redrawn every frame with the scout's eyes. */
-  private scoutLayer: SVGGElement | null = null;
+  /** Layers redrawn every frame with the mapper's eyes. */
+  private mapperLayer: SVGGElement | null = null;
   private agentLayer: SVGGElement | null = null;
   private miniAgentLayer: SVGGElement | null = null;
   private readonly agentEls = new Map<string, { main: SVGGElement; mini: SVGGElement }>();
@@ -222,7 +222,7 @@ export class NetworkView {
   private integrityEl!: HTMLDivElement;
   private queryBox!: HTMLDivElement;
   private queryKey = '';
-  private miniScoutLayer: SVGGElement | null = null;
+  private miniMapperLayer: SVGGElement | null = null;
   private miniXY: (id: string) => { x: number; y: number } = () => ({ x: 0, y: 0 });
 
   constructor(
@@ -303,6 +303,73 @@ export class NetworkView {
   /** The loading bar over the file being worked on, updated every frame. */
   private fileBar: { fill: SVGElement; width: number } | null = null;
 
+  /** Where things are drawn, for effects: file centres, agents' last spots, the avatar's middle. */
+  private filePos = new Map<string, { x: number; y: number }>();
+  private agentPos = new Map<string, { x: number; y: number }>();
+  private avatarPos = { x: CX, y: CY };
+  /** Top layer for shots and outcome texts. */
+  private fxLayer: SVGGElement | null = null;
+  /** When a shot towards each target lands, so its outcome text waits for it. */
+  private shotLands = new Map<string, number>();
+  /** Outcome texts still rising over each target, so new ones stack above. */
+  private fxStack = new Map<string, number>();
+
+  private fxKey(t: FxTarget): string {
+    return t.kind === 'player' ? 'player' : `${t.kind}:${t.id}`;
+  }
+
+  private fxPoint(t: FxTarget): { x: number; y: number } | null {
+    if (t.kind === 'player') return this.avatarPos;
+    if (t.kind === 'agent') return this.agentPos.get(t.id) ?? null;
+    if (t.kind === 'file') return this.filePos.get(t.id) ?? null;
+    return t.id === this.game.currentNode ? { x: CX, y: CY } : this.positions.get(t.id) ?? null;
+  }
+
+  /** Draws a shot or an outcome text in the map view. */
+  fx(ev: Extract<SimEvent, { type: 'shot' | 'outcome' }>): void {
+    const layer = this.fxLayer;
+    if (!layer) return;
+    if (ev.type === 'shot') {
+      const from = this.fxPoint(ev.from);
+      const to0 = this.fxPoint(ev.to);
+      if (!from || !to0) return;
+      // A miss flies past the target.
+      const ang = Math.atan2(to0.y - from.y, to0.x - from.x);
+      const to = ev.hit ? to0 : { x: to0.x + Math.cos(ang) * 40 - Math.sin(ang) * 22, y: to0.y + Math.sin(ang) * 40 + Math.cos(ang) * 22 };
+      const cls = ev.hostile ? 'is-hostile' : 'is-mine';
+      const trail = svg('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: `fx-trail ${cls}` }, layer);
+      const bolt = svg('circle', { r: 4.5, class: `fx-bolt ${cls}` }, layer);
+      bolt.style.transform = `translate(${from.x}px, ${from.y}px)`;
+      bolt.getBoundingClientRect();
+      bolt.style.transform = `translate(${to.x}px, ${to.y}px)`;
+      const flight = 220;
+      this.shotLands.set(this.fxKey(ev.to), performance.now() + flight);
+      setTimeout(() => {
+        bolt.remove();
+        trail.remove();
+        if (!ev.hit || !this.fxLayer) return;
+        const burst = svg('circle', { cx: to.x, cy: to.y, r: 14, class: `fx-burst ${cls}` }, this.fxLayer);
+        setTimeout(() => burst.remove(), 400);
+      }, flight);
+      return;
+    }
+    const key = this.fxKey(ev.at);
+    const wait = Math.max(0, (this.shotLands.get(key) ?? 0) - performance.now());
+    setTimeout(() => {
+      const p = this.fxPoint(ev.at);
+      if (!p || !this.fxLayer) return;
+      const n = this.fxStack.get(key) ?? 0;
+      this.fxStack.set(key, n + 1);
+      const lift = ev.at.kind === 'player' ? 34 : ev.at.kind === 'agent' ? 20 : 16;
+      const t = svg('text', { x: p.x, y: p.y - lift - n * 16, class: `fx-text ${ev.ok ? 'is-ok' : 'is-fail'}` }, this.fxLayer);
+      t.textContent = ev.text;
+      setTimeout(() => {
+        t.remove();
+        this.fxStack.set(key, Math.max(0, (this.fxStack.get(key) ?? 1) - 1));
+      }, 1500);
+    }, wait);
+  }
+
   /** Neighbour reached with number key n (1-based), in the order shown on screen. */
   neighbourByNumber(n: number): string | undefined {
     return this.neighbourOrder[n - 1];
@@ -323,7 +390,7 @@ export class NetworkView {
     const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}|${this.game.knownCount}|${this.game.filesKey}`;
     if (key !== this.lastKey) this.render();
     this.updateAvatar();
-    this.updateScout();
+    this.updateMapper();
     this.updateAgents();
     this.updateQuery();
     const lvl = this.game.alarm;
@@ -344,6 +411,9 @@ export class NetworkView {
   private render(): void {
     const g = this.game;
     this.fileBar = null;
+    this.filePos.clear();
+    this.agentPos.clear();
+    this.fxStack.clear();
     this.lastKey = `${g.currentNode}|${g.moveTarget}|${g.paused}|${g.identifiedCount}|${g.knownCount}|${g.filesKey}`;
     this.stage.innerHTML = '';
     const current = g.network.node(g.currentNode);
@@ -375,10 +445,13 @@ export class NetworkView {
     this.avatar = this.drawAvatar();
     this.updateAvatar(true);
     this.agentLayer = svg('g', { class: 'agent-layer' }, this.stage);
-    this.scoutLayer = svg('g', { class: 'scout-layer' }, this.stage);
+    this.mapperLayer = svg('g', { class: 'mapper-layer' }, this.stage);
     this.drawMinimap();
     this.agentEls.clear();
-    this.updateScout();
+    // Effects outlive a redraw (a finished download redraws the files), so the layer is kept and put back on top.
+    if (this.fxLayer) this.stage.appendChild(this.fxLayer);
+    else this.fxLayer = svg('g', { class: 'fx-layer' }, this.stage);
+    this.updateMapper();
     this.updateAgents();
   }
 
@@ -422,7 +495,12 @@ export class NetworkView {
         miniPos = pos ? this.miniXY(a.node) : null;
       }
       els.main.style.display = pos ? '' : 'none';
-      if (pos) els.main.setAttribute('transform', `translate(${pos.x.toFixed(1)} ${pos.y.toFixed(1)})`);
+      if (pos) {
+        // Moved by CSS with a short transition, so the 10 steps a second look like smooth motion.
+        els.main.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
+        this.agentPos.set(a.id, pos);
+      }
+      els.main.classList.toggle('is-querying', g.query?.agentId === a.id);
       els.main.classList.toggle('is-hostile', a.mood === 'hostile');
       els.main.classList.toggle('is-trusting', a.mood === 'trusting');
       els.main.classList.toggle('is-silenced', a.silenced);
@@ -448,6 +526,8 @@ export class NetworkView {
     svg('line', { x1: -5.5, y1: 0.5, x2: -0.5, y2: 5.5, class: 'agent-sword' }, grp);
     const label = svg('text', { x: 0, y: 22, class: 'agent-name' }, grp);
     label.textContent = a.name;
+    const alert = svg('text', { x: 0, y: -15, class: 'agent-alert' }, grp);
+    alert.textContent = '!';
     this.tip.attach(grp, () => {
       const live = this.game.agentById(a.id);
       if (!live) return [{ text: a.name, cls: 'tip-title' }];
@@ -515,19 +595,19 @@ export class NetworkView {
     }
   }
 
-  /** Draws the scout's eyes flying along the links of the hop in progress. */
-  private updateScout(): void {
-    const layer = this.scoutLayer;
-    const miniLayer = this.miniScoutLayer;
+  /** Draws the mapper's eyes flying along the links of the hop in progress. */
+  private updateMapper(): void {
+    const layer = this.mapperLayer;
+    const miniLayer = this.miniMapperLayer;
     if (!layer || !miniLayer) return;
     layer.replaceChildren();
     miniLayer.replaceChildren();
-    const scout = this.game.scoutState;
-    if (!scout) return;
-    const t = Math.min(1, scout.progress);
+    const mapper = this.game.mapperState;
+    if (!mapper) return;
+    const t = Math.min(1, mapper.progress);
     const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, k: number) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
     const current = this.game.currentNode;
-    for (const [from, to] of scout.edges) {
+    for (const [from, to] of mapper.edges) {
       // Main view: from the room out to each neighbour, or from a neighbour out along its stub.
       const end = this.positions.get(to);
       if (from === current && end) {
@@ -691,6 +771,7 @@ export class NetworkView {
       taken.add(key);
       const file = files[i++];
       if (file.deleted) continue;
+      this.filePos.set(file.id, { x: x + CELL / 2, y: y + CELL / 2 });
       const cls = ['data-block', file.scanned ? `is-${apparentContent(file)}` : 'is-encrypted'];
       if (scanning?.fileId === file.id) cls.push('is-scanning');
       if (file.downloaded || file.altered || file.extracted) cls.push('is-done');
@@ -782,6 +863,7 @@ export class NetworkView {
     av.classList.toggle('is-walking', !!end && !this.game.paused);
     av.classList.toggle('no-transition', instant);
     av.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+    this.avatarPos = { x: pos.x, y: pos.y - 25 * AVATAR_SCALE };
     (av.firstElementChild as SVGGElement).style.transform = `scale(${facing * AVATAR_SCALE}, ${AVATAR_SCALE})`;
   }
 
@@ -935,7 +1017,7 @@ export class NetworkView {
       });
     }
     this.miniAgentLayer = svg('g', { class: 'agent-layer' }, mini);
-    this.miniScoutLayer = svg('g', { class: 'scout-layer' }, mini);
+    this.miniMapperLayer = svg('g', { class: 'mapper-layer' }, mini);
   }
 }
 

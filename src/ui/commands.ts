@@ -47,7 +47,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'map', arg: 'none', usage: 'map', help: 'list all nodes' },
   { name: 'pause', arg: 'none', usage: 'pause', help: 'stop time (Space)' },
   { name: 'resume', aliases: ['unpause'], arg: 'none', usage: 'resume', help: 'continue time (Space)' },
-  { name: 'stop', arg: 'none', usage: 'stop', help: 'stop travelling after this hop, or stop a running scout (Esc)' },
+  { name: 'stop', arg: 'none', usage: 'stop', help: 'stop travelling after this hop, or stop a running mapper (Esc)' },
   { name: 'autopause', arg: 'none', usage: 'autopause', help: 'auto-pause on / off: time stops after every action (A)' },
   { name: 'mute', arg: 'none', usage: 'mute', help: 'sound on / off (M)' },
   { name: 'exit', aliases: ['disconnect', 'logout'], arg: 'none', usage: 'exit', help: 'leave the net: the run ends and you get paid' },

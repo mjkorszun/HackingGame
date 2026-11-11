@@ -1,5 +1,5 @@
 import { clickAction, filePrice, type DataFile } from './files';
-import { SCOUT_NOISE, scoutChances } from './programs';
+import { MAPPER_COOLDOWN, MAPPER_NOISE, mapperChances } from './programs';
 import { describe, expect, it } from 'vitest';
 import { testSystem } from '../data/testSystem';
 import { FixedClock } from './clock';
@@ -234,43 +234,56 @@ describe('discovering the map', () => {
   });
 });
 
-describe('scout', () => {
+describe('mapper', () => {
   /** Rolls in order, as d100 results (1..100). */
   const rolls = (...r: number[]) => {
     let i = 0;
     return () => (r[Math.min(i++, r.length - 1)] - 1) / 100;
   };
   const finish = (g: Game) => {
-    for (let i = 0; i < 1000 && g.isScouting; i++) g.step();
+    for (let i = 0; i < 1000 && g.isMapping; i++) g.step();
   };
 
   it('chances grow with rating and fall with encryption', () => {
-    expect(scoutChances(3, 2).identify).toBeCloseTo(90);
-    expect(scoutChances(3, 2).extend).toBeCloseTo(20);
-    expect(scoutChances(1000, 1).extend).toBeGreaterThan(99);
+    expect(mapperChances(3, 2).identify).toBeCloseTo(90);
+    expect(mapperChances(3, 2).extend).toBeCloseTo(20);
+    expect(mapperChances(1000, 1).extend).toBeGreaterThan(99);
   });
 
   it('picks the best program, the Nth one, or one by name', () => {
     const g = new Game(quiet);
-    expect(g.findProgram('scout')?.name).toBe('Hawkeye V2');
-    expect(g.findProgram('scout', '2')?.name).toBe('Owl 1.0');
-    expect(g.findProgram('scout', 'owl 1.0')?.rating).toBe(1);
-    expect(g.findProgram('scout', '9')).toBeUndefined();
+    expect(g.findProgram('mapper')?.name).toBe('Hawkeye V2');
+    expect(g.findProgram('mapper', '2')?.name).toBe('Owl 1.0');
+    expect(g.findProgram('mapper', 'owl 1.0')?.rating).toBe(1);
+    expect(g.findProgram('mapper', '9')).toBeUndefined();
   });
 
   it('always finds the neighbours, even when every roll fails', () => {
     const g = new Game(quiet, rolls(100));
     g.travelTo('edge');
     run(g, MOVE_TICKS * 2);
-    g.runProgram('scout');
-    for (let i = 0; i < 1000 && g.isScouting; i++) g.step();
+    g.runProgram('mapper');
+    for (let i = 0; i < 1000 && g.isMapping; i++) g.step();
     for (const n of g.network.neighbours('edge')) expect(g.isKnown(n.id)).toBe(true);
+  });
+
+  it('needs a long time to recharge after a run', () => {
+    const g = new Game(quiet, rolls(100));
+    g.autoPause = false;
+    g.setPaused(false);
+    expect(g.runProgram('mapper')).toBe(true);
+    finish(g);
+    expect(g.runProgram('mapper')).toBe(false);
+    expect(g.mapperCooldown).toBeGreaterThan(0);
+    run(g, MAPPER_COOLDOWN);
+    expect(g.mapperCooldown).toBe(0);
+    expect(g.runProgram('mapper')).toBe(true);
   });
 
   it('makes noise in the node it runs from', () => {
     const g = new Game(quiet, rolls(100));
-    expect(g.runProgram('scout')).toBe(true);
-    expect(g.noise.get('gw')).toBe(SCOUT_NOISE);
+    expect(g.runProgram('mapper')).toBe(true);
+    expect(g.noise.get('gw')).toBe(MAPPER_NOISE);
   });
 
   it('identifies a hidden neighbour on a good roll and stops on a bad extend roll', () => {
@@ -278,8 +291,8 @@ describe('scout', () => {
     s.travelTo('edge');
     run(s, MOVE_TICKS * 2);
     expect(s.isIdentified('orders')).toBe(false);
-    s.runProgram('scout');
-    expect(s.travelTo('gw')).toBe(false); // busy scouting
+    s.runProgram('mapper');
+    expect(s.travelTo('gw')).toBe(false); // busy mapping
     finish(s);
     expect(s.isIdentified('orders')).toBe(true);
     expect(s.isKnown('core')).toBe(false);
@@ -289,14 +302,14 @@ describe('scout', () => {
     const s = new Game(quiet, rolls(100));
     s.travelTo('edge');
     run(s, MOVE_TICKS * 2);
-    s.runProgram('scout');
+    s.runProgram('mapper');
     finish(s);
     expect(s.isIdentified('orders')).toBe(false);
   });
 
   it('strong rolls look further, up to the whole map', () => {
     const s = new Game(quiet, rolls(1));
-    s.runProgram('scout');
+    s.runProgram('mapper');
     finish(s);
     expect(s.knownCount).toBe(testSystem.nodes.length);
     expect(s.isIdentified('staff')).toBe(true);
@@ -311,7 +324,7 @@ describe('stub programs', () => {
     const g = new Game(quiet);
     for (const t of ['hide', 'analyze'] as const) expect(g.runProgram(t)).toBe(true);
     expect(g.runProgram('attack')).toBe(false);
-    expect(g.isScouting).toBe(false);
+    expect(g.isMapping).toBe(false);
   });
 });
 
@@ -505,9 +518,9 @@ describe('auto-pause', () => {
   it('stops time when a program ends', () => {
     const g = new Game(quiet, () => 0.99);
     g.setAutoPause(true);
-    g.runProgram('scout');
+    g.runProgram('mapper');
     for (let i = 0; i < 100 && !g.paused; i++) g.step();
-    expect(g.isScouting).toBe(false);
+    expect(g.isMapping).toBe(false);
     expect(g.paused).toBe(true);
   });
 
@@ -519,7 +532,7 @@ describe('auto-pause', () => {
     expect(g.paused).toBe(false);
     run(g, MOVE_TICKS);
     expect(g.paused).toBe(true);
-    g.runProgram('scout');
+    g.runProgram('mapper');
     expect(g.paused).toBe(false);
   });
 
@@ -719,7 +732,7 @@ describe('memory', () => {
   it('a downloaded program can be loaded into free memory and used at once', () => {
     const g = new Game(quiet, Math.random, [], { memory: 150 }); // Mace 15 (attack 3) takes 120 GB
     g.loot.push({ name: 'x f1', label: 'Mace 15', price: 0, evaluated: true, software: { id: 'p500', type: 'attack', name: 'Mace 15', rating: 3 } });
-    g.loot.push({ name: 'x f2', label: 'Owl', price: 0, evaluated: true, software: { id: 'p501', type: 'scout', name: 'Owl 2', rating: 1 } });
+    g.loot.push({ name: 'x f2', label: 'Owl', price: 0, evaluated: true, software: { id: 'p501', type: 'mapper', name: 'Owl 2', rating: 1 } });
     expect(g.loadProgram('Mace 15')).toBe(true);
     expect(g.findProgram('attack')?.name).toBe('Mace 15');
     expect(g.loadProgram('Owl 2')).toBe(false); // memory full
