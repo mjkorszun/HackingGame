@@ -167,9 +167,13 @@ function runCommand(raw: string): void {
     case 'deceive':
       if (!game.agentCommand(cmd.name, arg)) sfx.play('error');
       break;
+    case 'scout':
+      if (!game.scoutCommand(arg)) sfx.play('error');
+      break;
     case 'stay':
     case 'follow':
     case 'unload':
+    case 'explore':
       if (!game.orderAlly(arg, cmd.name)) sfx.play('error');
       break;
     case 'present':
@@ -177,6 +181,7 @@ function runCommand(raw: string): void {
       if (!game.answerQuery(cmd.name)) sfx.play('error');
       break;
     case 'warrior':
+    case 'shield':
     case 'hide':
     case 'analyze':
     case 'skimmer':

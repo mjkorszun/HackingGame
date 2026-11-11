@@ -4,6 +4,7 @@ import { programIcon } from './icons';
 /** What each type of program does (short, for the info window). */
 const TYPE_INFO: Record<ProgramType, string> = {
   warrior: 'released as your own agent: it fights enemy agents where it stands. stay, follow or unload it. if it dies, it is lost for this run',
+  scout: 'an agent you send to a node: it identifies what it reaches, reads the agents there and flies on to the next unknown node, until an agent catches it',
   shield: 'jumps out of you when you are attacked and circles you, taking the hits. unload it to have it ready again. if it breaks, it is lost for this run',
   silence: 'cuts an agent off: its messages cannot leave the node, so it raises no alarm',
   deceive: 'answers an agent\'s query with a lie. it trusts you until you leave the node',

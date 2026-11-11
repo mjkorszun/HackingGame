@@ -66,7 +66,7 @@ export function passDay(a: Account, roll: () => number = Math.random, days = 1):
 }
 
 /** Starting programs that do not fit in the starting memory: they wait in storage. */
-const START_STORED = ['Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mimic 1.0', 'Skimmer 1.0'];
+const START_STORED = ['Sparrow 1.0', 'Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mimic 1.0', 'Skimmer 1.0'];
 
 function fresh(): Account {
   const programs = STARTING_PROGRAMS.map((p) => ({ ...p }));

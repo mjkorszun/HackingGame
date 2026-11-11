@@ -754,6 +754,31 @@ describe('agents', () => {
     expect(g.integrity).toBeLessThan(g.maxIntegrity);
   });
 
+  it('a scout flies out, identifies nodes and reads agents until one catches it', () => {
+    const g = new Game({ ...testSystem, agents: [{ kind: 'warrior', node: 'orders' }] });
+    g.autoPause = false;
+    g.setPaused(false);
+    (g as unknown as { d100: () => number }).d100 = () => 100; // never caught
+    g.agents[0].stayLeft = 100_000;
+    g.programs.push({ id: 'sc', type: 'scout', name: 'Kite 9', rating: 9 });
+    expect(g.scoutCommand('')).toBe(true);
+    expect(g.programState('sc')).toBe('out');
+    tick(g, 2000);
+    expect(g.isIdentified('orders')).toBe(true);
+    expect(g.agents[0].known).not.toBe('none');
+    (g as unknown as { d100: () => number }).d100 = () => 1; // caught on the next node with an agent
+    g.orderAlly('Kite 9', 'unload');
+    tick(g, 2000);
+    expect(g.allies.length).toBe(0);
+    g.agents[0].node = 'edge';
+    g.travelTo('gw');
+    tick(g, 100);
+    expect(g.scoutCommand('Edge Relay')).toBe(true);
+    tick(g, 100);
+    expect(g.programState('sc')).toBe('lost');
+    expect(g.alarm).toBe(1);
+  });
+
   it('your agent can stay, follow you, and unload back into memory', () => {
     const { g } = setup(100);
     g.runProgram('warrior');
