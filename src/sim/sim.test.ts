@@ -6,6 +6,9 @@ import { FixedClock } from './clock';
 import { Game, MOVE_TICKS } from './game';
 import { Network } from './network';
 
+/** The test system without its agents, so a query never pauses a test that is about something else. */
+const quiet = { ...testSystem, agents: [] };
+
 function run(game: Game, ticks: number) {
   for (let i = 0; i < ticks; i++) game.step();
 }
@@ -40,7 +43,7 @@ describe('Network', () => {
 
 describe('Game', () => {
   it('moves to a neighbour after MOVE_TICKS ticks', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     expect(g.travelTo('edge')).toBe(true);
     run(g, MOVE_TICKS - 1);
     expect(g.currentNode).toBe('gw');
@@ -50,7 +53,7 @@ describe('Game', () => {
   });
 
   it('travels hop by hop to a distant node', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.revealMap();
     g.travelTo('ai');
     const hops = new Network(testSystem).path('gw', 'ai').length;
@@ -59,7 +62,7 @@ describe('Game', () => {
   });
 
   it('does not advance while paused', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.travelTo('edge');
     g.setPaused(true);
     run(g, MOVE_TICKS * 5);
@@ -71,7 +74,7 @@ describe('Game', () => {
   });
 
   it('stops after the current hop when travel is cancelled', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.revealMap();
     g.travelTo('ai');
     run(g, 1);
@@ -81,7 +84,7 @@ describe('Game', () => {
   });
 
   it('emits hop and arrival events', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.drainEvents();
     g.travelTo('edge');
     run(g, MOVE_TICKS);
@@ -94,7 +97,7 @@ describe('Game', () => {
 
 describe('Game.moveTarget', () => {
   it('reports the final destination, not the next hop', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.revealMap();
     g.travelTo('ai');
     expect(g.moveTarget).toBe('ai');
@@ -103,7 +106,7 @@ describe('Game.moveTarget', () => {
 
 describe('Game hop state', () => {
   it('exposes the next hop and its progress', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     expect(g.nextHop).toBeNull();
     expect(g.hopProgress).toBe(0);
     g.revealMap();
@@ -116,7 +119,7 @@ describe('Game hop state', () => {
 
 describe('hidden nodes', () => {
   it('show as hidden until the player enters them', () => {
-    const game = new Game(testSystem);
+    const game = new Game(quiet);
     expect(game.kindOf('staff')).toBe('hidden');
     expect(game.findNode('Staff Records')).toBeUndefined();
     expect(game.findNode('staff')).toBeUndefined();
@@ -136,14 +139,14 @@ describe('hidden nodes', () => {
 
 describe('discovery', () => {
   it('knows only the entry and its neighbours at the start', () => {
-    const game = new Game(testSystem);
+    const game = new Game(quiet);
     expect(game.isKnown('gw')).toBe(true);
     expect(game.isKnown('edge')).toBe(true);
     expect(game.isKnown('auth')).toBe(false);
     expect(game.findNode('Auth Service')).toBeUndefined();
   });
   it('reveals neighbours on arrival', () => {
-    const game = new Game(testSystem);
+    const game = new Game(quiet);
     game.travelTo('edge');
     run(game, MOVE_TICKS * 2);
     expect(game.currentNode).toBe('edge');
@@ -156,7 +159,7 @@ describe('discovery', () => {
 
 describe('node actions', () => {
   function at(id: string) {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.revealMap();
     g.travelTo(id);
     run(g, MOVE_TICKS * 20);
@@ -180,7 +183,7 @@ describe('node actions', () => {
   });
 
   it('only offers actions of the current node', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     expect(g.currentActions).toEqual([]);
     expect(g.runAction('download-map')).toBe(false);
   });
@@ -205,7 +208,7 @@ describe('gates', () => {
 
 describe('discovering the map', () => {
   it('starts knowing only the entry and its neighbours, and grows as you move', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     expect(g.isKnown('gw')).toBe(true);
     expect(g.isKnown('edge')).toBe(true);
     expect(g.isKnown('auth')).toBe(false);
@@ -218,7 +221,7 @@ describe('discovering the map', () => {
   });
 
   it('download-map reveals the whole system', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.revealMap();
     expect(g.isKnown('ai')).toBe(true);
   });
@@ -241,7 +244,7 @@ describe('scout', () => {
   });
 
   it('picks the best program, the Nth one, or one by name', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     expect(g.findProgram('scout')?.name).toBe('Hawkeye V2');
     expect(g.findProgram('scout', '2')?.name).toBe('Owl 1.0');
     expect(g.findProgram('scout', 'owl 1.0')?.rating).toBe(1);
@@ -249,7 +252,7 @@ describe('scout', () => {
   });
 
   it('always finds the neighbours, even when every roll fails', () => {
-    const g = new Game(testSystem, rolls(100));
+    const g = new Game(quiet, rolls(100));
     g.travelTo('edge');
     run(g, MOVE_TICKS * 2);
     g.runProgram('scout');
@@ -258,13 +261,13 @@ describe('scout', () => {
   });
 
   it('makes noise in the node it runs from', () => {
-    const g = new Game(testSystem, rolls(100));
+    const g = new Game(quiet, rolls(100));
     expect(g.runProgram('scout')).toBe(true);
     expect(g.noise.get('gw')).toBe(SCOUT_NOISE);
   });
 
   it('identifies a hidden neighbour on a good roll and stops on a bad extend roll', () => {
-    const s = new Game(testSystem, rolls(1, 100));
+    const s = new Game(quiet, rolls(1, 100));
     s.travelTo('edge');
     run(s, MOVE_TICKS * 2);
     expect(s.isIdentified('orders')).toBe(false);
@@ -276,7 +279,7 @@ describe('scout', () => {
   });
 
   it('a hidden neighbour stays hidden on a bad roll', () => {
-    const s = new Game(testSystem, rolls(100));
+    const s = new Game(quiet, rolls(100));
     s.travelTo('edge');
     run(s, MOVE_TICKS * 2);
     s.runProgram('scout');
@@ -285,7 +288,7 @@ describe('scout', () => {
   });
 
   it('strong rolls look further, up to the whole map', () => {
-    const s = new Game(testSystem, rolls(1));
+    const s = new Game(quiet, rolls(1));
     s.runProgram('scout');
     finish(s);
     expect(s.knownCount).toBe(testSystem.nodes.length);
@@ -295,10 +298,10 @@ describe('scout', () => {
 
 describe('stub programs', () => {
   it('starts paused', () => {
-    expect(new Game(testSystem).paused).toBe(true);
+    expect(new Game(quiet).paused).toBe(true);
   });
   it('passive programs only explain themselves; attack needs an agent here', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     for (const t of ['hide', 'analyze'] as const) expect(g.runProgram(t)).toBe(true);
     expect(g.runProgram('attack')).toBe(false);
     expect(g.isScouting).toBe(false);
@@ -307,7 +310,7 @@ describe('stub programs', () => {
 
 describe('data files and scan', () => {
   const inOrders = () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.autoPause = false;
     g.setPaused(false);
     g.revealMap();
@@ -323,11 +326,11 @@ describe('data files and scan', () => {
   };
 
   it('databases hold 6-12 files, the same every run; other nodes none', () => {
-    const a = new Game(testSystem).filesIn('orders');
+    const a = new Game(quiet).filesIn('orders');
     expect(a.length).toBeGreaterThanOrEqual(6);
     expect(a.length).toBeLessThanOrEqual(12);
-    expect(new Game(testSystem).filesIn('orders').map((f) => f.content)).toEqual(a.map((f) => f.content));
-    expect(new Game(testSystem).filesIn('gw')).toEqual([]);
+    expect(new Game(quiet).filesIn('orders').map((f) => f.content)).toEqual(a.map((f) => f.content));
+    expect(new Game(quiet).filesIn('gw')).toEqual([]);
   });
 
   it('scans one file', () => {
@@ -380,7 +383,7 @@ describe('data files and scan', () => {
   });
 
   it('a honeytoken looks valuable unless detected; downloading it springs the trap', () => {
-    const fail = new Game(testSystem, () => 0.99); // every detection roll fails
+    const fail = new Game(quiet, () => 0.99); // every detection roll fails
     fail.revealMap();
     fail.autoPause = false;
     fail.setPaused(false);
@@ -396,7 +399,7 @@ describe('data files and scan', () => {
     expect(fail.drainEvents().some((e) => e.type === 'log' && e.line.color === 'alarm3')).toBe(true);
     expect(fail.loot.length).toBe(0);
 
-    const ok = new Game(testSystem, () => 0); // every detection roll succeeds
+    const ok = new Game(quiet, () => 0); // every detection roll succeeds
     ok.revealMap();
     ok.autoPause = false;
     ok.setPaused(false);
@@ -458,14 +461,14 @@ describe('data files and scan', () => {
   });
 
   it('there is nothing to scan outside databases', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     expect(g.scanCommand('')).toBe(false);
   });
 });
 
 describe('auto-pause', () => {
   it('stops time when travel ends, not after each hop', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.revealMap();
     g.setAutoPause(true);
     g.travelTo('auth');
@@ -478,7 +481,7 @@ describe('auto-pause', () => {
   });
 
   it('stops time when a program ends', () => {
-    const g = new Game(testSystem, () => 0.99);
+    const g = new Game(quiet, () => 0.99);
     g.setAutoPause(true);
     g.runProgram('scout');
     for (let i = 0; i < 100 && !g.paused; i++) g.step();
@@ -487,7 +490,7 @@ describe('auto-pause', () => {
   });
 
   it('a new action lets time run again', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.setAutoPause(true);
     g.setPaused(true);
     g.travelTo('edge');
@@ -499,7 +502,7 @@ describe('auto-pause', () => {
   });
 
   it('without auto-pause a route set while paused waits', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.autoPause = false;
     g.setPaused(true);
     g.travelTo('edge');
@@ -507,7 +510,7 @@ describe('auto-pause', () => {
   });
 
   it('is on by default, and its pauses are marked automatic', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.travelTo('edge');
     run(g, MOVE_TICKS);
     expect(g.paused).toBe(true);
@@ -516,7 +519,7 @@ describe('auto-pause', () => {
   });
 
   it('when off, time keeps running after an action', () => {
-    const g = new Game(testSystem);
+    const g = new Game(quiet);
     g.autoPause = false;
     g.setPaused(false);
     g.travelTo('edge');
@@ -552,7 +555,7 @@ describe('file left click', () => {
 
 describe('run and contract', () => {
   it('the contract file sits in its database; altering it completes the contract and the report pays out', () => {
-    const g = new Game(testSystem, () => 0);
+    const g = new Game(quiet, () => 0);
     g.autoPause = false;
     g.setPaused(false);
     g.revealMap();
@@ -577,7 +580,7 @@ describe('run and contract', () => {
   });
 
   it('without the contract task the run pays only the files', () => {
-    const r = new Game(testSystem).endRun();
+    const r = new Game(quiet).endRun();
     expect(r.success).toBe(false);
     expect(r.total).toBe(0);
   });
@@ -667,5 +670,16 @@ describe('agents', () => {
     const { g, a } = setup(100);
     tick(g, a.stats.queryEvery * 3);
     expect(g.query).toBeNull();
+  });
+});
+
+describe('memory', () => {
+  it('a downloaded program can be loaded into a free memory slot and used at once', () => {
+    const g = new Game(quiet, Math.random, [], { memory: 1 });
+    g.loot.push({ name: 'x f1', label: 'Mace 15', price: 0, evaluated: true, software: { id: 'p500', type: 'attack', name: 'Mace 15', rating: 3 } });
+    g.loot.push({ name: 'x f2', label: 'Owl', price: 0, evaluated: true, software: { id: 'p501', type: 'scout', name: 'Owl 2', rating: 1 } });
+    expect(g.loadProgram('Mace 15')).toBe(true);
+    expect(g.findProgram('attack')?.name).toBe('Mace 15');
+    expect(g.loadProgram('Owl 2')).toBe(false); // memory full
   });
 });
