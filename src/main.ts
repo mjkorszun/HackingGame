@@ -161,14 +161,22 @@ function runCommand(raw: string): void {
       if (!game.fileAction(cmd.name, arg)) sfx.play('error');
       break;
     case 'attack':
+      if (!game.attackCommand(arg)) sfx.play('error');
+      break;
     case 'silence':
     case 'deceive':
       if (!game.agentCommand(cmd.name, arg)) sfx.play('error');
+      break;
+    case 'stay':
+    case 'follow':
+    case 'unload':
+      if (!game.orderAlly(arg, cmd.name)) sfx.play('error');
       break;
     case 'present':
     case 'ignore':
       if (!game.answerQuery(cmd.name)) sfx.play('error');
       break;
+    case 'warrior':
     case 'hide':
     case 'analyze':
     case 'skimmer':
@@ -339,6 +347,8 @@ term.completer = (value) =>
         ? game.currentActions.map((a) => a.id)
         : kind === 'agent'
           ? game.agentsIn(game.currentNode).map((a) => a.name)
+        : kind === 'ally'
+          ? game.allies.map((x) => x.program.name)
         : kind === 'loot'
           ? game.loot.filter((l) => l.software && !l.loaded).map((l) => l.software!.name)
         : kind === 'file' || (FILE_PROGRAMS as readonly string[]).includes(kind)

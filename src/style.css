@@ -697,3 +697,20 @@ body {
 .ch-avatar-icon { width: 56px; height: 56px; fill: currentColor; }
 .dev-icon-btn { background: #000; color: #3dff7a; border: 1px solid #145c2c; font: inherit; cursor: pointer; padding: 2px 8px; display: inline-flex; align-items: center; gap: 8px; }
 .dev-icon-btn:hover { border-color: #3dff7a; }
+
+/* ---------- your agents ---------- */
+.ally { cursor: pointer; transition: transform 0.1s linear; }
+.ally-body { fill: #04210f; stroke: #33ff66; stroke-width: 2.5; }
+.ally:hover .ally-body { fill: #0b3a1c; }
+.ally[data-order="follow"] .ally-body { stroke-dasharray: 5 3; }
+.ally[data-order="unload"] { opacity: 0.7; }
+.ally-icon { fill: #b6ffcb; color: #b6ffcb; }
+.ally-icon path { fill: currentColor; }
+.ally-hp-bg { fill: #3a0a0a; }
+.ally-hp { fill: #33ff66; }
+.ally-name { fill: #b6ffcb; font: 10px var(--font); text-anchor: middle; paint-order: stroke; stroke: #000; stroke-width: 3px; }
+.mini-ally { fill: #33ff66; stroke: #000; stroke-width: 0.8; transition: cx 0.1s linear, cy 0.1s linear; }
+.deck-state { font-size: 11px; padding: 0 4px; border: 1px solid currentColor; }
+.deck-state.is-out { color: #3de0ff; }
+.deck-state.is-lost { color: #ff4d4d; }
+.deck-program.is-lost { opacity: 0.6; }

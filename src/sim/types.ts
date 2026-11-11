@@ -103,9 +103,9 @@ export type SimEvent =
   | { type: 'alarm'; level: number }
   | { type: 'hit' }
   /** A shot flies from one thing to another (drawn in the map view). */
-  | { type: 'shot'; from: FxTarget; to: FxTarget; hit: boolean; hostile: boolean }
+  | { type: 'shot'; from: FxTarget; to: FxTarget; hit: boolean; hostile: boolean; recall?: boolean }
   /** How an action went, shown over its target in the map view. */
   | { type: 'outcome'; at: FxTarget; ok: boolean; text: string };
 
 /** Something in the map view an effect is drawn at. */
-export type FxTarget = { kind: 'player' } | { kind: 'agent'; id: string } | { kind: 'file'; id: string } | { kind: 'node'; id: string };
+export type FxTarget = { kind: 'player' } | { kind: 'agent'; id: string } | { kind: 'ally'; id: string } | { kind: 'file'; id: string } | { kind: 'node'; id: string };

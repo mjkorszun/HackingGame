@@ -2,7 +2,7 @@
 
 import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from '../sim/programs';
 
-export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'file' | 'agent' | 'loot' | ProgramType;
+export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'file' | 'agent' | 'ally' | 'loot' | ProgramType;
 
 export interface CommandSpec {
   name: string;
@@ -14,7 +14,7 @@ export interface CommandSpec {
 }
 
 const PROGRAM_HELP: Partial<Record<ProgramType, string>> = {
-  attack: 'attack an agent here: attack [W1]. a kill in one blow is quiet',
+  warrior: 'release a warrior as your agent here: warrior [n|name]',
   silence: 'silence an agent here: its messages cannot leave the node',
   deceive: 'answer a query with a lie',
   hide: 'passive: agents roll detection against it',
@@ -35,8 +35,12 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'look', aliases: ['l'], arg: 'node', usage: 'look [node]', help: 'describe the current node, or another one' },
   { name: 'do', arg: 'action', usage: 'do <action>', help: "use an action of the current node (look lists them)" },
   ...PROGRAM_TYPES.map(
-    (t): CommandSpec => ({ name: t, arg: t === 'attack' || t === 'silence' ? 'agent' : t, usage: (FILE_PROGRAMS as readonly string[]).includes(t) ? `${t} <file>` : t === 'attack' || t === 'silence' ? `${t} [agent]` : `${t} [n|name]`, help: PROGRAM_HELP[t] ?? `run your best ${t} program, or the Nth one, or one by name` }),
+    (t): CommandSpec => ({ name: t, arg: t === 'silence' ? 'agent' : t, usage: (FILE_PROGRAMS as readonly string[]).includes(t) ? `${t} <file>` : t === 'silence' ? `${t} [agent]` : `${t} [n|name]`, help: PROGRAM_HELP[t] ?? `run your best ${t} program, or the Nth one, or one by name` }),
   ),
+  { name: 'attack', arg: 'agent', usage: 'attack [agent]', help: 'your warriors here attack an agent (releases one if none is here)' },
+  { name: 'stay', arg: 'ally', usage: 'stay <agent>', help: 'your agent stays where it is' },
+  { name: 'follow', arg: 'ally', usage: 'follow <agent>', help: 'your agent follows you between nodes' },
+  { name: 'unload', arg: 'ally', usage: 'unload <agent>', help: 'your agent comes back to you and is loaded again' },
   { name: 'load', arg: 'loot', usage: 'load <program>', help: 'load a program you downloaded in this run into a free memory slot' },
   { name: 'present', arg: 'none', usage: 'present', help: 'answer a query by showing a privilege you hold' },
   { name: 'ignore', arg: 'none', usage: 'ignore', help: 'ignore a query (the agent grows suspicious)' },

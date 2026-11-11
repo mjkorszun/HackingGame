@@ -1,6 +1,6 @@
 import type { Rarity } from './development';
 /** A program in the player's deck. */
-export const PROGRAM_TYPES = ['attack', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'mapper', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
+export const PROGRAM_TYPES = ['warrior', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'mapper', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
 
 /** Programs used on one data file: evaluate f3, defuse f3, ... */
 export const FILE_PROGRAMS = ['evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
@@ -8,8 +8,8 @@ export type FileProgram = (typeof FILE_PROGRAMS)[number];
 export type ProgramType = (typeof PROGRAM_TYPES)[number];
 
 /** Placeholder results for programs whose systems don't exist yet. */
-/** Programs that act on an agent in your node: attack W1, silence W1, deceive (answers a query). */
-export const AGENT_PROGRAMS = ['attack', 'silence', 'deceive'] as const;
+/** Programs that act on an agent in your node: silence W1, deceive (answers a query). Warriors are released as your own agents. */
+export const AGENT_PROGRAMS = ['silence', 'deceive'] as const;
 export type AgentProgram = (typeof AGENT_PROGRAMS)[number];
 
 /** Passive programs: they work on their own. */
@@ -42,7 +42,7 @@ export interface Program {
 
 /** Base size in GB of a rating-1 program of each type (placeholder numbers). */
 const BASE_SIZE: Record<ProgramType, number> = {
-  attack: 60, silence: 40, deceive: 50, hide: 40, analyze: 30, skimmer: 30, mapper: 50, scan: 30,
+  warrior: 60, silence: 40, deceive: 50, hide: 40, analyze: 30, skimmer: 30, mapper: 50, scan: 30,
   evaluate: 20, identify: 20, defuse: 30, decrypt: 50, scrub: 30, forge: 40,
 };
 

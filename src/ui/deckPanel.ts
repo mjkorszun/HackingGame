@@ -16,6 +16,8 @@ export interface GearSource {
   loot: LootItem[];
   privileges: Set<Privilege>;
   keysFound: boolean;
+  /** In a run: a program out as your agent, or destroyed for this run. */
+  programState?(id: string): 'out' | 'lost' | null;
 }
 
 export interface GearOptions {
@@ -81,7 +83,9 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
   const row = (p: Program, stored: boolean) => {
     const li = document.createElement('li');
     li.className = `deck-program${p.rarity && p.rarity !== 'common' ? ` rarity-${p.rarity}` : ''}`;
-    li.innerHTML = `${programIcon(p)}${esc(`${p.name.padEnd(18)} ${`${p.type} ${p.rating}`.padEnd(11)} ${String(programSize(p)).padStart(3)} GB`)}`;
+    const state = game.programState?.(p.id) ?? null;
+    li.innerHTML = `${programIcon(p)}${esc(`${p.name.padEnd(18)} ${`${p.type} ${p.rating}`.padEnd(11)} ${String(programSize(p)).padStart(3)} GB`)}${state ? ` <span class="deck-state is-${state}">${state === 'out' ? 'OUT' : 'LOST'}</span>` : ''}`;
+    if (state) li.classList.add(`is-${state}`);
     if (opts.toggle) {
       // Main screen: left or right click opens the program's info, with Load / Unload in it.
       li.classList.add(stored ? 'is-stored' : 'is-loaded');
@@ -104,7 +108,7 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
       li.addEventListener('click', () => opts.run!(p));
       li.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        showProgramInfo(p, { status: 'loaded in memory' });
+        showProgramInfo(p, { status: state === 'out' ? 'out in the net as your agent' : state === 'lost' ? 'destroyed: lost for this run' : 'loaded in memory' });
       });
     } else {
       li.classList.add('is-static');
