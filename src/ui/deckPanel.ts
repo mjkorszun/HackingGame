@@ -2,6 +2,7 @@ import type { LootItem } from '../sim/game';
 import type { Privilege } from '../sim/actions';
 import { programSize, usedMemory, type Program } from '../sim/programs';
 import { SATS, sats } from '../sim/money';
+import { showProgramInfo } from './programInfo';
 
 /** What the gear panel shows: in a run it is the Game itself; on the main screen, the account. */
 export interface GearSource {
@@ -79,20 +80,33 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
     li.className = `deck-program${p.rarity && p.rarity !== 'common' ? ` rarity-${p.rarity}` : ''}`;
     li.textContent = `${p.name.padEnd(18)} ${`${p.type} ${p.rating}`.padEnd(11)} ${String(programSize(p)).padStart(3)} GB`;
     if (opts.toggle) {
+      // Main screen: left or right click opens the program's info, with Load / Unload in it.
       li.classList.add(stored ? 'is-stored' : 'is-loaded');
       const full = stored && !fits(p);
-      li.title = stored ? (full ? 'in storage: not enough memory' : 'in storage: click to load into memory') : 'loaded: click to unload';
-      if (!full) li.addEventListener('click', () => opts.toggle!(p));
-      else li.classList.add('is-blocked');
+      if (full) li.classList.add('is-blocked');
+      li.title = 'click for details';
+      const info = (e: Event) => {
+        e.preventDefault();
+        showProgramInfo(p, {
+          status: stored ? 'in storage' : 'loaded in memory',
+          action: { label: stored ? 'Load into memory' : 'Unload', run: () => opts.toggle!(p), disabled: full ? `not enough memory: needs ${programSize(p)} GB, ${game.memorySlots - used} GB free` : undefined },
+        });
+      };
+      li.addEventListener('click', info);
+      li.addEventListener('contextmenu', info);
     } else if (opts.run) {
+      // In the net: left click runs it, right click shows its info.
       const n = game.programs.filter((q) => q.type === p.type).indexOf(p) + 1;
-      li.title = `${p.name}  /  ${p.type} ${n}`;
+      li.title = `${p.name}  /  ${p.type} ${n}\nright click: details`;
       li.addEventListener('click', () => opts.run!(p));
+      li.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showProgramInfo(p, { status: 'loaded in memory' });
+      });
     } else {
       li.classList.add('is-static');
     }
     // Developed programs: rarity and traits in the tooltip.
-    if (p.rarity) li.title = [li.title, `${p.rarity}${p.author ? ` by ${p.author}` : ''}`, ...(p.traits ?? []).map((t) => `+ ${t}`)].filter(Boolean).join('\n');
     list.appendChild(li);
   };
   for (const p of game.programs) row(p, false);

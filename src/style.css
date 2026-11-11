@@ -616,3 +616,19 @@ body {
 .deck-program.rarity-rare { color: #6fb0ff; }
 .deck-program.rarity-epic { color: #b48cff; }
 .deck-program.rarity-legendary { color: #ff9f2e; }
+
+/* ---------- program info window ---------- */
+.pi-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.pi-panel { background: #000; border: 1px solid var(--green); color: var(--green); padding: 18px 22px; width: min(420px, calc(100vw - 32px)); font: 15px var(--font); }
+.pi-panel h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: 1px; }
+.pi-what { margin: 0 0 12px; color: #c8d4cc; line-height: 1.4; }
+.pi-panel table { border-collapse: collapse; }
+.pi-panel td { padding: 2px 22px 2px 0; }
+.pi-panel td:first-child { color: #9fb3a6; }
+.pi-panel h3 { margin: 14px 0 4px; font-size: 13px; color: var(--blue, #5ab4ff); font-weight: normal; }
+.pi-panel ul { list-style: none; margin: 0; padding: 0; }
+.pi-btns { display: flex; gap: 10px; margin-top: 16px; }
+.pi-btns button { background: #000; color: var(--green); border: 1px solid var(--green); font: inherit; padding: 5px 16px; cursor: pointer; }
+.pi-btns button:hover:not(:disabled) { background: var(--green-faint); }
+.pi-btns button:disabled { color: var(--grey); border-color: #4a564f; cursor: not-allowed; }
+.pi-note { margin-top: 8px; color: var(--yellow); font-size: 13px; }
