@@ -14,7 +14,7 @@ export interface CommandSpec {
 }
 
 const PROGRAM_HELP: Partial<Record<ProgramType, string>> = {
-  scan: 'scan files here: scan [all] [fN], or pick the program by name',
+  decrypt: 'decrypt files here: decrypt [all] [fN], or pick the program by name',
   evaluate: 'price of a valuable file (needs an evaluate program)',
   identify: 'what software a file holds (needs an identify program)',
 };
@@ -27,9 +27,10 @@ export const COMMANDS: CommandSpec[] = [
   ...PROGRAM_TYPES.map(
     (t): CommandSpec => ({ name: t, arg: t, usage: t === 'evaluate' || t === 'identify' ? `${t} <file>` : `${t} [n|name]`, help: PROGRAM_HELP[t] ?? `run your best ${t} program, or the Nth one, or one by name` }),
   ),
-  { name: 'download', arg: 'file', usage: 'download <file>', help: 'copy a scanned file (valuable data or software) into your deck' },
+  { name: 'download', arg: 'file', usage: 'download <file>', help: 'copy a decrypted file (valuable data or software) into your deck' },
   { name: 'alter', arg: 'file', usage: 'alter <file>', help: 'change contract data' },
   { name: 'delete', arg: 'file', usage: 'delete <file>', help: 'destroy contract data' },
+  { name: 'extract', arg: 'file', usage: 'extract <file>', help: 'take the privilege or keys from a keyring' },
   { name: 'map', arg: 'none', usage: 'map', help: 'list all nodes' },
   { name: 'pause', arg: 'none', usage: 'pause', help: 'stop time (Space)' },
   { name: 'resume', aliases: ['unpause'], arg: 'none', usage: 'resume', help: 'continue time (Space)' },

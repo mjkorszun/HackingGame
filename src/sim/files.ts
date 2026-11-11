@@ -1,19 +1,27 @@
 import type { Program, ProgramType } from './programs';
 
-/** What a data file turns out to hold once scanned. contract: data a contract needs altered or deleted. */
-export type FileContent = 'worthless' | 'valuable' | 'software' | 'contract';
+/** What a data file turns out to hold once decrypted. contract: data a contract needs altered or deleted. */
+export type FileContent = 'worthless' | 'valuable' | 'software' | 'contract' | 'honeytoken' | 'keyring';
+
+/** What a keyring holds: a privilege, or the system's encryption keys. */
+export type KeyringGrant = 'worker' | 'security' | 'admin' | 'keys';
 
 export interface DataFile {
   /** f1, f2, ... within its node. */
   id: string;
   content: FileContent;
-  scanned: boolean;
+  decrypted: boolean;
   /** valuable: its price in credits, fixed when the file is made; shown once evaluated. */
   price?: number;
   evaluated?: boolean;
   /** software: the program inside; its details show once identified. */
   software?: Omit<Program, 'id'>;
   identified?: boolean;
+  /** honeytoken: a trap posing as valuable data; shown for what it is only once detected. */
+  detected?: boolean;
+  /** keyring: what it holds, and whether it was already extracted. */
+  grant?: KeyringGrant;
+  extracted?: boolean;
   /** contract: what the contract wants done with it. */
   need?: 'alter' | 'delete';
   /** Done to this file: downloaded (a copy taken), altered or deleted. */
@@ -22,12 +30,19 @@ export interface DataFile {
   deleted?: boolean;
 }
 
-/** Actions a file offers once scanned. */
-export type FileAction = 'evaluate' | 'identify' | 'download' | 'alter' | 'delete';
+/** Actions a file offers once decrypted. */
+export type FileAction = 'evaluate' | 'identify' | 'download' | 'alter' | 'delete' | 'extract';
+
+/** What the player believes the file is: an undetected honeytoken looks valuable. */
+export function apparentContent(f: DataFile): FileContent {
+  return f.content === 'honeytoken' && !f.detected ? 'valuable' : f.content;
+}
 
 export function fileActions(f: DataFile): FileAction[] {
-  if (!f.scanned || f.deleted) return [];
-  switch (f.content) {
+  if (!f.decrypted || f.deleted) return [];
+  switch (apparentContent(f)) {
+    case 'keyring':
+      return f.extracted ? [] : ['extract'];
     case 'valuable':
       return ['evaluate', 'download'];
     case 'software':
@@ -43,16 +58,15 @@ const SOFTWARE_NAMES: Record<string, string[]> = {
   attack: ['Mace 15', 'Charge 2.1', 'Rocket Launcher V007'],
   hide: ['Shade 3.0', 'Mirage V2'],
   scout: ['Kestrel 1.4', 'Periscope V5'],
-  scan: ['Trawler 2.2', 'Sonar 1.1'],
   decrypt: ['Skeleton Key 3', 'Crowbar 1.9'],
 };
 
-/** Placeholder: ticks to scan one file with a rating-1 scan program. */
-export const SCAN_TICKS = 12;
+/** Placeholder: ticks to decrypt one file with a rating-1 decrypt program. */
+export const DECRYPT_TICKS = 12;
 
-/** Ticks to scan one file with a program of this rating. */
-export function scanTicks(rating: number): number {
-  return Math.max(3, Math.round(SCAN_TICKS / Math.max(1, rating)));
+/** Ticks to decrypt one file with a program of this rating. */
+export function decryptTicks(rating: number): number {
+  return Math.max(3, Math.round(DECRYPT_TICKS / Math.max(1, rating)));
 }
 
 /** A small seeded generator, so a node holds the same files every run. */
@@ -71,9 +85,15 @@ export function generateFiles(nodeId: string): DataFile[] {
   const count = 6 + Math.floor(rand() * 7);
   return Array.from({ length: count }, (_, i) => {
     const r = rand();
-    const content: FileContent = r < 0.58 ? 'worthless' : r < 0.86 ? 'valuable' : r < 0.95 ? 'software' : 'contract';
-    const file: DataFile = { id: `f${i + 1}`, content, scanned: false };
-    if (content === 'valuable') file.price = 100 * (1 + Math.floor(rand() * 40));
+    const content: FileContent =
+      r < 0.5 ? 'worthless' : r < 0.75 ? 'valuable' : r < 0.84 ? 'software' : r < 0.91 ? 'keyring' : r < 0.96 ? 'honeytoken' : 'contract';
+    const file: DataFile = { id: `f${i + 1}`, content, decrypted: false };
+    // A honeytoken carries a believable price too: that is the bait.
+    if (content === 'valuable' || content === 'honeytoken') file.price = 100 * (1 + Math.floor(rand() * 40));
+    if (content === 'keyring') {
+      const g = rand();
+      file.grant = g < 0.5 ? 'worker' : g < 0.8 ? 'keys' : g < 0.95 ? 'security' : 'admin';
+    }
     if (content === 'software') {
       const types = Object.keys(SOFTWARE_NAMES) as ProgramType[];
       const type = types[Math.floor(rand() * types.length)];
@@ -90,4 +110,6 @@ export const CONTENT_LABEL: Record<FileContent, string> = {
   valuable: 'valuable data',
   software: 'software',
   contract: 'contract data',
+  honeytoken: 'HONEYTOKEN (a trap)',
+  keyring: 'keyring (credentials / keys)',
 };

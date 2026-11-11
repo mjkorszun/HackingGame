@@ -1,4 +1,4 @@
-import { CONTENT_LABEL, fileActions, type DataFile, type FileAction } from '../sim/files';
+import { apparentContent, CONTENT_LABEL, fileActions, type DataFile, type FileAction } from '../sim/files';
 import { Tooltip, type TipLine } from './tooltip';
 import type { Program } from '../sim/programs';
 import type { Game } from '../sim/game';
@@ -96,9 +96,11 @@ const ICON_AUTO_PAUSE = icon(
 /** What the game tooltip says about a data file. */
 function fileTip(f: DataFile): TipLine[] {
   const lines: TipLine[] = [{ text: f.id, cls: 'tip-title' }];
-  if (!f.scanned) return [...lines, { text: 'not scanned', cls: 'c-system' }, { text: 'click to scan', cls: 'c-system' }];
-  lines.push({ text: CONTENT_LABEL[f.content], cls: `tip-${f.content}` });
-  if (f.content === 'valuable') lines.push({ text: f.evaluated ? `worth ${f.price} cr` : 'value unknown (evaluate)' });
+  if (!f.decrypted) return [...lines, { text: 'not decrypted', cls: 'c-system' }, { text: 'click to decrypt', cls: 'c-system' }];
+  const seen = apparentContent(f);
+  lines.push({ text: CONTENT_LABEL[seen], cls: `tip-${seen}` });
+  if (seen === 'keyring') lines.push({ text: f.extracted ? `extracted: ${f.grant === 'keys' ? 'encryption keys' : `${f.grant} privilege`}` : 'extract to see what it opens' });
+  if (seen === 'valuable') lines.push({ text: f.evaluated ? `worth ${f.price} cr` : 'value unknown (evaluate)' });
   if (f.content === 'software') {
     const sw = f.software!;
     lines.push({ text: f.identified ? `${sw.name}  ${sw.type} ${sw.rating}` : 'unknown program (identify)' });
@@ -121,9 +123,9 @@ export interface ViewActions {
   look(nodeId: string): void;
   act(actionId: string): void;
   run(program: Program): void;
-  /** Scan one file, or all unscanned files starting at it. */
-  scanFile(fileId: string, all: boolean): void;
-  scanAll(): void;
+  /** Decrypt one file, or all encrypted files starting at it. */
+  decryptFile(fileId: string, all: boolean): void;
+  decryptAll(): void;
   fileAction(action: FileAction, fileId: string): void;
   togglePause(): void;
   mute(): void;
@@ -440,7 +442,7 @@ export class NetworkView {
     const y0 = CY - span;
     const cols = Math.floor((2 * span) / CELL);
     const files = this.game.filesIn(nodeId);
-    const scanning = this.game.scanningFile;
+    const decrypting = this.game.decryptingFile;
     const taken = new Set<string>();
     for (let i = 0, tries = 0; i < files.length && tries < 2000; tries++) {
       const c = Math.floor(rand() * cols);
@@ -455,9 +457,9 @@ export class NetworkView {
       taken.add(key);
       const file = files[i++];
       if (file.deleted) continue;
-      const cls = ['data-block', file.scanned ? `is-${file.content}` : 'is-unscanned'];
-      if (scanning?.fileId === file.id) cls.push('is-scanning');
-      if (file.downloaded || file.altered) cls.push('is-done');
+      const cls = ['data-block', file.decrypted ? `is-${apparentContent(file)}` : 'is-encrypted'];
+      if (decrypting?.fileId === file.id) cls.push('is-decrypting');
+      if (file.downloaded || file.altered || file.extracted) cls.push('is-done');
       const blk = svg('g', { class: cls.join(' '), 'data-file': file.id }, parent);
       const pad = 5;
       svg('rect', { x: x + pad, y: y + pad, width: CELL - 2 * pad, height: CELL - 2 * pad }, blk);
@@ -467,23 +469,23 @@ export class NetworkView {
       this.tip.attach(blk, () => fileTip(file));
       blk.addEventListener('mouseenter', () => this.actions.hover());
       blk.addEventListener('click', () => {
-        if (!file.scanned) this.actions.scanFile(file.id, false);
+        if (!file.decrypted) this.actions.decryptFile(file.id, false);
       });
       blk.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const busy = this.game.isBusy;
         const items = [];
-        if (!file.scanned) items.push({ label: 'Scan', hint: 'click', disabled: busy, action: () => this.actions.scanFile(file.id, false) });
+        if (!file.decrypted) items.push({ label: 'Decrypt', hint: 'click', disabled: busy, action: () => this.actions.decryptFile(file.id, false) });
         for (const act of fileActions(file)) {
           const needs = (act === 'evaluate' || act === 'identify') && !this.game.findProgram(act);
           const done = act === 'download' && file.downloaded;
           items.push({ label: act, hint: needs ? `needs ${act}` : done ? 'done' : undefined, disabled: busy || needs || done, action: () => this.actions.fileAction(act, file.id) });
         }
-        if (this.game.filesIn(nodeId).some((f) => !f.scanned)) {
-          items.push({ label: 'Scan all', hint: 'starting from this file', disabled: busy, action: () => this.actions.scanFile(file.id, true) });
+        if (this.game.filesIn(nodeId).some((f) => !f.decrypted)) {
+          items.push({ label: 'Decrypt all', hint: 'starting from this file', disabled: busy, action: () => this.actions.decryptFile(file.id, true) });
         }
-        this.menu.show(e.clientX, e.clientY, `${file.id}${file.scanned ? `: ${CONTENT_LABEL[file.content]}` : ''}`, items);
+        this.menu.show(e.clientX, e.clientY, `${file.id}${file.decrypted ? `: ${CONTENT_LABEL[apparentContent(file)]}` : ''}`, items);
       });
     }
   }
@@ -618,9 +620,9 @@ export class NetworkView {
       const busy = this.game.isBusy;
       const scout = this.game.findProgram('scout');
       if (scout) items.push({ label: 'Scout', hint: scout.name, disabled: busy, action: () => this.actions.run(scout) });
-      const scan = this.game.findProgram('scan');
-      if (scan && this.game.filesIn(node.id).some((f) => !f.scanned)) {
-        items.push({ label: 'Scan all', hint: scan.name, disabled: busy, action: () => this.actions.scanAll() });
+      const decrypt = this.game.findProgram('decrypt');
+      if (decrypt && this.game.filesIn(node.id).some((f) => !f.decrypted)) {
+        items.push({ label: 'Decrypt all', hint: decrypt.name, disabled: busy, action: () => this.actions.decryptAll() });
       }
     }
     this.menu.show(x, y, this.game.nameOf(node.id), items);
