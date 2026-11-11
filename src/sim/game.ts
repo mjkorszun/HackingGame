@@ -150,7 +150,7 @@ export class Game {
     const target = job && this.files.get(job.node);
     if (job && target) target.push({ id: `f${target.length + 1}`, content: 'contract', scanned: false, need: job.need });
     (system.agents ?? []).forEach((a, i) => {
-      const stats = WARRIORS[a.variant ?? 0] ?? WARRIORS[0];
+      const stats = WARRIORS[a.type ?? 'musketeer'];
       this.agents.push({
         id: `a${i + 1}`, name: codeName(`${system.id}/${i}`), stats, hp: stats.hp, node: a.node, hop: null,
         stayLeft: stats.stay[0], queryLeft: stats.queryEvery, attackLeft: stats.attackEvery,
@@ -326,14 +326,16 @@ export class Game {
       if (a.known === 'none') this.log(`${program.name}: could not read ${a.name}`, 'system');
       return;
     }
-    a.known = got;
-    this.log(`${program.name}: ${a.name} ${got === 'full' ? 'fully analyzed' : 'partly analyzed'} (hover it to see)`, 'info');
+    // Agents of one type share their stats: what you learn about one applies to every agent of that type here.
+    for (const b of this.agents) if (b.stats.type === a.stats.type && b.known !== 'full') b.known = got;
+    const others = this.agents.filter((b) => b !== a && b.stats.type === a.stats.type).length;
+    this.log(`${program.name}: ${a.name} (${a.stats.type}) ${got === 'full' ? 'fully analyzed' : 'partly analyzed'}${others ? `. this applies to every ${a.stats.type} here` : ''} (hover it to see)`, 'info');
   }
 
   private startQuery(a: Agent): void {
     this.query = { agentId: a.id };
     this.analyze(a);
-    this.log(`${a.name} (${a.stats.kind}) QUERIES YOU${a.strikes ? ' again' : ''}: who are you?`, 'alarm2');
+    this.log(`${a.name} (${a.stats.type}) QUERIES YOU${a.strikes ? ' again' : ''}: who are you?`, 'alarm2');
     this.setPaused(true);
     this.events.push({ type: 'query', agentId: a.id });
   }

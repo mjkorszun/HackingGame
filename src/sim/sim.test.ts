@@ -629,6 +629,25 @@ describe('agents', () => {
     expect(a.mood).toBe('hostile');
   });
 
+  it('analyzing one agent reveals every agent of the same type in the system', () => {
+    const g = new Game({ ...testSystem, agents: [
+      { kind: 'warrior', node: 'gw', type: 'knight' },
+      { kind: 'warrior', node: 'core', type: 'knight' },
+      { kind: 'warrior', node: 'core', type: 'ranger' },
+    ] });
+    g.autoPause = false;
+    g.setPaused(false);
+    (g as unknown as { d100: () => number }).d100 = () => 1;
+    const [k1, k2, r] = g.agents;
+    k1.stayLeft = 10_000;
+    for (let i = 0; i < k1.stats.queryEvery; i++) g.step();
+    expect(g.query?.agentId).toBe(k1.id);
+    expect(k1.known).toBe('full');
+    expect(k2.known).toBe('full');
+    expect(r.known).toBe('none');
+    expect(k1.name).not.toBe(k2.name);
+  });
+
   it('a successful deceive leaves you alone until you leave the node', () => {
     const { g, a } = setup(1);
     tick(g, a.stats.queryEvery);

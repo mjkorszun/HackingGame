@@ -381,9 +381,10 @@ export class NetworkView {
 
   /** Where an agent in a node is drawn: in the room around you, or beside a neighbour. */
   private agentSpot(nodeId: string, index: number): { x: number; y: number } | null {
-    if (nodeId === this.game.currentNode) return { x: CX + 50 + index * 30, y: CY + 22 };
+    // Several agents in one node stand in a column (then a second one), so their code names don't overlap.
+    if (nodeId === this.game.currentNode) return { x: CX + 55 + Math.floor(index / 4) * 70, y: CY - 30 + (index % 4) * 36 };
     const p = this.positions.get(nodeId);
-    return p ? { x: p.x + NEIGHBOUR_R * 0.75 + index * 22, y: p.y - NEIGHBOUR_R * 0.75 } : null;
+    return p ? { x: p.x + NEIGHBOUR_R * 0.75 + Math.floor(index / 3) * 62, y: p.y - NEIGHBOUR_R * 0.75 + (index % 3) * 34 } : null;
   }
 
   /** Agents move every tick: their dots are kept and only moved, so hover and menus keep working. */
@@ -398,7 +399,7 @@ export class NetworkView {
       seen.add(a.id);
       let els = this.agentEls.get(a.id);
       if (!els) {
-        els = { main: this.drawAgent(a, layer), mini: svg('circle', { r: 3.2, class: 'mini-agent' }, mini) as unknown as SVGGElement };
+        els = { main: this.drawAgent(a, layer), mini: svg('circle', { r: 3.2, class: `mini-agent is-${a.stats.type}` }, mini) as unknown as SVGGElement };
         this.agentEls.set(a.id, els);
       }
       let pos: { x: number; y: number } | null;
@@ -436,9 +437,9 @@ export class NetworkView {
     }
   }
 
-  /** A warrior: light red dot, dark red rim, a small sword inside. */
+  /** A warrior: a dot with a small sword inside, coloured by its type. */
   private drawAgent(a: Agent, parent: Element): SVGGElement {
-    const grp = svg('g', { class: 'agent', 'data-agent': a.id }, parent) as SVGGElement;
+    const grp = svg('g', { class: `agent is-${a.stats.type}`, 'data-agent': a.id }, parent) as SVGGElement;
     svg('circle', { r: 11, class: 'agent-body' }, grp);
     svg('line', { x1: -4.5, y1: 4.5, x2: 5, y2: -5, class: 'agent-sword' }, grp);
     svg('line', { x1: -5.5, y1: 0.5, x2: -0.5, y2: 5.5, class: 'agent-sword' }, grp);
@@ -496,7 +497,7 @@ export class NetworkView {
       { cmd: 'ignore', label: 'Ignore', hint: a.strikes ? 'RED alarm, it turns hostile' : 'yellow alarm, it asks again' },
     ];
     this.queryBox.innerHTML = `
-      <div class="qb-title">${esc(a.name)} (${a.stats.kind}) QUERIES YOU${a.strikes ? ' AGAIN' : ''}</div>
+      <div class="qb-title">${esc(a.name)} (${a.stats.type}) QUERIES YOU${a.strikes ? ' AGAIN' : ''}</div>
       <div class="qb-info">${agentInfo(a).slice(1).map(esc).join('<br>')}</div>
       <div class="qb-options"></div>`;
     const box = this.queryBox.querySelector('.qb-options')!;

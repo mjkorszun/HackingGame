@@ -531,6 +531,19 @@ body {
 .agent.is-silenced .agent-body { stroke-dasharray: 3 2; }
 @keyframes agent-angry { from { stroke-width: 2.5; } to { stroke-width: 4.5; } }
 .mini-agent { fill: #ff6060; stroke: #000; stroke-width: 0.8; }
+/* warrior types: musketeer red (above), ranger amber, knight steel blue */
+.agent.is-ranger .agent-body { fill: #ffcf6a; stroke: #8a5600; }
+.agent.is-ranger .agent-sword { stroke: #6b4200; }
+.agent.is-ranger .agent-name { fill: #ffcf6a; }
+.agent.is-ranger:hover .agent-body { fill: #ffe0a0; }
+.agent.is-knight .agent-body { fill: #8fb8ff; stroke: #1d3f8f; }
+.agent.is-knight .agent-sword { stroke: #13306e; }
+.agent.is-knight .agent-name { fill: #8fb8ff; }
+.agent.is-knight:hover .agent-body { fill: #b5d0ff; }
+.agent.is-hostile.is-ranger .agent-body { fill: #ffb020; stroke: #fff0c0; }
+.agent.is-hostile.is-knight .agent-body { fill: #5a8cff; stroke: #d8e6ff; }
+.mini-agent.is-ranger { fill: #ffc040; }
+.mini-agent.is-knight { fill: #6f9cff; }
 
 .query-box {
   position: absolute;

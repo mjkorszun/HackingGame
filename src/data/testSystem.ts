@@ -11,9 +11,9 @@ export const testSystem: SystemDef = {
   entry: 'gw',
   security: 1,
   agents: [
-    { kind: 'warrior', node: 'core', variant: 0 },
-    { kind: 'warrior', node: 'staff', variant: 1 },
-    { kind: 'warrior', node: 'cams', variant: 2 },
+    { kind: 'warrior', node: 'core', type: 'musketeer' },
+    { kind: 'warrior', node: 'staff', type: 'ranger' },
+    { kind: 'warrior', node: 'cams', type: 'knight' },
   ],
   contract: { title: 'Alter File', need: 'alter', node: 'orders', pay: 50 },
   nodes: [

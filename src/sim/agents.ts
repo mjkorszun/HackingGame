@@ -3,8 +3,13 @@
 /** How an agent moves around its system. Only roam is built so far. */
 export type AgentAi = 'roam' | 'guard-entry' | 'path' | 'defend' | 'zone';
 
+/** Warrior types. Agents of one type share their stats, so analyzing one reveals the others. */
+export type WarriorType = 'musketeer' | 'ranger' | 'knight';
+
 export interface AgentStats {
   kind: 'warrior';
+  /** Which type of warrior: decides its stats and colour. */
+  type: WarriorType;
   /** Detection: rolled against the player's hide when it queries. */
   detection: number;
   /** Ticks between query attempts while it shares a node with the player. */
@@ -32,6 +37,7 @@ export interface AgentStats {
 /** Placeholder warrior: detection 3, query every 3 s, hits 4 every 2 s (DPS 2), armour 2, 30 HP. */
 export const WARRIOR: AgentStats = {
   kind: 'warrior',
+  type: 'musketeer',
   detection: 3,
   queryEvery: 30,
   damage: 4,
@@ -47,15 +53,15 @@ export const WARRIOR: AgentStats = {
 };
 
 /**
- * Three kinds of warrior (placeholder numbers):
- * 0 balanced; 1 watchful but fragile (asks often, easy to kill, hard to fool);
- * 2 heavy gun (rarely asks, hits hard, tough, hard to silence, easy to fool).
+ * Three types of warrior (placeholder numbers):
+ * musketeer balanced; ranger watchful but fragile (asks often, easy to kill, hard to fool);
+ * knight heavy gun (rarely asks, hits hard, tough, hard to silence, easy to fool).
  */
-export const WARRIORS: AgentStats[] = [
-  WARRIOR,
-  { ...WARRIOR, detection: 4, queryEvery: 20, damage: 3, attackEvery: 20, armor: 1, hp: 20, silenceResist: 1, deceiveResist: 3, scanResist: 1, stay: [40, 80] },
-  { ...WARRIOR, detection: 2, queryEvery: 60, damage: 8, attackEvery: 30, armor: 4, hp: 60, silenceResist: 4, deceiveResist: 1, scanResist: 3, stay: [80, 140], hopTicks: 20 },
-];
+export const WARRIORS: Record<WarriorType, AgentStats> = {
+  musketeer: WARRIOR,
+  ranger: { ...WARRIOR, type: 'ranger', detection: 4, queryEvery: 20, damage: 3, attackEvery: 20, armor: 1, hp: 20, silenceResist: 1, deceiveResist: 3, scanResist: 1, stay: [40, 80] },
+  knight: { ...WARRIOR, type: 'knight', detection: 2, queryEvery: 60, damage: 8, attackEvery: 30, armor: 4, hp: 60, silenceResist: 4, deceiveResist: 1, scanResist: 3, stay: [80, 140], hopTicks: 20 },
+};
 
 /** A code name like Decker's: two letters, a dash, three digits (KX-271). Same seed, same name. */
 export function codeName(seedText: string): string {
@@ -104,7 +110,7 @@ export function dps(s: AgentStats): number {
 /** Lines describing an agent, as far as the player's Analyze revealed it. */
 export function agentInfo(a: Agent): string[] {
   const s = a.stats;
-  const lines = [`${a.name}: ${s.kind}`];
+  const lines = [`${a.name}: ${s.type} (${s.kind})`];
   if (a.known === 'none') return [...lines, 'not analyzed: stats unknown'];
   lines.push(`HP ${a.hp}/${s.hp}   hits ${s.damage} every ${s.attackEvery / TPS} s (DPS ${dps(s)})`);
   if (a.known === 'partial') return [...lines, 'partly analyzed'];
