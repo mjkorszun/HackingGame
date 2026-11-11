@@ -557,12 +557,18 @@ export class NetworkView {
         const m1 = this.miniXY(a.node);
         const m2 = this.miniXY(a.hop.to);
         miniPos = { x: m1.x + (m2.x - m1.x) * k, y: m1.y + (m2.y - m1.y) * k };
+      } else if (a.program.type === 'shield' && a.node === g.currentNode && !g.isMoving) {
+        // A shield circles you.
+        const t = performance.now() / 700;
+        pos = { x: this.avatarPos.x + Math.cos(t) * 56, y: this.avatarPos.y + Math.sin(t) * 38 };
+        miniPos = this.miniXY(a.node);
       } else {
         const i = count.get(a.node) ?? 0;
         count.set(a.node, i + 1);
         pos = this.allySpot(a.node, i);
         miniPos = this.miniXY(a.node);
       }
+      els.main.classList.toggle('is-shield', a.program.type === 'shield');
       els.main.style.display = pos ? '' : 'none';
       if (pos) {
         els.main.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;

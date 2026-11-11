@@ -15,6 +15,7 @@ export interface CommandSpec {
 
 const PROGRAM_HELP: Partial<Record<ProgramType, string>> = {
   warrior: 'release a warrior as your agent here: warrior [n|name]',
+  shield: 'passive: jumps out and takes the hits when you are attacked',
   silence: 'silence an agent here: its messages cannot leave the node',
   deceive: 'answer a query with a lie',
   hide: 'passive: agents roll detection against it',

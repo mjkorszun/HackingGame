@@ -714,3 +714,6 @@ body {
 .deck-state.is-out { color: #3de0ff; }
 .deck-state.is-lost { color: #ff4d4d; }
 .deck-program.is-lost { opacity: 0.6; }
+.ally.is-shield { transition: none; }
+.ally.is-shield .ally-body { stroke: #3de0ff; fill: #021a22; }
+.ally.is-shield .ally-hp { fill: #3de0ff; }

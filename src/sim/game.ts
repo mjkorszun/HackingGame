@@ -105,6 +105,8 @@ export const ALLY_HOP_TICKS = 12;
 export const WARRIOR_ATTACK_EVERY = 15;
 export const warriorHp = (rating: number) => 20 + 10 * rating;
 export const warriorDamage = (rating: number) => 6 * rating;
+/** Placeholder shield HP: 15 + 10 per rating. */
+export const shieldHp = (rating: number) => 15 + 10 * rating;
 /** What a released warrior does until told otherwise (later each program can set its own). */
 export const WARRIOR_DEFAULT_ORDER: AllyOrder = 'stay';
 
@@ -648,6 +650,7 @@ export class Game {
           continue;
         }
       }
+      if (ally.program.type === 'shield') continue;
       const here = this.agentsIn(ally.node);
       const enemy = here.find((x) => x.id === ally.target) ?? (this.query ? here.find((x) => x.id === this.query!.agentId) : undefined) ?? here.find((x) => x.mood === 'hostile');
       if (!enemy || --ally.attackLeft > 0) continue;
@@ -696,6 +699,19 @@ export class Game {
   }
 
   private hitPlayer(a: Agent): void {
+    // A loaded shield jumps out at the first shot and takes it.
+    const shield = this.findProgram('shield');
+    if (shield) {
+      const hp = shieldHp(shield.rating);
+      const ally: Ally = { id: `y${this.nextAllyId++}`, program: shield, hp, maxHp: hp, node: this.currentNode, hop: null, order: 'follow', attackLeft: 0, target: null };
+      this.allies.push(ally);
+      this.released.add(shield.id);
+      this.deckVersion++;
+      this.outcome({ kind: 'ally', id: ally.id }, true, 'SHIELD UP');
+      this.log(`${shield.name} jumps out and takes the hits for you`, 'info');
+      this.hitAlly(a, ally);
+      return;
+    }
     this.integrity = Math.max(0, this.integrity - a.stats.damage);
     this.events.push({ type: 'hit' });
     this.events.push({ type: 'shot', from: { kind: 'agent', id: a.id }, to: { kind: 'player' }, hit: true, hostile: true });
@@ -1492,4 +1508,5 @@ export const STARTING_PROGRAMS: Program[] = [
   { id: 'p14', type: 'deceive', name: 'Mirage 1.0', rating: 1 },
   { id: 'p15', type: 'analyze', name: 'Profiler 1.0', rating: 1 },
   { id: 'p16', type: 'skimmer', name: 'Skimmer 1.0', rating: 1, efficiency: 1, detection: 2 },
+  { id: 'p17', type: 'shield', name: 'Aegis 1.0', rating: 1 },
 ];
