@@ -54,7 +54,7 @@ export function showProgramInfo(p: Program, opts: InfoOptions = {}): void {
   overlay.className = 'pi-overlay';
   overlay.innerHTML = `
     <div class="pi-panel" role="dialog" aria-label="${esc(p.name)}">
-      <h2 class="rarity-${rarity}">${programIcon(p.type, 'pi-icon')}${esc(p.name)}</h2>
+      <h2 class="rarity-${rarity}">${programIcon(p, 'pi-icon')}${esc(p.name)}</h2>
       <p class="pi-what">${TYPE_INFO[p.type]}</p>
       <table>${lines.join('')}</table>
       ${traits}

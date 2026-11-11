@@ -34,4 +34,4 @@ npm run build     # type check + production build into dist/
 
 Sound effects: [Kenney](https://kenney.nl), CC0.
 
-Program icons: [game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). Icons used: broadsword, silenced, domino-mask, hooded-figure, microscope, robber, sniffing-dog, magnifying-glass, two-coins, cyber-eye, tripwire, lockpicks, broom, quill-ink (list in `src/ui/icons.ts`).
+Program icons: [game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). The icons used are listed in `src/ui/icons.ts` (`ICON_POOLS`).

@@ -15,6 +15,7 @@ import { showSkillPick } from './ui/skillPick';
 import { addXp } from './sim/progression';
 import { HomeScreen, type Choice, type ContractOffer } from './ui/homeScreen';
 import { finishProgram, newProject, work } from './sim/development';
+import { randomIcon } from './ui/icons';
 import { generate } from './sim/generate';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
@@ -251,6 +252,7 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       let program: Program | undefined;
       if (r.done) {
         program = finishProgram(p, `p${nextProgramId(account)}`, 'you');
+        program.icon = randomIcon(program.type);
         account.programs.push(program);
         account.project = undefined;
         lines.push(`${p.name} is done`);
