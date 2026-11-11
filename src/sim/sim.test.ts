@@ -292,6 +292,17 @@ describe('scout', () => {
   });
 });
 
+describe('stub programs', () => {
+  it('starts paused', () => {
+    expect(new Game(testSystem).paused).toBe(true);
+  });
+  it('each first-version program can be run and only prints for now', () => {
+    const g = new Game(testSystem);
+    for (const t of ['attack', 'hide', 'scan', 'decrypt'] as const) expect(g.runProgram(t)).toBe(true);
+    expect(g.isScouting).toBe(false);
+  });
+});
+
 describe('auto-pause', () => {
   it('stops time when travel ends, not after each hop', () => {
     const g = new Game(testSystem);
@@ -340,13 +351,14 @@ describe('auto-pause', () => {
     g.travelTo('edge');
     run(g, MOVE_TICKS);
     expect(g.paused).toBe(true);
-    const ev = g.drainEvents().find((e) => e.type === 'paused');
+    const ev = g.drainEvents().find((e) => e.type === 'paused' && e.paused);
     expect(ev).toMatchObject({ paused: true, auto: true });
   });
 
   it('when off, time keeps running after an action', () => {
     const g = new Game(testSystem);
     g.autoPause = false;
+    g.setPaused(false);
     g.travelTo('edge');
     run(g, MOVE_TICKS);
     expect(g.paused).toBe(false);

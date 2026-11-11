@@ -7,6 +7,7 @@ import { renderDeck } from './ui/deckPanel';
 import { ContextMenu } from './ui/contextMenu';
 import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
+import { PROGRAM_TYPES, type ProgramType } from './sim/programs';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const game = new Game(testSystem);
@@ -85,8 +86,12 @@ function runCommand(raw: string): void {
       if (!arg) game.log('usage: do <action> (look lists the actions here)', 'system');
       else if (!game.runAction(arg)) sfx.play('error');
       break;
+    case 'attack':
+    case 'hide':
     case 'scout':
-      if (!game.runProgram('scout', arg)) sfx.play('error');
+    case 'scan':
+    case 'decrypt':
+      if (!game.runProgram(cmd.name, arg)) sfx.play('error');
       break;
     case 'map':
       for (const n of game.network.def.nodes) {
@@ -144,8 +149,8 @@ term.completer = (value) =>
     names: (kind) =>
       kind === 'action'
         ? game.currentActions.map((a) => a.id)
-        : kind === 'scout'
-          ? game.programsOf('scout').map((p) => p.name)
+        : (PROGRAM_TYPES as readonly string[]).includes(kind)
+          ? game.programsOf(kind as ProgramType).map((p) => p.name)
           : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes.filter((n) => game.isKnown(n.id))).map((n) => game.nameOf(n.id)))],
   });
 const view = new NetworkView(document.getElementById('view')!, game, menu, {
@@ -195,7 +200,7 @@ function flush(): void {
     else if (ev.type === 'hop') sfx.play('hop');
     else if (ev.type === 'moved') sfx.play('arrive');
     else if (ev.type === 'paused' && !ev.auto) sfx.play(ev.paused ? 'pause' : 'resume');
-    else if (ev.type === 'program') sfx.play(ev.programType);
+    else if (ev.type === 'program' && ev.programType === 'scout') sfx.play('scout');
   }
 }
 

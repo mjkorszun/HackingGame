@@ -1,6 +1,8 @@
 /** Console command names and tab completion. Pure functions, no DOM. */
 
-export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'scout';
+import { PROGRAM_TYPES, type ProgramType } from '../sim/programs';
+
+export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | ProgramType;
 
 export interface CommandSpec {
   name: string;
@@ -16,7 +18,9 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'connect', aliases: ['go', 'move'], arg: 'neighbour', usage: 'connect <node>', help: 'travel to a node (Tab completes names)' },
   { name: 'look', aliases: ['l'], arg: 'node', usage: 'look [node]', help: 'describe the current node, or another one' },
   { name: 'do', arg: 'action', usage: 'do <action>', help: "use an action of the current node (look lists them)" },
-  { name: 'scout', arg: 'scout', usage: 'scout [n|name]', help: 'run your best Scout, or the Nth one, or one by name' },
+  ...PROGRAM_TYPES.map(
+    (t): CommandSpec => ({ name: t, arg: t, usage: `${t} [n|name]`, help: `run your best ${t} program, or the Nth one, or one by name` }),
+  ),
   { name: 'map', arg: 'none', usage: 'map', help: 'list all nodes' },
   { name: 'pause', arg: 'none', usage: 'pause', help: 'stop time (Space)' },
   { name: 'resume', aliases: ['unpause'], arg: 'none', usage: 'resume', help: 'continue time (Space)' },

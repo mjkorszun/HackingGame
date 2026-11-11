@@ -11,7 +11,7 @@ export function renderDeck(root: HTMLElement, game: Game, run: (program: Program
         <div class="deck-empty">no data yet</div>
       </div>
       <div>
-        <h3>programs</h3>
+        <h3>software</h3>
         <ul class="deck-programs"></ul>
       </div>
     </div>`;
@@ -20,7 +20,7 @@ export function renderDeck(root: HTMLElement, game: Game, run: (program: Program
     const n = game.programsOf(p.type).indexOf(p) + 1;
     const li = document.createElement('li');
     li.className = 'deck-program';
-    li.textContent = `${p.name.padEnd(12)} ${p.type} ${p.rating}`;
+    li.textContent = `${p.name.padEnd(14)} ${p.type} ${p.rating}`;
     li.title = `${p.name}  /  ${p.type} ${n}`;
     li.addEventListener('click', () => run(p));
     list.appendChild(li);

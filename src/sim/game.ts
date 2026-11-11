@@ -1,6 +1,6 @@
 import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { Network } from './network';
-import { SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
+import { PROGRAM_STUBS, SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
 import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
 /** Unidentified nodes are called ?1, ?2, ... */
@@ -40,7 +40,8 @@ interface MoveTask {
 export class Game {
   readonly network: Network;
   tick = 0;
-  paused = false;
+  /** The game starts paused, so the player can look around first. */
+  paused = true;
   /** Half-turn mode: time stops by itself whenever a lasting action ends. */
   autoPause = true;
   currentNode: string;
@@ -59,6 +60,10 @@ export class Game {
   readonly programs: Program[] = [
     { id: 'p1', type: 'scout', name: 'Hawkeye V2', rating: 3 },
     { id: 'p2', type: 'scout', name: 'Owl 1.0', rating: 1 },
+    { id: 'p3', type: 'attack', name: 'Shooter V3', rating: 1 },
+    { id: 'p4', type: 'hide', name: 'Ghost 1.2', rating: 1 },
+    { id: 'p5', type: 'scan', name: 'Sieve 2.0', rating: 1 },
+    { id: 'p6', type: 'decrypt', name: 'Lockpick 1.0', rating: 1 },
   ];
   /** Noise the player made in each node. Nothing reacts to it yet. */
   readonly noise = new Map<string, number>();
@@ -337,6 +342,10 @@ export class Game {
     if (this.move) {
       this.log('cannot run programs while connecting', 'alarm1');
       return false;
+    }
+    if (program.type !== 'scout') {
+      this.log(`${program.name} (${program.type} ${program.rating}): ${PROGRAM_STUBS[program.type]}`, 'info');
+      return true;
     }
     if (this.scout) {
       this.log('scout is already running', 'alarm1');
