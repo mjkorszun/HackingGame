@@ -11,14 +11,16 @@ import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from './sim/programs';
 import { loadAccount, saveAccount } from './ui/account';
 import { showRunSummary } from './ui/runSummary';
+import { HomeScreen, type ContractOffer } from './ui/homeScreen';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const account = loadAccount();
-const game = new Game(testSystem, Math.random, account.programs);
+/** The run in progress; set when the player enters the network from the main screen. */
+let game: Game;
+let term: Console;
+let view: NetworkView;
 const menu = new ContextMenu();
 const sfx = new Sound(import.meta.env.BASE_URL);
-// Browsers block audio until the first click or key, so the link-up sound plays then.
-sfx.onReady = () => sfx.play('linkUp');
 menu.onEvent = (e) => sfx.play(e === 'open' ? 'menuOpen' : e === 'item' ? 'menuItem' : 'menuClose');
 
 function travel(nodeId: string): void {
@@ -176,9 +178,33 @@ function updateDeck(): void {
   deckVersion = game.deckVersion;
   renderDeck(deckEl, game, account.sats, (p) => ui(p.name));
 }
-updateDeck();
 
-const term = new Console(document.getElementById('console')!, (cmd) => {
+const offers: ContractOffer[] = testSystem.contract ? [{ contract: testSystem.contract, system: testSystem }] : [];
+const home = new HomeScreen(document.getElementById('home')!, offers, {
+  choose: () => {},
+  enter: () => enterNetwork(home.contract),
+  click: () => sfx.play('menuItem'),
+});
+renderDeck(home.gear, { programs: account.programs, loot: [], privileges: new Set(), keysFound: false }, account.sats);
+
+/** Leaves the main screen and starts the run: the console, the network view and the clock. */
+function enterNetwork(offer: ContractOffer | undefined): void {
+  const system = { ...(offer?.system ?? testSystem), contract: offer?.contract };
+  game = new Game(system, Math.random, account.programs);
+  home.hide();
+  document.getElementById('app')!.hidden = false;
+  updateDeck();
+  startView();
+  void sfx.ready.then(() => sfx.play('linkUp'));
+  flush();
+  last = performance.now();
+  requestAnimationFrame(frame);
+  // Exposed for debugging and automated checks.
+  (window as unknown as { game: Game }).game = game;
+}
+
+function startView(): void {
+term = new Console(document.getElementById('console')!, (cmd) => {
   sfx.play('command');
   runCommand(cmd);
   flush();
@@ -196,7 +222,7 @@ term.completer = (value) =>
           ? game.programsOf(kind as ProgramType).map((p) => p.name)
           : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes.filter((n) => game.isKnown(n.id))).map((n) => game.nameOf(n.id)))],
   });
-const view = new NetworkView(document.getElementById('view')!, game, menu, {
+view = new NetworkView(document.getElementById('view')!, game, menu, {
   travel: (id) => ui(`connect ${nodeName(id)}`),
   look: (id) => ui(`look ${nodeName(id)}`),
   act: (id) => ui(`do ${id}`),
@@ -213,14 +239,16 @@ const view = new NetworkView(document.getElementById('view')!, game, menu, {
 });
 
 game.log('type help for commands', 'system');
+}
 
 const buildTag = document.createElement('div');
 buildTag.className = 'build-tag';
 buildTag.textContent = __BUILD_LABEL__;
 document.getElementById('view')!.appendChild(buildTag);
+document.getElementById('home')!.appendChild(buildTag.cloneNode(true));
 
 document.addEventListener('keydown', (e) => {
-  if (term.inputFocused || game.ended) return;
+  if (!game || term.inputFocused || game.ended) return;
   if (e.code === 'Space') {
     ui(game.paused ? 'resume' : 'pause');
     e.preventDefault();
@@ -262,8 +290,3 @@ function frame(now: number): void {
   updateDeck();
   requestAnimationFrame(frame);
 }
-flush();
-requestAnimationFrame(frame);
-
-// Exposed for debugging and automated checks.
-(window as unknown as { game: Game }).game = game;

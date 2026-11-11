@@ -31,7 +31,7 @@ export const COMMANDS: CommandSpec[] = [
   ...PROGRAM_TYPES.map(
     (t): CommandSpec => ({ name: t, arg: t, usage: (FILE_PROGRAMS as readonly string[]).includes(t) ? `${t} <file>` : `${t} [n|name]`, help: PROGRAM_HELP[t] ?? `run your best ${t} program, or the Nth one, or one by name` }),
   ),
-  { name: 'download', arg: 'file', usage: 'download <file>', help: 'copy a decrypted file (valuable data or software) into your deck' },
+  { name: 'download', arg: 'file', usage: 'download <file>', help: 'copy a decrypted file (valuable data or software) into your gear' },
   { name: 'alter', arg: 'file', usage: 'alter <file>', help: 'change contract data' },
   { name: 'delete', arg: 'file', usage: 'delete <file>', help: 'destroy contract data' },
   { name: 'extract', arg: 'file', usage: 'extract <file>', help: 'take the privilege or keys from a keyring' },
