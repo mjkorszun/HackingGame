@@ -48,7 +48,7 @@ const HELP = [
   "programs: type a program's own name to run it (e.g. Hawkeye V2).",
   'Tab completes commands, node and program names; Tab twice lists the options.',
   'mouse: click a node to connect, right-click for actions, click the minimap to travel.',
-  'keys: Space pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
+  'keys: Space pause, A auto-pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
 ];
 
 function runCommand(raw: string): void {
@@ -107,6 +107,9 @@ function runCommand(raw: string): void {
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
       break;
+    case 'autopause':
+      game.setAutoPause(!game.autoPause);
+      break;
     case 'mute':
       sfx.toggleMute();
       game.log(sfx.muted ? 'sound off' : 'sound on', 'system');
@@ -152,6 +155,7 @@ const view = new NetworkView(document.getElementById('view')!, game, menu, {
   run: (p) => ui(p.name),
   togglePause: () => ui(game.paused ? 'resume' : 'pause'),
   mute: () => ui('mute'),
+  autoPause: () => ui('autopause'),
   hover: () => sfx.play('hover'),
   sound: sfx,
 });
@@ -173,6 +177,8 @@ document.addEventListener('keydown', (e) => {
     else if (game.isMoving || game.isScouting) ui('stop');
   } else if (e.key === 'm' || e.key === 'M') {
     ui('mute');
+  } else if (e.key === 'a' || e.key === 'A') {
+    ui('autopause');
   } else if (/^[1-9]$/.test(e.key)) {
     const id = view.neighbourByNumber(Number(e.key));
     if (id) ui(`connect ${nodeName(id)}`);

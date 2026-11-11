@@ -82,6 +82,15 @@ function drawEye(x: number, y: number, scale: number, opacity: number, parent: E
   svg('circle', { cx: 0, cy: 0, r: 3, class: 'scout-eye-pupil' }, g);
 }
 
+const icon = (body: string) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${body}</svg>`;
+const SPEAKER = '<path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>';
+const ICON_SPEAKER_ON = icon(`${SPEAKER}<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`);
+const ICON_SPEAKER_OFF = icon(`${SPEAKER}<path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`);
+/** Stopwatch with pause bars: time that stops by itself. */
+const ICON_AUTO_PAUSE = icon(
+  '<circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 2.5h4M12 2.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="9" y="10" width="2.2" height="7" fill="currentColor"/><rect x="12.8" y="10" width="2.2" height="7" fill="currentColor"/>',
+);
+
 function formatTime(tick: number): string {
   const total = Math.floor(tick / TICKS_PER_SECOND);
   const m = Math.floor(total / 60);
@@ -97,6 +106,7 @@ export interface ViewActions {
   run(program: Program): void;
   togglePause(): void;
   mute(): void;
+  autoPause(): void;
   hover(): void;
   sound: Sound;
 }
@@ -110,6 +120,7 @@ export class NetworkView {
   private readonly clock: HTMLElement;
   private readonly pauseBtn: HTMLButtonElement;
   private readonly muteBtn: HTMLButtonElement;
+  private readonly autoBtn: HTMLButtonElement;
   private readonly stage: SVGSVGElement;
   /** The minimap is its own small SVG pinned to the bottom-right corner of the view. */
   private readonly miniSvg: SVGSVGElement;
@@ -157,6 +168,12 @@ export class NetworkView {
     this.muteBtn.className = 'mute-btn';
     this.muteBtn.title = 'Sound on / off (M)';
     this.muteBtn.addEventListener('click', () => actions.mute());
+    this.autoBtn = document.createElement('button');
+    this.autoBtn.type = 'button';
+    this.autoBtn.className = 'icon-btn auto-btn';
+    this.autoBtn.title = 'Auto-pause: time stops after every action (A)';
+    this.autoBtn.innerHTML = ICON_AUTO_PAUSE;
+    this.autoBtn.addEventListener('click', () => actions.autoPause());
     const vol = document.createElement('input');
     vol.type = 'range';
     vol.min = '0';
@@ -168,7 +185,7 @@ export class NetworkView {
     vol.addEventListener('input', () => actions.sound.setVolume(Number(vol.value) / 100));
     vol.addEventListener('change', () => actions.sound.play('hop'));
     soundBox.append(this.muteBtn, vol);
-    this.header.append(title, alarm, soundBox, this.clock, this.pauseBtn);
+    this.header.append(title, alarm, soundBox, this.clock, this.autoBtn, this.pauseBtn);
 
     this.stage = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stage', role: 'img' });
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -187,7 +204,12 @@ export class NetworkView {
   update(): void {
     this.clock.textContent = formatTime(this.game.tick);
     this.pauseBtn.textContent = this.game.paused ? '▶ RESUME' : '❚❚ PAUSE';
-    this.muteBtn.textContent = this.actions.sound.muted ? 'SND OFF' : 'SND ON';
+    const muted = this.actions.sound.muted;
+    if (this.muteBtn.dataset.muted !== String(muted)) {
+      this.muteBtn.dataset.muted = String(muted);
+      this.muteBtn.innerHTML = muted ? ICON_SPEAKER_OFF : ICON_SPEAKER_ON;
+    }
+    this.autoBtn.classList.toggle('is-on', this.game.autoPause);
     this.muteBtn.classList.toggle('is-muted', this.actions.sound.muted);
     this.header.classList.toggle('is-paused', this.game.paused);
     const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}|${this.game.knownCount}`;

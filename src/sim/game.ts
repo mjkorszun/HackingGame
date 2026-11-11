@@ -41,6 +41,8 @@ export class Game {
   readonly network: Network;
   tick = 0;
   paused = false;
+  /** Half-turn mode: time stops by itself whenever a lasting action ends. */
+  autoPause = false;
   currentNode: string;
 
   private move: MoveTask | null = null;
@@ -92,6 +94,16 @@ export class Game {
 
   togglePause(): void {
     this.setPaused(!this.paused);
+  }
+
+  setAutoPause(on: boolean): void {
+    this.autoPause = on;
+    this.log(on ? 'auto-pause on: time stops after every action' : 'auto-pause off', 'system');
+  }
+
+  /** A lasting action (travel, a program) has ended. */
+  private actionEnded(): void {
+    if (this.autoPause) this.setPaused(true);
   }
 
   /** Whether the player knows this node exists (it is drawn and can be targeted). */
@@ -271,6 +283,7 @@ export class Game {
         this.log(`node identified: ${this.nameOf(this.currentNode)}`, 'info');
       }
       this.startNextHop();
+      if (!this.move) this.actionEnded();
     }
   }
 
@@ -401,6 +414,7 @@ export class Game {
     }
     this.scout = null;
     this.log('scout finished', 'info');
+    this.actionEnded();
   }
 
   log(text: string, color: LogColor = 'normal'): void {

@@ -21,6 +21,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'pause', arg: 'none', usage: 'pause', help: 'stop time (Space)' },
   { name: 'resume', aliases: ['unpause'], arg: 'none', usage: 'resume', help: 'continue time (Space)' },
   { name: 'stop', arg: 'none', usage: 'stop', help: 'stop travelling after this hop, or stop a running scout (Esc)' },
+  { name: 'autopause', arg: 'none', usage: 'autopause', help: 'auto-pause on / off: time stops after every action (A)' },
   { name: 'mute', arg: 'none', usage: 'mute', help: 'sound on / off (M)' },
   { name: 'clear', arg: 'none', usage: 'clear', help: 'clear the console' },
 ];

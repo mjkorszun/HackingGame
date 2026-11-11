@@ -291,3 +291,34 @@ describe('scout', () => {
     expect(s.isIdentified('staff')).toBe(true);
   });
 });
+
+describe('auto-pause', () => {
+  it('stops time when travel ends, not after each hop', () => {
+    const g = new Game(testSystem);
+    g.revealMap();
+    g.setAutoPause(true);
+    g.travelTo('auth');
+    run(g, MOVE_TICKS);
+    expect(g.currentNode).toBe('edge');
+    expect(g.paused).toBe(false);
+    run(g, MOVE_TICKS);
+    expect(g.currentNode).toBe('auth');
+    expect(g.paused).toBe(true);
+  });
+
+  it('stops time when a program ends', () => {
+    const g = new Game(testSystem, () => 0.99);
+    g.setAutoPause(true);
+    g.runProgram('scout');
+    for (let i = 0; i < 100 && !g.paused; i++) g.step();
+    expect(g.isScouting).toBe(false);
+    expect(g.paused).toBe(true);
+  });
+
+  it('is off by default', () => {
+    const g = new Game(testSystem);
+    g.travelTo('edge');
+    run(g, MOVE_TICKS);
+    expect(g.paused).toBe(false);
+  });
+});
