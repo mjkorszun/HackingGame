@@ -269,11 +269,11 @@ body {
 /* ---------- current node as a room ---------- */
 .room-body { fill: #020c05; stroke: var(--kc, var(--green)); stroke-width: 3; }
 .room-grid line { stroke: var(--green-faint); stroke-width: 1; }
-.room-head { fill: #000; stroke: var(--green-faint); }
 .room-icon { stroke-width: 2; }
 .room-title { fill: var(--green); font-family: var(--font); font-size: 15px; font-weight: bold; }
 .room-kind { fill: var(--grey); font-family: var(--font); font-size: 12px; }
 .room-door { fill: var(--kc, var(--green)); }
-.room text, .room-door, .data-block, .room-icon { pointer-events: none; }
+.room text, .room-door, .data-block, .room-grid, .room-hud { pointer-events: none; }
+.room-body { stroke-width: 3; }
 .data-block rect { fill: #0d3318; stroke: #5dff8a; stroke-width: 1.5; }
 .data-block line { stroke: #5dff8a; stroke-width: 1.2; }
