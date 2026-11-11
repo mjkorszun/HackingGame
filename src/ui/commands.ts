@@ -1,6 +1,6 @@
 /** Console command names and tab completion. Pure functions, no DOM. */
 
-export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'program';
+export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'scout';
 
 export interface CommandSpec {
   name: string;
@@ -16,7 +16,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'connect', aliases: ['go', 'move'], arg: 'neighbour', usage: 'connect <node>', help: 'travel to a node (Tab completes names)' },
   { name: 'look', aliases: ['l'], arg: 'node', usage: 'look [node]', help: 'describe the current node, or another one' },
   { name: 'do', arg: 'action', usage: 'do <action>', help: "use an action of the current node (look lists them)" },
-  { name: 'run', arg: 'program', usage: 'run <program>', help: 'run a program from your deck (e.g. run scout)' },
+  { name: 'scout', arg: 'scout', usage: 'scout [n|name]', help: 'run your best Scout, or the Nth one, or one by name' },
   { name: 'map', arg: 'none', usage: 'map', help: 'list all nodes' },
   { name: 'pause', arg: 'none', usage: 'pause', help: 'stop time (Space)' },
   { name: 'resume', aliases: ['unpause'], arg: 'none', usage: 'resume', help: 'continue time (Space)' },
@@ -41,6 +41,8 @@ export function splitCommand(raw: string): { word: string; arg: string } {
 export interface CompletionContext {
   /** Names a command argument can take, per argument kind. */
   names(kind: Exclude<ArgKind, 'none'>): string[];
+  /** Extra whole-line commands, such as program names typed on their own ("Rocket Launcher V007"). */
+  extraCommands?(): string[];
 }
 
 export interface Completion {
@@ -66,23 +68,28 @@ export function complete(input: string, ctx: CompletionContext): Completion {
   const lead = input.match(/^\s*/)![0];
   const body = input.slice(lead.length);
   const space = body.search(/\s/);
+  const extras = (ctx.extraCommands?.() ?? []).filter((n) => n.toLowerCase().startsWith(body.toLowerCase()));
+  const completeAmong = (options: string[], suffix: (o: string) => string): Completion => {
+    if (options.length === 1) return { value: options[0] + suffix(options[0]), options };
+    const common = commonPrefix(options);
+    return { value: common.length > body.length ? common : input, options };
+  };
 
-  // Completing the command word.
+  // Completing the command word (or a program name typed on its own).
   if (space < 0) {
     const prefix = body.toLowerCase();
     const matches = COMMANDS.filter((c) => c.name.startsWith(prefix));
-    const options = matches.map((c) => c.name);
-    if (matches.length === 1) {
-      const c = matches[0];
-      return { value: c.name + (c.arg === 'none' ? '' : ' '), options };
-    }
-    const common = commonPrefix(options);
-    return { value: common.length > body.length ? common : input, options };
+    const options = [...matches.map((c) => c.name), ...extras];
+    return completeAmong(options, (o) => {
+      const c = matches.find((m) => m.name === o);
+      return c && c.arg !== 'none' ? ' ' : '';
+    });
   }
 
   // Completing the argument.
   const word = body.slice(0, space);
   const cmd = findCommand(word);
+  if (!cmd && extras.length) return completeAmong(extras, () => '');
   if (!cmd || cmd.arg === 'none') return { value: input, options: [] };
   const argPrefix = body.slice(space).replace(/^\s+/, '');
   const options = ctx.names(cmd.arg).filter((n) => n.toLowerCase().startsWith(argPrefix.toLowerCase()));

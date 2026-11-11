@@ -1,6 +1,6 @@
 import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { Network } from './network';
-import { SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program } from './programs';
+import { SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
 import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
 /** Unidentified nodes are called ?1, ?2, ... */
@@ -54,7 +54,10 @@ export class Game {
   /** Privileges the player holds in this system. */
   readonly privileges = new Set<Privilege>();
   /** Programs in the player's deck. */
-  readonly programs: Program[] = [{ id: 'scout', name: 'Scout', rating: 3 }];
+  readonly programs: Program[] = [
+    { id: 'p1', type: 'scout', name: 'Hawkeye V2', rating: 3 },
+    { id: 'p2', type: 'scout', name: 'Owl 1.0', rating: 1 },
+  ];
   /** Noise the player made in each node. Nothing reacts to it yet. */
   readonly noise = new Map<string, number>();
 
@@ -282,10 +285,34 @@ export class Game {
   }
 
   /** Runs a program from the deck. Returns false if it could not start. */
-  runProgram(id: string): boolean {
-    const program = this.programs.find((p) => p.id === id.trim().toLowerCase());
+  /** The player's programs of one type, in deck order. */
+  programsOf(type: ProgramType): Program[] {
+    return this.programs.filter((p) => p.type === type);
+  }
+
+  /**
+   * Picks a program of a type: no query = the highest rating; a number = the Nth
+   * program of that type in the deck; otherwise its name.
+   */
+  findProgram(type: ProgramType, query = ''): Program | undefined {
+    const list = this.programsOf(type);
+    const q = query.trim().toLowerCase();
+    if (!q) return [...list].sort((a, b) => b.rating - a.rating)[0];
+    if (/^\d+$/.test(q)) return list[Number(q) - 1];
+    return list.find((p) => p.name.toLowerCase() === q);
+  }
+
+  /** A program by its own name, whatever its type. */
+  programByName(name: string): Program | undefined {
+    const q = name.trim().toLowerCase();
+    return this.programs.find((p) => p.name.toLowerCase() === q);
+  }
+
+  /** Runs a program of a type (see findProgram). Returns false if it could not start. */
+  runProgram(type: ProgramType, query = ''): boolean {
+    const program = this.findProgram(type, query);
     if (!program) {
-      this.log(`no program "${id}" in your deck`, 'alarm1');
+      this.log(query ? `no ${type} program "${query}" in your deck` : `no ${type} program in your deck`, 'alarm1');
       return false;
     }
     if (this.move) {
@@ -299,7 +326,7 @@ export class Game {
     const here = this.currentNode;
     const { identify, extend } = scoutChances(program.rating, this.network.def.encryption ?? 1);
     this.noise.set(here, (this.noise.get(here) ?? 0) + SCOUT_NOISE);
-    this.log(`scout ${program.rating} launched. it is loud: noise in ${this.nameOf(here)} +${SCOUT_NOISE}`, 'system');
+    this.log(`${program.name} (scout ${program.rating}) launched. it is loud: noise in ${this.nameOf(here)} +${SCOUT_NOISE}`, 'system');
     const neighbours = this.network.neighbours(here).map((n) => n.id);
     this.scout = {
       depth: 1,

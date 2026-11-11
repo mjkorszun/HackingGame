@@ -54,3 +54,12 @@ describe('command parsing', () => {
     expect(findCommand('nope')).toBeUndefined();
   });
 });
+
+describe('program names as commands', () => {
+  const ctx = { names: () => [], extraCommands: () => ['Hawkeye V2', 'Owl 1.0'] };
+  it('completes a program name typed on its own', () => {
+    expect(complete('haw', ctx).value).toBe('Hawkeye V2');
+    expect(complete('Owl', ctx).value).toBe('Owl 1.0');
+    expect(complete('hawkeye v', ctx).value).toBe('Hawkeye V2');
+  });
+});

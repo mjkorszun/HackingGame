@@ -1,3 +1,4 @@
+import type { Program } from '../sim/programs';
 import type { Game } from '../sim/game';
 import { TICKS_PER_SECOND } from '../sim/game';
 import type { NodeDef, NodeKind } from '../sim/types';
@@ -93,7 +94,7 @@ export interface ViewActions {
   travel(nodeId: string): void;
   look(nodeId: string): void;
   act(actionId: string): void;
-  run(programId: string): void;
+  run(program: Program): void;
   togglePause(): void;
   mute(): void;
   hover(): void;
@@ -531,7 +532,7 @@ export class NetworkView {
     items.push({ label: 'Look', action: () => this.actions.look(node.id) });
     if (isCurrent) {
       for (const prog of this.game.programs) {
-        items.push({ label: `Run ${prog.name}`, hint: `run ${prog.id}`, disabled: this.game.isScouting, action: () => this.actions.run(prog.id) });
+        items.push({ label: `Run ${prog.name}`, hint: `${prog.type} ${prog.rating}`, disabled: this.game.isScouting, action: () => this.actions.run(prog) });
       }
       for (const act of this.game.currentActions) {
         items.push({ label: act.id, hint: act.requires ? `${act.requires} priv.` : undefined, action: () => this.actions.act(act.id) });

@@ -45,12 +45,19 @@ function look(nodeId: string): void {
 const HELP = [
   'commands:',
   ...COMMANDS.map((c) => `  ${c.usage.padEnd(16)}${c.help}`),
-  'Tab completes commands and node names; Tab twice lists the options.',
+  "programs: type a program's own name to run it (e.g. Hawkeye V2).",
+  'Tab completes commands, node and program names; Tab twice lists the options.',
   'mouse: click a node to connect, right-click for actions, click the minimap to travel.',
   'keys: Space pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
 ];
 
 function runCommand(raw: string): void {
+  // A program's own name works as a command: "Hawkeye V2".
+  const program = game.programByName(raw);
+  if (program) {
+    if (!game.runProgram(program.type, program.name)) sfx.play('error');
+    return;
+  }
   const { word, arg } = splitCommand(raw);
   const cmd = findCommand(word);
   if (!cmd) {
@@ -78,9 +85,8 @@ function runCommand(raw: string): void {
       if (!arg) game.log('usage: do <action> (look lists the actions here)', 'system');
       else if (!game.runAction(arg)) sfx.play('error');
       break;
-    case 'run':
-      if (!arg) game.log('usage: run <program> (your deck lists them)', 'system');
-      else if (!game.runProgram(arg)) sfx.play('error');
+    case 'scout':
+      if (!game.runProgram('scout', arg)) sfx.play('error');
       break;
     case 'map':
       for (const n of game.network.def.nodes) {
@@ -121,7 +127,7 @@ function ui(cmd: string): void {
 
 const nodeName = (id: string) => game.nameOf(id);
 
-renderDeck(document.getElementById('deck')!, game, (id) => ui(`run ${id}`));
+renderDeck(document.getElementById('deck')!, game, (p) => ui(p.name));
 
 const term = new Console(document.getElementById('console')!, (cmd) => {
   sfx.play('command');
@@ -131,18 +137,19 @@ const term = new Console(document.getElementById('console')!, (cmd) => {
 term.onType = () => sfx.play('key');
 term.completer = (value) =>
   complete(value, {
+    extraCommands: () => game.programs.map((p) => p.name),
     names: (kind) =>
       kind === 'action'
         ? game.currentActions.map((a) => a.id)
-        : kind === 'program'
-          ? game.programs.map((p) => p.id)
+        : kind === 'scout'
+          ? game.programsOf('scout').map((p) => p.name)
           : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes.filter((n) => game.isKnown(n.id))).map((n) => game.nameOf(n.id)))],
   });
 const view = new NetworkView(document.getElementById('view')!, game, menu, {
   travel: (id) => ui(`connect ${nodeName(id)}`),
   look: (id) => ui(`look ${nodeName(id)}`),
   act: (id) => ui(`do ${id}`),
-  run: (id) => ui(`run ${id}`),
+  run: (p) => ui(p.name),
   togglePause: () => ui(game.paused ? 'resume' : 'pause'),
   mute: () => ui('mute'),
   hover: () => sfx.play('hover'),

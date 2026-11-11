@@ -1,7 +1,8 @@
 import type { Game } from '../sim/game';
+import type { Program } from '../sim/programs';
 
 /** The panel under the console: your own hardware and programs. Click a program to run it. */
-export function renderDeck(root: HTMLElement, game: Game, run: (id: string) => void): void {
+export function renderDeck(root: HTMLElement, game: Game, run: (program: Program) => void): void {
   root.innerHTML = `
     <div class="deck-title">YOUR DECK</div>
     <div class="deck-cols">
@@ -16,11 +17,12 @@ export function renderDeck(root: HTMLElement, game: Game, run: (id: string) => v
     </div>`;
   const list = root.querySelector('.deck-programs')!;
   for (const p of game.programs) {
+    const n = game.programsOf(p.type).indexOf(p) + 1;
     const li = document.createElement('li');
     li.className = 'deck-program';
-    li.textContent = `${p.name.padEnd(10)} ${p.rating}`;
-    li.title = `run ${p.id}`;
-    li.addEventListener('click', () => run(p.id));
+    li.textContent = `${p.name.padEnd(12)} ${p.type} ${p.rating}`;
+    li.title = `${p.name}  /  ${p.type} ${n}`;
+    li.addEventListener('click', () => run(p));
     list.appendChild(li);
   }
 }

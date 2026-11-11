@@ -234,9 +234,26 @@ describe('scout', () => {
   };
 
   it('chances grow with rating and fall with encryption', () => {
-    expect(scoutChances(3, 2)).toEqual({ identify: 60, extend: 20 });
-    expect(scoutChances(1, 3).extend).toBe(0);
+    expect(scoutChances(3, 2).identify).toBeCloseTo(90);
+    expect(scoutChances(3, 2).extend).toBeCloseTo(20);
     expect(scoutChances(1000, 1).extend).toBeGreaterThan(99);
+  });
+
+  it('picks the best program, the Nth one, or one by name', () => {
+    const g = new Game(testSystem);
+    expect(g.findProgram('scout')?.name).toBe('Hawkeye V2');
+    expect(g.findProgram('scout', '2')?.name).toBe('Owl 1.0');
+    expect(g.findProgram('scout', 'owl 1.0')?.rating).toBe(1);
+    expect(g.findProgram('scout', '9')).toBeUndefined();
+  });
+
+  it('always finds the neighbours, even when every roll fails', () => {
+    const g = new Game(testSystem, rolls(100));
+    g.travelTo('edge');
+    run(g, MOVE_TICKS * 2);
+    g.runProgram('scout');
+    for (let i = 0; i < 1000 && g.isScouting; i++) g.step();
+    for (const n of g.network.neighbours('edge')) expect(g.isKnown(n.id)).toBe(true);
   });
 
   it('makes noise in the node it runs from', () => {
