@@ -105,13 +105,13 @@ function runCommand(raw: string): void {
       if (!arg) game.log('usage: do <action> (look lists the actions here)', 'system');
       else if (!game.runAction(arg)) sfx.play('error');
       break;
-    case 'decrypt':
-      if (!game.decryptCommand(arg)) sfx.play('error');
+    case 'scan':
+      if (!game.scanCommand(arg)) sfx.play('error');
       break;
     case 'evaluate':
     case 'identify':
     case 'defuse':
-    case 'brute':
+    case 'decrypt':
     case 'scrub':
     case 'forge':
     case 'download':
@@ -123,7 +123,7 @@ function runCommand(raw: string): void {
     case 'attack':
     case 'hide':
     case 'scout':
-    case 'decrypt':
+    case 'scan':
       if (!game.runProgram(cmd.name, arg)) sfx.play('error');
       break;
     case 'map':
@@ -141,7 +141,7 @@ function runCommand(raw: string): void {
       game.setPaused(false);
       break;
     case 'stop':
-      if (game.cancelScout() || game.cancelDecrypt()) break;
+      if (game.cancelScout() || game.cancelScan()) break;
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
       break;
@@ -227,8 +227,8 @@ view = new NetworkView(document.getElementById('view')!, game, menu, {
   look: (id) => ui(`look ${nodeName(id)}`),
   act: (id) => ui(`do ${id}`),
   run: (p) => ui(p.name),
-  decryptFile: (fileId, all) => ui(all ? `decrypt all ${fileId}` : `decrypt ${fileId}`),
-  decryptAll: () => ui('decrypt all'),
+  scanFile: (fileId, all) => ui(all ? `scan all ${fileId}` : `scan ${fileId}`),
+  scanAll: () => ui('scan all'),
   fileAction: (action, fileId) => ui(`${action} ${fileId}`),
   togglePause: () => ui(game.paused ? 'resume' : 'pause'),
   mute: () => ui('mute'),
@@ -275,7 +275,7 @@ function flush(): void {
     else if (ev.type === 'hop') sfx.play('hop');
     else if (ev.type === 'moved') sfx.play('arrive');
     else if (ev.type === 'paused' && !ev.auto) sfx.play(ev.paused ? 'pause' : 'resume');
-    else if (ev.type === 'program' && (ev.programType === 'scout' || ev.programType === 'decrypt')) sfx.play(ev.programType);
+    else if (ev.type === 'program' && (ev.programType === 'scout' || ev.programType === 'scan')) sfx.play(ev.programType);
   }
 }
 

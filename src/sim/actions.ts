@@ -30,7 +30,7 @@ export const NODE_ACTIONS: Partial<Record<NodeKind, NodeAction[]>> = {
     a('sniff', 'listen to the traffic and learn about the other system', 'nothing useful in the traffic yet'),
     a('isolate', 'cut traffic to the other system: no alarms and no agents get through', 'uplink isolated: alarms and agents will not pass through (alarms and agents come later)'),
   ],
-  vault: [a('extract-keys', 'take the keys: decrypting in this system gets easier', 'no keys yet (encryption comes later)')],
+  vault: [a('extract-keys', 'take the keys: scanning in this system gets easier', 'no keys yet (encryption comes later)')],
   overseer: [
     a('download-map', 'get the map of the whole system', ''),
     a('backdoor', 'leave a way in: next run starts deep inside this system', 'backdoor placed (backdoors come later)'),

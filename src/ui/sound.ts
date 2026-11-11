@@ -18,7 +18,7 @@ const SOUNDS = {
   key: 'click1.wav',
   // One sound per program type, played when it starts.
   scout: 'zap_three_tone_up.ogg',
-  decrypt: 'three_tone_1.ogg',
+  scan: 'three_tone_1.ogg',
 } as const;
 
 export type SoundName = keyof typeof SOUNDS;

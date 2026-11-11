@@ -1,22 +1,22 @@
 import type { Program, ProgramType } from './programs';
 
-/** What a data file turns out to hold once decrypted. contract: data a contract needs altered or deleted. */
+/** What a data file turns out to hold once scanned. contract: data a contract needs altered or deleted. */
 export type FileContent = 'worthless' | 'valuable' | 'software' | 'contract' | 'honeytoken' | 'keyring';
 
 /**
  * Extra protection on an archive, beyond its encryption. Each needs its own program:
- * killswitch (destroys itself if decrypted before Defuse), seal (too strong for decrypt
- * until Brute cracks it), tracker (downloading tags you until Scrub removes it),
+ * killswitch (destroys itself if scanned before Defuse), seal (scan cannot read it
+ * until Decrypt cracks it), tracker (downloading tags you until Scrub removes it),
  * lock (opens only with a privilege, or after Forge fakes one).
  */
 export type Protection = 'killswitch' | 'seal' | 'tracker' | 'lock';
 
 /** The program that removes each protection. */
-export const PROTECTION_PROGRAM = { killswitch: 'defuse', seal: 'brute', tracker: 'scrub', lock: 'forge' } as const;
+export const PROTECTION_PROGRAM = { killswitch: 'defuse', seal: 'decrypt', tracker: 'scrub', lock: 'forge' } as const;
 
 export const PROTECTION_LABEL: Record<Protection, string> = {
-  killswitch: 'kill switch: destroys itself if decrypted (defuse)',
-  seal: 'heavy seal: too strong for decrypt (brute)',
+  killswitch: 'kill switch: destroys itself if scanned (defuse)',
+  seal: 'sealed: scan cannot read it until decrypt cracks it',
   tracker: 'tracker: tags whoever downloads it (scrub)',
   lock: 'privilege lock (needs the privilege, or forge)',
 };
@@ -28,7 +28,7 @@ export interface DataFile {
   /** f1, f2, ... within its node. */
   id: string;
   content: FileContent;
-  decrypted: boolean;
+  scanned: boolean;
   /** valuable: its price in credits, fixed when the file is made; shown once evaluated. */
   price?: number;
   evaluated?: boolean;
@@ -52,8 +52,8 @@ export interface DataFile {
   deleted?: boolean;
 }
 
-/** Actions a file offers once decrypted. */
-export type FileAction = 'evaluate' | 'identify' | 'download' | 'alter' | 'delete' | 'extract' | 'defuse' | 'brute' | 'scrub' | 'forge';
+/** Actions a file offers once scanned. */
+export type FileAction = 'evaluate' | 'identify' | 'download' | 'alter' | 'delete' | 'extract' | 'defuse' | 'decrypt' | 'scrub' | 'forge';
 
 /** What the player believes the file is: an undetected honeytoken looks valuable. */
 export function apparentContent(f: DataFile): FileContent {
@@ -64,15 +64,15 @@ export function fileActions(f: DataFile): FileAction[] {
   if (f.deleted) return [];
   // Removing a protection works on an encrypted file too.
   const guard: FileAction[] = f.protection ? [PROTECTION_PROGRAM[f.protection]] : [];
-  if (!f.decrypted) return guard;
+  if (!f.scanned) return guard;
   return [...guard, ...contentActions(f)];
 }
 
-/** What a left click does on a decrypted file, if anything. */
+/** What a left click does on a scanned file, if anything. */
 export function clickAction(f: DataFile): FileAction | undefined {
   if (f.deleted) return undefined;
-  // A sealed archive must be cracked before it can be decrypted.
-  if (!f.decrypted) return f.protection === 'seal' ? PROTECTION_PROGRAM.seal : undefined;
+  // A sealed archive must be cracked before it can be scanned.
+  if (!f.scanned) return f.protection === 'seal' ? PROTECTION_PROGRAM.seal : undefined;
   switch (apparentContent(f)) {
     case 'valuable':
       if (!f.evaluated) return 'evaluate';
@@ -105,15 +105,16 @@ const SOFTWARE_NAMES: Record<string, string[]> = {
   attack: ['Mace 15', 'Charge 2.1', 'Rocket Launcher V007'],
   hide: ['Shade 3.0', 'Mirage V2'],
   scout: ['Kestrel 1.4', 'Periscope V5'],
+  scan: ['Glimpse 2', 'X-Ray 1.9'],
   decrypt: ['Skeleton Key 3', 'Crowbar 1.9'],
 };
 
-/** Placeholder: ticks to decrypt one file with a rating-1 decrypt program. */
-export const DECRYPT_TICKS = 12;
+/** Placeholder: ticks to scan one file with a rating-1 scan program. */
+export const SCAN_TICKS = 12;
 
-/** Ticks to decrypt one file with a program of this rating. */
-export function decryptTicks(rating: number): number {
-  return Math.max(3, Math.round(DECRYPT_TICKS / Math.max(1, rating)));
+/** Ticks to scan one file with a program of this rating. */
+export function scanTicks(rating: number): number {
+  return Math.max(3, Math.round(SCAN_TICKS / Math.max(1, rating)));
 }
 
 /** A small seeded generator, so a node holds the same files every run. */
@@ -140,7 +141,7 @@ export function generateFiles(nodeId: string, security = 1): DataFile[] {
     const r = rand();
     const content: FileContent =
       r < 0.5 ? 'worthless' : r < 0.75 ? 'valuable' : r < 0.84 ? 'software' : r < 0.93 ? 'keyring' : 'honeytoken';
-    const file: DataFile = { id: `f${i + 1}`, content, decrypted: false };
+    const file: DataFile = { id: `f${i + 1}`, content, scanned: false };
     // A honeytoken carries a believable price too: that is the bait.
     if (content === 'valuable' || content === 'honeytoken') file.price = filePrice(security, rand);
     if (content === 'keyring') {

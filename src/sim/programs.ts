@@ -1,13 +1,13 @@
 /** A program in the player's deck. */
-export const PROGRAM_TYPES = ['attack', 'hide', 'scout', 'decrypt', 'evaluate', 'identify', 'defuse', 'brute', 'scrub', 'forge'] as const;
+export const PROGRAM_TYPES = ['attack', 'hide', 'scout', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
 
 /** Programs used on one data file: evaluate f3, defuse f3, ... */
-export const FILE_PROGRAMS = ['evaluate', 'identify', 'defuse', 'brute', 'scrub', 'forge'] as const;
+export const FILE_PROGRAMS = ['evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
 export type FileProgram = (typeof FILE_PROGRAMS)[number];
 export type ProgramType = (typeof PROGRAM_TYPES)[number];
 
 /** Placeholder results for programs whose systems don't exist yet. */
-export const PROGRAM_STUBS: Record<Exclude<ProgramType, 'scout' | 'decrypt' | FileProgram>, string> = {
+export const PROGRAM_STUBS: Record<Exclude<ProgramType, 'scout' | 'scan' | FileProgram>, string> = {
   attack: 'no agent here to attack (agents come later)',
   hide: 'you blend into the normal traffic (hiding comes later)',
 };
