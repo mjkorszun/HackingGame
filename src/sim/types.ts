@@ -48,6 +48,8 @@ export interface SystemDef {
   encryption?: number;
   /** Security level: how valuable the data kept here is (and, later, how hard it fights back). */
   security?: number;
+  /** Agents that start in this system. */
+  agents?: { kind: 'warrior'; node: string }[];
   /** The job the player was hired for in this system. */
   contract?: ContractDef;
 }
@@ -87,4 +89,10 @@ export type SimEvent =
   | { type: 'moved'; nodeId: string }
   /** auto: caused by auto-pause, not by the player (played without a sound). */
   | { type: 'paused'; paused: boolean; auto?: boolean }
-  | { type: 'program'; programType: ProgramType };
+  | { type: 'program'; programType: ProgramType }
+  /** An agent queries the player: the game pauses and the player must answer. */
+  | { type: 'query'; agentId: string }
+  /** The player's integrity hit zero: thrown out of the net. */
+  | { type: 'kicked' }
+  | { type: 'alarm'; level: number }
+  | { type: 'hit' };

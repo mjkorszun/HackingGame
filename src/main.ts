@@ -121,7 +121,16 @@ function runCommand(raw: string): void {
       if (!game.fileAction(cmd.name, arg)) sfx.play('error');
       break;
     case 'attack':
+    case 'silence':
+    case 'deceive':
+      if (!game.agentCommand(cmd.name, arg)) sfx.play('error');
+      break;
+    case 'present':
+    case 'ignore':
+      if (!game.answerQuery(cmd.name)) sfx.play('error');
+      break;
     case 'hide':
+    case 'analyze':
     case 'scout':
     case 'scan':
       if (!game.runProgram(cmd.name, arg)) sfx.play('error');
@@ -216,6 +225,8 @@ term.completer = (value) =>
     names: (kind) =>
       kind === 'action'
         ? game.currentActions.map((a) => a.id)
+        : kind === 'agent'
+          ? game.agentsIn(game.currentNode).map((a) => a.name)
         : kind === 'file' || (FILE_PROGRAMS as readonly string[]).includes(kind)
           ? game.filesIn(game.currentNode).filter((f) => fileActions(f).length).map((f) => f.id)
         : (PROGRAM_TYPES as readonly string[]).includes(kind)
@@ -235,6 +246,7 @@ view = new NetworkView(document.getElementById('view')!, game, menu, {
   autoPause: () => ui('autopause'),
   hover: () => sfx.play('hover'),
   exit: () => ui('exit'),
+  command: (cmd) => ui(cmd),
   sound: sfx,
 });
 
@@ -275,6 +287,8 @@ function flush(): void {
     else if (ev.type === 'hop') sfx.play('hop');
     else if (ev.type === 'moved') sfx.play('arrive');
     else if (ev.type === 'paused' && !ev.auto) sfx.play(ev.paused ? 'pause' : 'resume');
+    else if (ev.type === 'query') sfx.play('error');
+    else if (ev.type === 'kicked') setTimeout(leaveNet, 600);
     else if (ev.type === 'program' && (ev.programType === 'scout' || ev.programType === 'scan')) sfx.play(ev.programType);
   }
 }

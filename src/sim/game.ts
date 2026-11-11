@@ -1,4 +1,5 @@
 import { sats } from './money';
+import { versus, WARRIOR, type Agent } from './agents';
 import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
@@ -98,6 +99,19 @@ export class Game {
   readonly loot: LootItem[] = [];
   /** The run is over: the player left the net. */
   ended = false;
+  /** Agents defending the system. */
+  readonly agents: Agent[] = [];
+  /** System alarm: 0 green, 1 yellow, 2 orange, 3 red. */
+  alarm = 0;
+  /** Ticks since the last thing that raised the alarm (yellow fades after a quiet minute). */
+  private calm = 0;
+  readonly maxIntegrity = 20;
+  /** The player's integrity: at 0 you are thrown out of the net. */
+  integrity = 20;
+  /** Thrown out of the net by losing all integrity. */
+  kicked = false;
+  /** The agent querying the player, waiting for an answer. */
+  query: { agentId: string } | null = null;
   /** Changes whenever the deck's contents change (programs or loot). */
   deckVersion = 0;
   private nextProgramId: number;
@@ -124,6 +138,13 @@ export class Game {
     const job = system.contract;
     const target = job && this.files.get(job.node);
     if (job && target) target.push({ id: `f${target.length + 1}`, content: 'contract', scanned: false, need: job.need });
+    (system.agents ?? []).forEach((a, i) => {
+      this.agents.push({
+        id: `a${i + 1}`, name: `W${i + 1}`, stats: WARRIOR, hp: WARRIOR.hp, node: a.node, hop: null,
+        stayLeft: WARRIOR.stay[0], queryLeft: WARRIOR.queryEvery, attackLeft: WARRIOR.attackEvery,
+        mood: 'patrol', strikes: 0, silenced: false, known: 'none',
+      });
+    });
     this.discoverAround(this.currentNode);
     this.log(`link up: ${system.name} (${system.location})`, 'system');
     this.log(`you are at ${this.nameOf(this.currentNode)}`);
@@ -144,6 +165,246 @@ export class Game {
     return job.need === 'alter' ? !!f.altered && !f.deleted : !!f.deleted;
   }
 
+  // ---------- agents ----------
+
+  agentById(id: string): Agent | undefined {
+    return this.agents.find((a) => a.id === id);
+  }
+
+  /** Agents standing in a node (not on a link). */
+  agentsIn(nodeId: string): Agent[] {
+    return this.agents.filter((a) => a.node === nodeId && !a.hop);
+  }
+
+  /** Best hide rating in the gear (0 without one). */
+  private get hideRating(): number {
+    return this.findProgram('hide')?.rating ?? 0;
+  }
+
+  /** Detection after the alarm: agents grow more suspicious as it rises. */
+  private detectionOf(a: Agent): number {
+    return a.stats.detection * (1 + 0.5 * this.alarm);
+  }
+
+  /** Chance an agent's query catches the player (shown in its info). */
+  queryChance(a: Agent): number {
+    return versus(this.detectionOf(a), this.hideRating);
+  }
+
+  private pick<T>(list: T[]): T {
+    return list[Math.min(list.length - 1, Math.floor(((this.d100() - 1) / 100) * list.length))];
+  }
+
+  private updateAgents(): void {
+    const playerHere = this.move ? null : this.currentNode;
+    for (const a of [...this.agents]) {
+      if (this.ended) return;
+      if (a.hop) {
+        a.hop.elapsed++;
+        if (a.hop.elapsed >= a.stats.hopTicks) {
+          a.node = a.hop.to;
+          a.hop = null;
+          a.stayLeft = a.stats.stay[0] + Math.floor(((this.d100() - 1) / 100) * (a.stats.stay[1] - a.stats.stay[0]));
+          a.queryLeft = a.stats.queryEvery;
+        }
+        continue;
+      }
+      const together = a.node === playerHere;
+      if (a.mood === 'hostile') {
+        if (together) {
+          if (--a.attackLeft <= 0) {
+            a.attackLeft = a.stats.attackEvery;
+            this.hitPlayer(a);
+          }
+        } else {
+          // Chase the player.
+          const target = this.move ? this.move.to : this.currentNode;
+          const path = this.network.path(a.node, target);
+          if (path.length) a.hop = { to: path[0], elapsed: 0 };
+        }
+        continue;
+      }
+      if (together && a.mood === 'patrol' && !this.query) {
+        if (--a.queryLeft <= 0) {
+          a.queryLeft = a.stats.queryEvery;
+          // After a first unanswered query it asks again for sure.
+          if (a.strikes > 0 || this.d100() <= this.queryChance(a)) this.startQuery(a);
+        }
+      }
+      if (together && (a.mood === 'trusting' || this.query?.agentId === a.id)) continue;
+      if (--a.stayLeft <= 0) {
+        const next = this.network.neighbours(a.node).filter((n) => n.kind !== 'honeypot');
+        if (next.length) a.hop = { to: this.pick(next).id, elapsed: 0 };
+      }
+    }
+  }
+
+  private updateAlarm(): void {
+    this.calm++;
+    if (this.alarm === 1 && this.calm >= 600) {
+      this.alarm = 0;
+      this.events.push({ type: 'alarm', level: 0 });
+      this.log('alarm back to GREEN: the system calmed down', 'info');
+    }
+  }
+
+  /** Raises the system alarm to at least this level. */
+  raiseAlarm(level: number): void {
+    this.calm = 0;
+    if (level <= this.alarm) return;
+    this.alarm = level;
+    const name = ['GREEN', 'YELLOW', 'ORANGE', 'RED'][level];
+    this.events.push({ type: 'alarm', level });
+    this.log(`ALARM ${name}`, level >= 3 ? 'alarm3' : level === 2 ? 'alarm2' : 'alarm1');
+  }
+
+  /** Passive Analyze: a roll each time an agent deals with you, until it is fully known. */
+  private analyze(a: Agent): void {
+    if (a.known === 'full') return;
+    const program = this.findProgram('analyze');
+    if (!program) return;
+    const chance = versus(program.rating, a.stats.scanResist);
+    const roll = this.d100();
+    const got = roll <= chance / 2 ? 'full' : roll <= chance ? 'partial' : 'none';
+    if (got === 'none' || (got === 'partial' && a.known === 'partial')) {
+      if (a.known === 'none') this.log(`${program.name}: could not read ${a.name}`, 'system');
+      return;
+    }
+    a.known = got;
+    this.log(`${program.name}: ${a.name} ${got === 'full' ? 'fully analyzed' : 'partly analyzed'} (hover it to see)`, 'info');
+  }
+
+  private startQuery(a: Agent): void {
+    this.query = { agentId: a.id };
+    this.analyze(a);
+    this.log(`${a.name} (${a.stats.kind}) QUERIES YOU${a.strikes ? ' again' : ''}: who are you?`, 'alarm2');
+    this.setPaused(true);
+    this.events.push({ type: 'query', agentId: a.id });
+  }
+
+  /** Answers the open query. */
+  answerQuery(choice: 'present' | 'deceive' | 'silence' | 'attack' | 'ignore'): boolean {
+    const a = this.query && this.agentById(this.query.agentId);
+    if (!a) {
+      this.log('no one is querying you', 'system');
+      return false;
+    }
+    if (choice === 'present') {
+      if (!this.privileges.size) {
+        this.log('you hold no privilege to show', 'alarm1');
+        return false;
+      }
+      this.query = null;
+      a.mood = 'trusting';
+      this.log(`you show your ${[...this.privileges].join(' / ')} privilege. ${a.name} lets you be`, 'info');
+      return true;
+    }
+    if (choice === 'ignore') {
+      this.query = null;
+      this.log(`you ignore ${a.name}`, 'system');
+      this.strike(a);
+      return true;
+    }
+    return this.agentCommand(choice, a.name);
+  }
+
+  /** A failed or ignored query: first time yellow and it asks again; second time red and hostile. */
+  private strike(a: Agent): void {
+    a.strikes++;
+    if (a.strikes === 1) {
+      this.raiseAlarm(1);
+      a.queryLeft = 20;
+      this.log(`${a.name} grows suspicious: it will ask again`, 'alarm1');
+    } else {
+      this.makeHostile(a, true);
+    }
+  }
+
+  private makeHostile(a: Agent, alarm: boolean): void {
+    a.mood = 'hostile';
+    a.attackLeft = a.stats.attackEvery;
+    this.log(`${a.name} marks you as an ENEMY`, 'alarm3');
+    if (alarm && !a.silenced) this.raiseAlarm(3);
+  }
+
+  /** attack / silence / deceive an agent in your node (by name, or the one querying you, or the first one here). */
+  agentCommand(type: 'attack' | 'silence' | 'deceive', target: string, program = this.findProgram(type)): boolean {
+    if (!program) {
+      this.log(`no ${type} program in your gear`, 'alarm1');
+      return false;
+    }
+    if (this.move) {
+      this.log('cannot do that while connecting', 'alarm1');
+      return false;
+    }
+    const here = this.agentsIn(this.currentNode);
+    const q = target.trim().toLowerCase();
+    const a = q ? here.find((x) => x.name.toLowerCase() === q) : (this.query && this.agentById(this.query.agentId)) || here[0];
+    if (!a) {
+      this.log(q ? `no agent "${target}" here` : 'no agent here', 'alarm1');
+      return false;
+    }
+    const querying = this.query?.agentId === a.id;
+    if (type === 'deceive') {
+      if (!querying) {
+        this.log(`${program.name}: deceive answers a query. ${a.name} is not asking anything`, 'system');
+        return false;
+      }
+      this.query = null;
+      if (this.d100() <= versus(program.rating, a.stats.deceiveResist)) {
+        a.mood = 'trusting';
+        this.log(`${program.name}: ${a.name} is deceived. it leaves you alone while you stay here`, 'info');
+      } else {
+        this.log(`${program.name}: ${a.name} saw through it`, 'alarm1');
+        this.strike(a);
+      }
+      return true;
+    }
+    if (querying) this.query = null;
+    this.analyze(a);
+    if (type === 'silence') {
+      if (a.silenced) {
+        this.log(`${a.name} is already silenced`, 'system');
+        return false;
+      }
+      if (this.d100() <= versus(program.rating, a.stats.silenceResist)) {
+        a.silenced = true;
+        this.log(`${program.name}: ${a.name} silenced. its messages cannot leave this node`, 'info');
+        if (a.mood !== 'hostile') this.makeHostile(a, false);
+      } else {
+        this.log(`${program.name}: silence failed on ${a.name}`, 'alarm2');
+        if (a.mood !== 'hostile') this.makeHostile(a, true);
+        else if (!a.silenced) this.raiseAlarm(3);
+      }
+      return true;
+    }
+    // attack
+    const hit = this.d100() <= versus(program.rating, a.stats.armor);
+    const damage = hit ? 10 * program.rating : 0;
+    a.hp -= damage;
+    if (a.hp <= 0) {
+      this.agents.splice(this.agents.indexOf(a), 1);
+      this.log(`${program.name}: ${a.name} destroyed${a.mood === 'hostile' ? '' : ' in one blow. no one noticed'}`, 'info');
+      return true;
+    }
+    this.log(hit ? `${program.name}: ${a.name} hit for ${damage} (HP ${a.hp}/${a.stats.hp})` : `${program.name}: missed ${a.name}`, 'alarm2');
+    if (a.mood !== 'hostile') this.makeHostile(a, true);
+    else if (!a.silenced) this.raiseAlarm(3);
+    return true;
+  }
+
+  private hitPlayer(a: Agent): void {
+    this.integrity = Math.max(0, this.integrity - a.stats.damage);
+    this.events.push({ type: 'hit' });
+    this.log(`${a.name} hits you: integrity ${this.integrity}/${this.maxIntegrity}`, 'alarm3');
+    if (this.integrity <= 0 && !this.kicked) {
+      this.kicked = true;
+      this.query = null;
+      this.log('INTEGRITY LOST: you are thrown out of the net', 'alarm3');
+      this.events.push({ type: 'kicked' });
+    }
+  }
+
   /** Leaves the net: the run ends and its report says what the player earned. */
   endRun(): RunReport {
     this.ended = true;
@@ -152,7 +413,7 @@ export class Game {
     this.scout = null;
     this.scan = null;
     const job = this.network.def.contract;
-    const success = this.contractDone;
+    const success = this.contractDone && !this.kicked;
     const files = this.loot.filter((l) => !l.software).map((l) => ({ name: l.name, label: l.label, price: l.price }));
     const software = this.loot.filter((l) => l.software).map((l) => l.software!);
     const pay = job && success ? job.pay : 0;
@@ -169,10 +430,16 @@ export class Game {
     this.updateMove();
     this.updateScout();
     this.updateScan();
+    this.updateAgents();
+    this.updateAlarm();
   }
 
   setPaused(paused: boolean, auto = false): void {
     if (this.paused === paused) return;
+    if (!paused && this.query) {
+      this.log(`${this.agentById(this.query.agentId)?.name ?? 'an agent'} is querying you: answer first`, 'alarm1');
+      return;
+    }
     this.paused = paused;
     this.events.push({ type: 'paused', paused, auto });
     this.log(paused ? 'paused' : 'resumed', 'system');
@@ -365,6 +632,13 @@ export class Game {
     if (!move) return;
     move.elapsed++;
     if (move.elapsed >= move.total) {
+      // Leaving a node: agents there forget the encounter, unless they know you are an enemy.
+      for (const a of this.agents) {
+        if (a.node === this.currentNode && a.mood !== 'hostile') {
+          a.mood = 'patrol';
+          a.strikes = 0;
+        }
+      }
       this.currentNode = move.to;
       this.move = null;
       this.events.push({ type: 'moved', nodeId: this.currentNode });
@@ -429,9 +703,12 @@ export class Game {
       this.log(`${program.name}: pick a file, e.g. ${program.type} f3`, 'system');
       return false;
     }
-    if (program.type === 'attack' || program.type === 'hide') {
+    if (program.type === 'hide' || program.type === 'analyze') {
       this.log(`${program.name} (${program.type} ${program.rating}): ${PROGRAM_STUBS[program.type]}`, 'info');
       return true;
+    }
+    if (program.type === 'attack' || program.type === 'silence' || program.type === 'deceive') {
+      return this.agentCommand(program.type, '', program);
     }
     if (this.isBusy) {
       this.log(`${this.scout ? 'scout' : 'scan'} is already running`, 'alarm1');
@@ -654,9 +931,13 @@ export class Game {
         return false;
       }
       file.downloaded = true;
-      if (file.protection === 'tracker') this.log(`TRACKER: ${file.id} tagged you on the way out (attribution comes later)`, 'alarm2');
+      if (file.protection === 'tracker') {
+        this.log(`TRACKER: ${file.id} tagged you on the way out`, 'alarm2');
+        this.raiseAlarm(1);
+      }
       if (file.content === 'honeytoken') {
-        this.log(`HONEYTOKEN: ${file.id} was a trap. it phoned home with your trace (alarms come later)`, 'alarm3');
+        this.log(`HONEYTOKEN: ${file.id} was a trap. it phoned home with your trace`, 'alarm3');
+        this.raiseAlarm(2);
         file.detected = true;
       } else if (file.content === 'software') {
         const sw = file.software!;
@@ -801,4 +1082,7 @@ export const STARTING_PROGRAMS: Program[] = [
   { id: 'p10', type: 'decrypt', name: 'Lockpick 1.0', rating: 1 },
   { id: 'p11', type: 'scrub', name: 'Bleach 1.1', rating: 1 },
   { id: 'p12', type: 'forge', name: 'Mimic 1.0', rating: 1 },
+  { id: 'p13', type: 'silence', name: 'Hush 1.0', rating: 1 },
+  { id: 'p14', type: 'deceive', name: 'Mirage 1.0', rating: 1 },
+  { id: 'p15', type: 'analyze', name: 'Profiler 1.0', rating: 1 },
 ];

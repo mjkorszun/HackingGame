@@ -10,6 +10,7 @@ export const testSystem: SystemDef = {
   location: 'Frankfurt, DE',
   entry: 'gw',
   security: 1,
+  agents: [{ kind: 'warrior', node: 'core' }],
   contract: { title: 'Alter File', need: 'alter', node: 'orders', pay: 50 },
   nodes: [
     { id: 'gw', name: 'Public Gateway', kind: 'gateway', x: 0, y: 2 },

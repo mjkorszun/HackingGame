@@ -1,5 +1,5 @@
 /** A program in the player's deck. */
-export const PROGRAM_TYPES = ['attack', 'hide', 'scout', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
+export const PROGRAM_TYPES = ['attack', 'silence', 'deceive', 'hide', 'analyze', 'scout', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
 
 /** Programs used on one data file: evaluate f3, defuse f3, ... */
 export const FILE_PROGRAMS = ['evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
@@ -7,9 +7,14 @@ export type FileProgram = (typeof FILE_PROGRAMS)[number];
 export type ProgramType = (typeof PROGRAM_TYPES)[number];
 
 /** Placeholder results for programs whose systems don't exist yet. */
-export const PROGRAM_STUBS: Record<Exclude<ProgramType, 'scout' | 'scan' | FileProgram>, string> = {
-  attack: 'no agent here to attack (agents come later)',
-  hide: 'you blend into the normal traffic (hiding comes later)',
+/** Programs that act on an agent in your node: attack W1, silence W1, deceive (answers a query). */
+export const AGENT_PROGRAMS = ['attack', 'silence', 'deceive'] as const;
+export type AgentProgram = (typeof AGENT_PROGRAMS)[number];
+
+/** Passive programs: they work on their own. */
+export const PROGRAM_STUBS: Record<'hide' | 'analyze', string> = {
+  hide: 'works on its own: agents roll their detection against it when they query you',
+  analyze: 'works on its own: every agent that deals with you gets analyzed',
 };
 
 export interface Program {

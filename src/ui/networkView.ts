@@ -1,4 +1,5 @@
 import { sats } from '../sim/money';
+import { agentInfo, oddsWord, versus, type Agent } from '../sim/agents';
 import { apparentContent, clickAction, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
 import { Tooltip, type TipLine } from './tooltip';
 import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
@@ -183,6 +184,8 @@ export interface ViewActions {
   hover(): void;
   /** Leave the net: ends the run. */
   exit(): void;
+  /** Runs a console command (answers to a query, attack W1, ...). */
+  command(cmd: string): void;
   sound: Sound;
 }
 
@@ -209,6 +212,13 @@ export class NetworkView {
   private readonly tip = new Tooltip();
   /** Layers redrawn every frame with the scout's eyes. */
   private scoutLayer: SVGGElement | null = null;
+  private agentLayer: SVGGElement | null = null;
+  private miniAgentLayer: SVGGElement | null = null;
+  private readonly agentEls = new Map<string, { main: SVGGElement; mini: SVGGElement }>();
+  private alarmEl!: HTMLDivElement;
+  private integrityEl!: HTMLDivElement;
+  private queryBox!: HTMLDivElement;
+  private queryKey = '';
   private miniScoutLayer: SVGGElement | null = null;
   private miniXY: (id: string) => { x: number; y: number } = () => ({ x: 0, y: 0 });
 
@@ -228,8 +238,12 @@ export class NetworkView {
     title.querySelector('.sys-name')!.textContent = sys.name;
     title.querySelector('.sys-loc')!.textContent = sys.location;
     const alarm = document.createElement('div');
-    alarm.className = 'alarm alarm-green';
+    alarm.className = 'alarm alarm-0';
     alarm.textContent = 'ALARM: GREEN';
+    this.alarmEl = alarm;
+    this.integrityEl = document.createElement('div');
+    this.integrityEl.className = 'integrity';
+    this.integrityEl.title = 'Integrity: at 0 you are thrown out of the net';
     this.clock = document.createElement('div');
     this.clock.className = 'clock';
     this.pauseBtn = document.createElement('button');
@@ -263,7 +277,7 @@ export class NetworkView {
     vol.addEventListener('input', () => actions.sound.setVolume(Number(vol.value) / 100));
     vol.addEventListener('change', () => actions.sound.play('hop'));
     soundBox.append(this.muteBtn, vol);
-    this.header.append(title, alarm, soundBox, this.clock, this.autoBtn, this.pauseBtn);
+    this.header.append(title, alarm, this.integrityEl, soundBox, this.clock, this.autoBtn, this.pauseBtn);
 
     this.stage = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stage', role: 'img' });
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -276,7 +290,10 @@ export class NetworkView {
     exitBtn.setAttribute('aria-label', 'Leave the net');
     exitBtn.innerHTML = ICON_POWER;
     exitBtn.addEventListener('click', () => actions.exit());
-    root.append(this.header, this.stage, this.miniSvg, exitBtn);
+    this.queryBox = document.createElement('div');
+    this.queryBox.className = 'query-box';
+    this.queryBox.hidden = true;
+    root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox);
     this.render();
   }
 
@@ -304,6 +321,19 @@ export class NetworkView {
     if (key !== this.lastKey) this.render();
     this.updateAvatar();
     this.updateScout();
+    this.updateAgents();
+    this.updateQuery();
+    const lvl = this.game.alarm;
+    if (this.alarmEl.dataset.level !== String(lvl)) {
+      this.alarmEl.dataset.level = String(lvl);
+      this.alarmEl.className = `alarm alarm-${lvl}`;
+      this.alarmEl.textContent = `ALARM: ${['GREEN', 'YELLOW', 'ORANGE', 'RED'][lvl]}`;
+    }
+    const integ = `INTEGRITY ${this.game.integrity}/${this.game.maxIntegrity}`;
+    if (this.integrityEl.textContent !== integ) {
+      this.integrityEl.textContent = integ;
+      this.integrityEl.classList.toggle('is-low', this.game.integrity <= this.game.maxIntegrity / 2);
+    }
     const busy = this.game.scanningFile;
     if (this.fileBar && busy) this.fileBar.fill.setAttribute('width', String(this.fileBar.width * Math.min(1, busy.progress)));
   }
@@ -341,9 +371,144 @@ export class NetworkView {
     this.positions = new Map(positions.map((p) => [p.node.id, { x: p.x, y: p.y }]));
     this.avatar = this.drawAvatar();
     this.updateAvatar(true);
+    this.agentLayer = svg('g', { class: 'agent-layer' }, this.stage);
     this.scoutLayer = svg('g', { class: 'scout-layer' }, this.stage);
     this.drawMinimap();
+    this.agentEls.clear();
     this.updateScout();
+    this.updateAgents();
+  }
+
+  /** Where an agent in a node is drawn: in the room around you, or beside a neighbour. */
+  private agentSpot(nodeId: string, index: number): { x: number; y: number } | null {
+    if (nodeId === this.game.currentNode) return { x: CX + 50 + index * 30, y: CY + 22 };
+    const p = this.positions.get(nodeId);
+    return p ? { x: p.x + NEIGHBOUR_R * 0.75 + index * 22, y: p.y - NEIGHBOUR_R * 0.75 } : null;
+  }
+
+  /** Agents move every tick: their dots are kept and only moved, so hover and menus keep working. */
+  private updateAgents(): void {
+    const layer = this.agentLayer;
+    const mini = this.miniAgentLayer;
+    if (!layer || !mini) return;
+    const g = this.game;
+    const seen = new Set<string>();
+    const count = new Map<string, number>();
+    for (const a of g.agents) {
+      seen.add(a.id);
+      let els = this.agentEls.get(a.id);
+      if (!els) {
+        els = { main: this.drawAgent(a, layer), mini: svg('circle', { r: 3.2, class: 'mini-agent' }, mini) as unknown as SVGGElement };
+        this.agentEls.set(a.id, els);
+      }
+      let pos: { x: number; y: number } | null;
+      let miniPos: { x: number; y: number } | null;
+      if (a.hop) {
+        const from = a.node === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.node);
+        const to = a.hop.to === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.hop.to);
+        const k = a.hop.elapsed / a.stats.hopTicks;
+        pos = from && to ? { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k } : null;
+        const m1 = this.miniXY(a.node);
+        const m2 = this.miniXY(a.hop.to);
+        miniPos = pos ? { x: m1.x + (m2.x - m1.x) * k, y: m1.y + (m2.y - m1.y) * k } : null;
+      } else {
+        const i = count.get(a.node) ?? 0;
+        count.set(a.node, i + 1);
+        pos = this.agentSpot(a.node, i);
+        miniPos = pos ? this.miniXY(a.node) : null;
+      }
+      els.main.style.display = pos ? '' : 'none';
+      if (pos) els.main.setAttribute('transform', `translate(${pos.x.toFixed(1)} ${pos.y.toFixed(1)})`);
+      els.main.classList.toggle('is-hostile', a.mood === 'hostile');
+      els.main.classList.toggle('is-trusting', a.mood === 'trusting');
+      els.main.classList.toggle('is-silenced', a.silenced);
+      els.mini.style.display = miniPos ? '' : 'none';
+      if (miniPos) {
+        els.mini.setAttribute('cx', miniPos.x.toFixed(1));
+        els.mini.setAttribute('cy', miniPos.y.toFixed(1));
+      }
+    }
+    for (const [id, els] of this.agentEls) {
+      if (seen.has(id)) continue;
+      els.main.remove();
+      els.mini.remove();
+      this.agentEls.delete(id);
+    }
+  }
+
+  /** A warrior: light red dot, dark red rim, a small sword inside. */
+  private drawAgent(a: Agent, parent: Element): SVGGElement {
+    const grp = svg('g', { class: 'agent', 'data-agent': a.id }, parent) as SVGGElement;
+    svg('circle', { r: 11, class: 'agent-body' }, grp);
+    svg('line', { x1: -4.5, y1: 4.5, x2: 5, y2: -5, class: 'agent-sword' }, grp);
+    svg('line', { x1: -5.5, y1: 0.5, x2: -0.5, y2: 5.5, class: 'agent-sword' }, grp);
+    const label = svg('text', { x: 0, y: 22, class: 'agent-name' }, grp);
+    label.textContent = a.name;
+    this.tip.attach(grp, () => {
+      const live = this.game.agentById(a.id);
+      if (!live) return [{ text: a.name, cls: 'tip-title' }];
+      const [head, ...rest] = agentInfo(live);
+      const mood = live.mood === 'hostile' ? 'HOSTILE' : live.mood === 'trusting' ? 'fooled: leaves you alone here' : 'on patrol';
+      return [{ text: head, cls: 'tip-title' }, { text: mood + (live.silenced ? ', silenced' : ''), cls: live.mood === 'hostile' ? 'tip-honeytoken' : 'c-system' }, ...rest.map((t) => ({ text: t }))];
+    });
+    grp.addEventListener('mouseenter', () => this.actions.hover());
+    grp.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const live = this.game.agentById(a.id);
+      if (!live) return;
+      const here = live.node === this.game.currentNode && !live.hop && !this.game.isMoving;
+      const odds = (type: 'attack' | 'silence', resist: number) => {
+        const p = this.game.findProgram(type);
+        if (!p) return `needs ${type}`;
+        return live.known === 'none' ? 'odds unknown' : oddsWord(versus(p.rating, resist));
+      };
+      this.menu.show(e.clientX, e.clientY, `${live.name}: ${live.stats.kind}`, [
+        { label: 'Attack', hint: here ? odds('attack', live.stats.armor) : 'not in your node', disabled: !here || !this.game.findProgram('attack'), action: () => this.actions.command(`attack ${live.name}`) },
+        { label: 'Silence', hint: here ? odds('silence', live.stats.silenceResist) : 'not in your node', disabled: !here || live.silenced || !this.game.findProgram('silence'), action: () => this.actions.command(`silence ${live.name}`) },
+      ]);
+    });
+    return grp;
+  }
+
+  /** The query window: who asks, what you know about it, and how you can answer. */
+  private updateQuery(): void {
+    const g = this.game;
+    const a = g.query ? g.agentById(g.query.agentId) : undefined;
+    const key = a ? `${a.id}|${a.known}|${a.strikes}|${g.privileges.size}|${g.programs.length}` : '';
+    if (key === this.queryKey) return;
+    this.queryKey = key;
+    this.queryBox.hidden = !a;
+    if (!a) return;
+    const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+    const odds = (type: 'deceive' | 'silence' | 'attack', resist: number): string => {
+      const p = g.findProgram(type);
+      if (!p) return `needs a ${type} program`;
+      return a.known === 'none' ? `${p.name}: odds unknown` : `${p.name}: odds ${oddsWord(versus(p.rating, resist))}`;
+    };
+    const attack = g.findProgram('attack');
+    const oneShot = attack && a.known !== 'none' ? (10 * attack.rating >= a.hp ? ', can kill in one blow' : ', cannot kill in one blow') : '';
+    const options: { cmd: string; label: string; hint: string; disabled?: boolean }[] = [
+      { cmd: 'present', label: 'Show privilege', hint: g.privileges.size ? `you hold: ${[...g.privileges].join(', ')}` : 'you hold no privilege', disabled: !g.privileges.size },
+      { cmd: 'deceive', label: 'Deceive', hint: `${odds('deceive', a.stats.deceiveResist)}. if it fails: ${a.strikes ? 'RED alarm, hostile' : 'yellow alarm, it asks again'}`, disabled: !g.findProgram('deceive') },
+      { cmd: 'silence', label: 'Silence', hint: `${odds('silence', a.stats.silenceResist)}. hostile, but no alarm leaves the node`, disabled: !g.findProgram('silence') },
+      { cmd: 'attack', label: 'Attack', hint: `${odds('attack', a.stats.armor)}${oneShot}. a kill in one blow is quiet`, disabled: !attack },
+      { cmd: 'ignore', label: 'Ignore', hint: a.strikes ? 'RED alarm, it turns hostile' : 'yellow alarm, it asks again' },
+    ];
+    this.queryBox.innerHTML = `
+      <div class="qb-title">${esc(a.name)} (${a.stats.kind}) QUERIES YOU${a.strikes ? ' AGAIN' : ''}</div>
+      <div class="qb-info">${agentInfo(a).slice(1).map(esc).join('<br>')}</div>
+      <div class="qb-options"></div>`;
+    const box = this.queryBox.querySelector('.qb-options')!;
+    for (const o of options) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'qb-btn';
+      b.disabled = !!o.disabled;
+      b.innerHTML = `<span class="qb-label">${o.label}</span><span class="qb-hint">${esc(o.hint)}</span>`;
+      b.addEventListener('click', () => this.actions.command(o.cmd));
+      box.appendChild(b);
+    }
   }
 
   /** Draws the scout's eyes flying along the links of the hop in progress. */
@@ -763,6 +928,7 @@ export class NetworkView {
         ]);
       });
     }
+    this.miniAgentLayer = svg('g', { class: 'agent-layer' }, mini);
     this.miniScoutLayer = svg('g', { class: 'scout-layer' }, mini);
   }
 }
