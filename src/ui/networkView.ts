@@ -200,6 +200,7 @@ export class NetworkView {
       const active = target !== null && (p.node.id === target || g.network.path(current.id, target)[0] === p.node.id);
       const door = this.doorTowards(p.x, p.y);
       svg('line', { x1: door.x, y1: door.y, x2: p.x, y2: p.y, class: active ? 'link link-active' : 'link' }, links);
+      if (g.network.hasGate(current.id, p.node.id)) this.drawGate((door.x + p.x) / 2, (door.y + p.y) / 2, Math.atan2(p.y - door.y, p.x - door.x), links);
     }
 
     positions.forEach((p, i) => {
@@ -244,6 +245,15 @@ export class NetworkView {
         svg('line', { x1, y1, x2, y2, class: 'link-stub', stroke: `url(#${id})` }, parent);
       }
     }
+  }
+
+  /** A gate: a small barrier across the middle of a link. */
+  private drawGate(x: number, y: number, angle: number, parent: Element): void {
+    const grp = svg('g', { class: 'gate', transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${((angle * 180) / Math.PI).toFixed(1)})` }, parent);
+    svg('rect', { x: -5, y: -13, width: 10, height: 26, rx: 2 }, grp);
+    svg('line', { x1: -5, y1: -4, x2: 5, y2: -4 }, grp);
+    svg('line', { x1: -5, y1: 4, x2: 5, y2: 4 }, grp);
+    svg('title', {}, grp).textContent = 'gate';
   }
 
   /** Where the link towards (x, y) leaves the room: found on the room's real outline. */
@@ -499,6 +509,7 @@ export class NetworkView {
       const na = g.network.node(a);
       const nb = g.network.node(b);
       svg('line', { x1: sx(na.x), y1: sy(na.y), x2: sx(nb.x), y2: sy(nb.y), class: 'mini-link' }, mini);
+      if (g.network.hasGate(a, b)) svg('rect', { x: (sx(na.x) + sx(nb.x)) / 2 - 2, y: (sy(na.y) + sy(nb.y)) / 2 - 2, width: 4, height: 4, class: 'mini-gate' }, mini);
     }
     const target = g.moveTarget;
     for (const n of nodes) {

@@ -42,6 +42,8 @@ export interface SystemDef {
   nodes: NodeDef[];
   /** Undirected links between node ids. */
   links: [string, string][];
+  /** Links that have a gate in the middle (gates are not nodes: they sit on the connection). */
+  gates?: [string, string][];
 }
 
 export type LogColor = 'normal' | 'info' | 'system' | 'command' | 'alarm1' | 'alarm2' | 'alarm3';
