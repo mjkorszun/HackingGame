@@ -3,6 +3,9 @@ import type { Privilege } from '../sim/actions';
 import { programSize, usedMemory, type Program } from '../sim/programs';
 import { SATS, sats } from '../sim/money';
 import { showProgramInfo } from './programInfo';
+import { programIcon } from './icons';
+
+const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /** What the gear panel shows: in a run it is the Game itself; on the main screen, the account. */
 export interface GearSource {
@@ -78,7 +81,7 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
   const row = (p: Program, stored: boolean) => {
     const li = document.createElement('li');
     li.className = `deck-program${p.rarity && p.rarity !== 'common' ? ` rarity-${p.rarity}` : ''}`;
-    li.textContent = `${p.name.padEnd(18)} ${`${p.type} ${p.rating}`.padEnd(11)} ${String(programSize(p)).padStart(3)} GB`;
+    li.innerHTML = `${programIcon(p.type)}${esc(`${p.name.padEnd(18)} ${`${p.type} ${p.rating}`.padEnd(11)} ${String(programSize(p)).padStart(3)} GB`)}`;
     if (opts.toggle) {
       // Main screen: left or right click opens the program's info, with Load / Unload in it.
       li.classList.add(stored ? 'is-stored' : 'is-loaded');
