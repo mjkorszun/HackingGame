@@ -3,7 +3,7 @@ import { MAPPER_COOLDOWN, MAPPER_NOISE, mapperChances } from './programs';
 import { describe, expect, it } from 'vitest';
 import { testSystem } from '../data/testSystem';
 import { FixedClock } from './clock';
-import { Game, MOVE_TICKS, warriorDamage } from './game';
+import { Game, MOVE_TICKS, shieldHp, warriorDamage } from './game';
 import { Network } from './network';
 
 /** The test system without its agents, so a query never pauses a test that is about something else. */
@@ -739,6 +739,19 @@ describe('agents', () => {
     expect(g.findProgram('warrior')).toBeUndefined();
     tick(g, a.stats.attackEvery * 2);
     expect(g.kicked).toBe(true);
+  });
+
+  it('a loaded shield jumps out at the first shot and takes the hits; when it breaks it is lost for this run', () => {
+    const { g, a } = setup(1);
+    g.agentCommand('silence', a.name); // hostile, no alarm
+    expect(a.mood).toBe('hostile');
+    tick(g, a.stats.attackEvery);
+    const s = g.allies.find((x) => x.program.type === 'shield')!;
+    expect(s.hp).toBe(shieldHp(1) - a.stats.damage);
+    expect(g.integrity).toBe(g.maxIntegrity);
+    tick(g, a.stats.attackEvery * 10);
+    expect(g.programState(s.program.id)).toBe('lost');
+    expect(g.integrity).toBeLessThan(g.maxIntegrity);
   });
 
   it('your agent can stay, follow you, and unload back into memory', () => {
