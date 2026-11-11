@@ -3,7 +3,7 @@ import { programIcon } from './icons';
 
 /** What each type of program does (short, for the info window). */
 const TYPE_INFO: Record<ProgramType, string> = {
-  attack: 'hits an agent in your node. a kill in one blow goes unnoticed',
+  warrior: 'released as your own agent: it fights enemy agents where it stands. stay, follow or unload it. if it dies, it is lost for this run',
   silence: 'cuts an agent off: its messages cannot leave the node, so it raises no alarm',
   deceive: 'answers an agent\'s query with a lie. it trusts you until you leave the node',
   hide: 'works on its own: agents roll their detection against it when they query you',

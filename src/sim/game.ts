@@ -82,6 +82,32 @@ interface ScanTask {
   progressId: number;
 }
 
+/** One of the player's programs released as an agent in the net. */
+export interface Ally {
+  id: string;
+  program: Program;
+  hp: number;
+  maxHp: number;
+  /** Node it is in, or the node it is leaving while on a link. */
+  node: string;
+  hop: { to: string; elapsed: number } | null;
+  /** stay: holds its node. follow: goes where you go. unload: comes back to you and is loaded again. */
+  order: AllyOrder;
+  attackLeft: number;
+  /** The enemy agent it was told to fight, if any. */
+  target: string | null;
+}
+
+export type AllyOrder = 'stay' | 'follow' | 'unload';
+
+/** Placeholder warrior numbers: HP 20 + 10 per rating, hits 6 per rating every 1.5 s, hops in 1.2 s. */
+export const ALLY_HOP_TICKS = 12;
+export const WARRIOR_ATTACK_EVERY = 15;
+export const warriorHp = (rating: number) => 20 + 10 * rating;
+export const warriorDamage = (rating: number) => 6 * rating;
+/** What a released warrior does until told otherwise (later each program can set its own). */
+export const WARRIOR_DEFAULT_ORDER: AllyOrder = 'stay';
+
 /** A file action that takes time (download, decrypt...); its effect lands when the bar is full. */
 interface FileJob {
   nodeId: string;
@@ -144,6 +170,14 @@ export class Game {
   ended = false;
   /** Agents defending the system. */
   readonly agents: Agent[] = [];
+  /** The player's own agents (released programs). */
+  readonly allies: Ally[] = [];
+  /** Ids of programs that are out as agents, and of ones destroyed this run: neither can be used now. */
+  private readonly released = new Set<string>();
+  readonly lost = new Set<string>();
+  /** Which ally each enemy agent fights (the last one that hit it). */
+  private readonly foes = new Map<string, string>();
+  private nextAllyId = 1;
   /** System alarm: 0 green, 1 yellow, 2 orange, 3 red. */
   alarm = 0;
   /** Ticks since the last thing that raised the alarm (yellow fades after a quiet minute). */
@@ -306,7 +340,15 @@ export class Game {
       }
       const together = a.node === playerHere;
       if (a.mood === 'hostile') {
-        if (together) {
+        // Your agents in its node draw its fire first: the one fighting it, or any.
+        const near = this.allies.filter((x) => x.node === a.node && !x.hop);
+        const foe = near.find((x) => x.id === this.foes.get(a.id)) ?? near[0];
+        if (foe) {
+          if (--a.attackLeft <= 0) {
+            a.attackLeft = a.stats.attackEvery;
+            this.hitAlly(a, foe);
+          }
+        } else if (together) {
           if (--a.attackLeft <= 0) {
             a.attackLeft = a.stats.attackEvery;
             this.hitPlayer(a);
@@ -403,6 +445,7 @@ export class Game {
       this.strike(a);
       return true;
     }
+    if (choice === 'attack') return this.attackCommand(a.name);
     return this.agentCommand(choice, a.name);
   }
 
@@ -431,7 +474,7 @@ export class Game {
   }
 
   /** attack / silence / deceive an agent in your node (by name, or the one querying you, or the first one here). */
-  agentCommand(type: 'attack' | 'silence' | 'deceive', target: string, program = this.findProgram(type)): boolean {
+  agentCommand(type: 'silence' | 'deceive', target: string, program = this.findProgram(type)): boolean {
     if (!program) {
       this.log(`no ${type} program in your gear`, 'alarm1');
       return false;
@@ -487,22 +530,169 @@ export class Game {
       }
       return true;
     }
-    // attack
-    const hit = this.d100() <= versus(program.rating, a.stats.armor);
-    const damage = hit ? 10 * program.rating : 0;
+    return true;
+  }
+
+  /** An agent in your node, by name; or the one querying you; or the first one here. */
+  private agentHere(target: string): Agent | undefined {
+    const here = this.agentsIn(this.currentNode);
+    const q = target.trim().toLowerCase();
+    return q ? here.find((x) => x.name.toLowerCase() === q) : (this.query && this.agentById(this.query.agentId)) || here[0];
+  }
+
+  /**
+   * attack: your warriors in this node go for an agent here (by name, or the one querying you, or the first one).
+   * With no warrior here, your best free warrior is released to do it.
+   */
+  attackCommand(target: string): boolean {
+    if (this.move) {
+      this.log('cannot do that while connecting', 'alarm1');
+      return false;
+    }
+    const a = this.agentHere(target);
+    if (!a) {
+      this.log(target.trim() ? `no agent "${target}" here` : 'no agent here', 'alarm1');
+      return false;
+    }
+    const mine = this.allies.filter((x) => x.node === this.currentNode && !x.hop && x.program.type === 'warrior');
+    if (!mine.length) {
+      const program = this.findProgram('warrior');
+      if (!program) {
+        this.log('no warrior to send: release one or load one', 'alarm1');
+        return false;
+      }
+      return this.releaseWarrior(program, a);
+    }
+    if (this.query?.agentId === a.id) this.query = null;
+    for (const x of mine) x.target = a.id;
+    this.log(`${mine.map((x) => x.program.name).join(', ')}: going for ${a.name}`, 'system');
+    return true;
+  }
+
+  /** Releases a warrior program as your agent in this node, optionally sent at an agent. */
+  releaseWarrior(program: Program, target: Agent | null): boolean {
+    if (this.move) {
+      this.log('cannot release an agent while connecting', 'alarm1');
+      return false;
+    }
+    if (this.released.has(program.id) || this.lost.has(program.id)) {
+      this.log(`${program.name} is ${this.lost.has(program.id) ? 'destroyed for this run' : 'already out'}`, 'alarm1');
+      return false;
+    }
+    const hp = warriorHp(program.rating);
+    const ally: Ally = { id: `y${this.nextAllyId++}`, program, hp, maxHp: hp, node: this.currentNode, hop: null, order: WARRIOR_DEFAULT_ORDER, attackLeft: 3, target: target?.id ?? null };
+    this.allies.push(ally);
+    this.released.add(program.id);
+    this.deckVersion++;
+    if (target && this.query?.agentId === target.id) this.query = null;
+    this.events.push({ type: 'program', programType: 'warrior' });
+    this.outcome({ kind: 'ally', id: ally.id }, true, 'RELEASED');
+    this.log(`${program.name} released${target ? `: going for ${target.name}` : ''}. it ${ally.order === 'stay' ? 'holds this node' : 'follows you'} (stay / follow / unload)`, 'info');
+    this.actionStarted();
+    return true;
+  }
+
+  /** One of your agents, by its program's name (or the only one out). */
+  allyByName(name: string): Ally | undefined {
+    const q = name.trim().toLowerCase();
+    if (!q) return this.allies.length === 1 ? this.allies[0] : undefined;
+    return this.allies.find((x) => x.program.name.toLowerCase() === q || x.id === q);
+  }
+
+  /** Gives one of your agents an order: stay, follow, or unload (come back and be loaded again). */
+  orderAlly(name: string, order: AllyOrder): boolean {
+    const ally = this.allyByName(name);
+    if (!ally) {
+      this.log(this.allies.length ? `which agent? ${this.allies.map((x) => x.program.name).join(', ')}` : 'you have no agents out', 'alarm1');
+      return false;
+    }
+    ally.order = order;
+    const what = { stay: 'holds its node', follow: 'follows you', unload: 'comes back to you' }[order];
+    this.log(`${ally.program.name} ${what}`, 'system');
+    if (order === 'unload') this.tryUnload(ally);
+    return true;
+  }
+
+  /** Where the player is, or is heading. */
+  private get playerTarget(): string {
+    return this.move ? this.move.to : this.currentNode;
+  }
+
+  private tryUnload(ally: Ally): boolean {
+    if (ally.hop || this.move || ally.node !== this.currentNode) return false;
+    this.allies.splice(this.allies.indexOf(ally), 1);
+    this.released.delete(ally.program.id);
+    this.deckVersion++;
+    this.events.push({ type: 'shot', from: { kind: 'ally', id: ally.id }, to: { kind: 'player' }, hit: false, hostile: false, recall: true });
+    this.outcome({ kind: 'player' }, true, 'UNLOADED');
+    this.log(`${ally.program.name} is back in your memory`, 'info');
+    return true;
+  }
+
+  /** Your agents: move as ordered, and fight enemy agents in their node. */
+  private updateAllies(): void {
+    for (const ally of [...this.allies]) {
+      if (this.ended) return;
+      if (ally.hop) {
+        if (++ally.hop.elapsed >= ALLY_HOP_TICKS) {
+          ally.node = ally.hop.to;
+          ally.hop = null;
+        }
+        continue;
+      }
+      if (ally.order === 'unload' && this.tryUnload(ally)) continue;
+      if (ally.order !== 'stay' && ally.node !== this.playerTarget) {
+        const path = this.network.path(ally.node, this.playerTarget);
+        if (path.length) {
+          ally.hop = { to: path[0], elapsed: 0 };
+          continue;
+        }
+      }
+      const here = this.agentsIn(ally.node);
+      const enemy = here.find((x) => x.id === ally.target) ?? (this.query ? here.find((x) => x.id === this.query!.agentId) : undefined) ?? here.find((x) => x.mood === 'hostile');
+      if (!enemy || --ally.attackLeft > 0) continue;
+      ally.attackLeft = WARRIOR_ATTACK_EVERY;
+      this.allyHits(ally, enemy);
+    }
+  }
+
+  private allyHits(ally: Ally, a: Agent): void {
+    if (this.query?.agentId === a.id) this.query = null;
+    this.analyze(a);
+    const r = ally.program.rating;
+    const hit = this.d100() <= versus(r, a.stats.armor);
+    const damage = hit ? warriorDamage(r) : 0;
+    const fresh = a.mood !== 'hostile';
     a.hp -= damage;
-    this.events.push({ type: 'shot', from: { kind: 'player' }, to: { kind: 'agent', id: a.id }, hit, hostile: false });
+    this.foes.set(a.id, ally.id);
+    this.events.push({ type: 'shot', from: { kind: 'ally', id: ally.id }, to: { kind: 'agent', id: a.id }, hit, hostile: false });
     this.outcome({ kind: 'agent', id: a.id }, hit, a.hp <= 0 ? 'DESTROYED' : hit ? `-${damage}` : 'MISS');
     if (a.hp <= 0) {
       this.agents.splice(this.agents.indexOf(a), 1);
+      this.foes.delete(a.id);
+      if (ally.target === a.id) ally.target = null;
       this.feats.push('kill');
-      this.log(`${program.name}: ${a.name} destroyed${a.mood === 'hostile' ? '' : ' in one blow. no one noticed'}`, 'info');
-      return true;
+      this.log(`${ally.program.name}: ${a.name} destroyed${fresh ? ' in one blow. no one noticed' : ''}`, 'info');
+      return;
     }
-    this.log(hit ? `${program.name}: ${a.name} hit for ${damage} (HP ${a.hp}/${a.stats.hp})` : `${program.name}: missed ${a.name}`, 'alarm2');
-    if (a.mood !== 'hostile') this.makeHostile(a, true);
+    this.log(hit ? `${ally.program.name}: ${a.name} hit for ${damage} (HP ${a.hp}/${a.stats.hp})` : `${ally.program.name}: missed ${a.name}`, 'alarm2');
+    if (fresh) this.makeHostile(a, true);
     else if (!a.silenced) this.raiseAlarm(3);
-    return true;
+  }
+
+  private hitAlly(a: Agent, ally: Ally): void {
+    ally.hp -= a.stats.damage;
+    this.events.push({ type: 'shot', from: { kind: 'agent', id: a.id }, to: { kind: 'ally', id: ally.id }, hit: true, hostile: true });
+    if (ally.hp > 0) {
+      this.outcome({ kind: 'ally', id: ally.id }, false, `-${a.stats.damage}`);
+      return;
+    }
+    this.outcome({ kind: 'ally', id: ally.id }, false, 'DESTROYED');
+    this.allies.splice(this.allies.indexOf(ally), 1);
+    this.released.delete(ally.program.id);
+    this.lost.add(ally.program.id);
+    this.deckVersion++;
+    this.log(`${a.name} destroyed your ${ally.program.name}. it is lost for this run`, 'alarm3');
   }
 
   private hitPlayer(a: Agent): void {
@@ -527,6 +717,7 @@ export class Game {
     this.mapper = null;
     this.scan = null;
     this.fileJob = null;
+    this.allies.length = 0;
     const job = this.network.def.contract;
     const success = this.contractDone;
     const files = this.loot.filter((l) => !l.software).map((l) => ({ name: l.name, label: l.label, price: l.price }));
@@ -558,6 +749,7 @@ export class Game {
     this.updateScan();
     this.updateFileJob();
     this.updateAgents();
+    this.updateAllies();
     this.updateAlarm();
   }
 
@@ -796,7 +988,12 @@ export class Game {
   /** Runs a program from the deck. Returns false if it could not start. */
   /** The player's programs of one type, in deck order. */
   programsOf(type: ProgramType): Program[] {
-    return this.programs.filter((p) => p.type === type);
+    return this.programs.filter((p) => p.type === type && !this.released.has(p.id) && !this.lost.has(p.id));
+  }
+
+  /** Where a program is now, if not simply loaded: out as an agent, or destroyed this run. */
+  programState(id: string): 'out' | 'lost' | null {
+    return this.lost.has(id) ? 'lost' : this.released.has(id) ? 'out' : null;
   }
 
   /**
@@ -838,7 +1035,8 @@ export class Game {
       return true;
     }
     if (program.type === 'skimmer') return this.plantSkimmer(program);
-    if (program.type === 'attack' || program.type === 'silence' || program.type === 'deceive') {
+    if (program.type === 'warrior') return this.releaseWarrior(program, null);
+    if (program.type === 'silence' || program.type === 'deceive') {
       return this.agentCommand(program.type, '', program);
     }
     if (this.isBusy) {
@@ -1281,7 +1479,7 @@ export const DEFAULT_MEMORY = 500;
 export const STARTING_PROGRAMS: Program[] = [
   { id: 'p1', type: 'mapper', name: 'Hawkeye V2', rating: 3 },
   { id: 'p2', type: 'mapper', name: 'Owl 1.0', rating: 1 },
-  { id: 'p3', type: 'attack', name: 'Shooter V3', rating: 1 },
+  { id: 'p3', type: 'warrior', name: 'Shooter V3', rating: 1 },
   { id: 'p4', type: 'hide', name: 'Ghost 1.2', rating: 1 },
   { id: 'p6', type: 'scan', name: 'Probe 1.0', rating: 1 },
   { id: 'p7', type: 'evaluate', name: 'Appraiser 1.0', rating: 1 },

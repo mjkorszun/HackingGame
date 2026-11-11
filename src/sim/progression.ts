@@ -33,7 +33,7 @@ export const SKILLS: Skill[] = [
   { id: 'craftsman', name: 'Craftsman', text: 'better odds of a rare program' },
   { id: 'ghost', name: 'Ghost', text: 'agents notice you less' },
   { id: 'smooth', name: 'Smooth Talker', text: 'deceive works more often' },
-  { id: 'gunner', name: 'Gunner', text: 'attack programs hit harder' },
+  { id: 'gunner', name: 'Gunner', text: 'your warriors hit harder' },
   { id: 'iron', name: 'Iron Will', text: 'more integrity' },
   { id: 'cracker', name: 'Cracker', text: 'decrypt cracks seals faster' },
   { id: 'appraiser', name: 'Appraiser', text: 'files sell for more' },

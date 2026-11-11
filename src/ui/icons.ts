@@ -7,7 +7,7 @@ import type { Program, ProgramType } from '../sim/programs';
 
 /** Icon names (game-icons.net) each type can use; a program gets one of them at random. */
 export const ICON_POOLS: Record<ProgramType, string[]> = {
-  attack: ['broadsword', 'katana', 'daggers', 'energy-sword', 'battle-axe', 'flying-dagger', 'lightning-saber', 'crossed-swords', 'fist', 'crescent-blade', 'ak47', 'winchester-rifle', 'uzi', 'revolver', 'machine-gun', 'grenade', 'rocket', 'missile-launcher'],
+  warrior: ['broadsword', 'katana', 'daggers', 'energy-sword', 'battle-axe', 'flying-dagger', 'lightning-saber', 'crossed-swords', 'fist', 'crescent-blade', 'ak47', 'winchester-rifle', 'uzi', 'revolver', 'machine-gun', 'grenade', 'rocket', 'missile-launcher'],
   silence: ['silenced', 'mute', 'sound-off', 'lips', 'closed-doors', 'semi-closed-eye'],
   deceive: ['domino-mask', 'drama-masks', 'double-face-mask', 'fox-head', 'chameleon-glyph', 'mirror-mirror', 'puppet', 'android-mask', 'mecha-mask'],
   hide: ['hooded-figure', 'cloak', 'ninja-head', 'invisible', 'fog', 'ghost', 'shadow-follower', 'hood', 'two-shadows'],

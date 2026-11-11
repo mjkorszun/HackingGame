@@ -158,6 +158,8 @@ function migrate(a: Account): Account {
 function renameOld(programs: { type: string; name: string }[]): void {
   // The old scout became the mapper.
   for (const p of programs) if (p.type === 'scout') p.type = 'mapper';
+  // Attack programs became warriors you release.
+  for (const p of programs) if (p.type === 'attack') p.type = 'warrior';
   if (!programs.some((p) => p.type === 'brute')) return;
   for (const p of programs) {
     if (p.type === 'decrypt') {

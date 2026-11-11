@@ -3,7 +3,7 @@ import { MAPPER_COOLDOWN, MAPPER_NOISE, mapperChances } from './programs';
 import { describe, expect, it } from 'vitest';
 import { testSystem } from '../data/testSystem';
 import { FixedClock } from './clock';
-import { Game, MOVE_TICKS } from './game';
+import { Game, MOVE_TICKS, warriorDamage } from './game';
 import { Network } from './network';
 
 /** The test system without its agents, so a query never pauses a test that is about something else. */
@@ -320,10 +320,12 @@ describe('stub programs', () => {
   it('starts paused', () => {
     expect(new Game(quiet).paused).toBe(true);
   });
-  it('passive programs only explain themselves; attack needs an agent here', () => {
+  it('passive programs only explain themselves; a warrior is released as your agent', () => {
     const g = new Game(quiet);
     for (const t of ['hide', 'analyze'] as const) expect(g.runProgram(t)).toBe(true);
-    expect(g.runProgram('attack')).toBe(false);
+    expect(g.runProgram('warrior')).toBe(true);
+    expect(g.allies.length).toBe(1);
+    expect(g.runProgram('warrior')).toBe(false); // the only one is already out
     expect(g.isMapping).toBe(false);
   });
 });
@@ -703,22 +705,59 @@ describe('agents', () => {
     expect(g.alarm).toBe(0);
   });
 
-  it('an attack that does not kill makes it hostile and the alarm red; hostile agents wear down integrity until you are kicked', () => {
+  it('attack releases a warrior at the agent: a hit that does not kill makes it hostile and the alarm red; it fights your warrior, not you', () => {
     const { g, a } = setup(1);
-    g.agentCommand('attack', a.name);
-    expect(a.hp).toBe(a.stats.hp - 10);
+    expect(g.attackCommand(a.name)).toBe(true);
+    const w = g.allies[0];
+    expect(w.program.name).toBe('Shooter V3');
+    expect(g.programState(w.program.id)).toBe('out');
+    tick(g, 3);
+    expect(a.hp).toBe(a.stats.hp - warriorDamage(1));
     expect(g.alarm).toBe(3);
-    tick(g, a.stats.attackEvery * 5);
-    expect(g.integrity).toBe(0);
+    tick(g, 200);
+    expect(g.agents).not.toContain(a); // the warrior wins
+    expect(g.integrity).toBe(g.maxIntegrity); // the agent shot at the warrior
+    expect(w.hp).toBeLessThan(w.maxHp);
+  });
+
+  it('a strong enough warrior kills in one blow, quietly', () => {
+    const { g, a } = setup(1);
+    g.programs.push({ id: 'big', type: 'warrior', name: 'Rocket Launcher V007', rating: 5 });
+    g.attackCommand(a.name);
+    tick(g, 3);
+    expect(g.agents).not.toContain(a);
+    expect(g.alarm).toBe(0);
+  });
+
+  it('a destroyed warrior is lost for this run; with no warrior around, hostile agents wear you down', () => {
+    const { g, a } = setup(1);
+    a.stats = { ...a.stats, damage: 100 };
+    g.attackCommand(a.name);
+    tick(g, 3 + a.stats.attackEvery);
+    expect(g.allies.length).toBe(0);
+    expect(g.programState('p3')).toBe('lost');
+    expect(g.findProgram('warrior')).toBeUndefined();
+    tick(g, a.stats.attackEvery * 2);
     expect(g.kicked).toBe(true);
   });
 
-  it('a strong enough attack kills in one blow, quietly', () => {
-    const { g, a } = setup(1);
-    g.programs.push({ id: 'big', type: 'attack', name: 'Rocket Launcher V007', rating: 3 });
-    g.agentCommand('attack', a.name);
-    expect(g.agents).not.toContain(a);
-    expect(g.alarm).toBe(0);
+  it('your agent can stay, follow you, and unload back into memory', () => {
+    const { g } = setup(100);
+    g.runProgram('warrior');
+    const w = g.allies[0];
+    expect(g.orderAlly('', 'follow')).toBe(true);
+    g.travelTo('edge');
+    tick(g, MOVE_TICKS * 3);
+    expect(g.currentNode).toBe('edge');
+    expect(w.node).toBe('edge');
+    g.orderAlly('Shooter V3', 'stay');
+    g.travelTo('gw');
+    tick(g, MOVE_TICKS * 3);
+    expect(w.node).toBe('edge');
+    g.orderAlly('Shooter V3', 'unload');
+    tick(g, 100);
+    expect(g.allies.length).toBe(0);
+    expect(g.findProgram('warrior')?.name).toBe('Shooter V3');
   });
 
   it('a high roll misses the query', () => {
@@ -731,10 +770,10 @@ describe('agents', () => {
 describe('memory', () => {
   it('a downloaded program can be loaded into free memory and used at once', () => {
     const g = new Game(quiet, Math.random, [], { memory: 150 }); // Mace 15 (attack 3) takes 120 GB
-    g.loot.push({ name: 'x f1', label: 'Mace 15', price: 0, evaluated: true, software: { id: 'p500', type: 'attack', name: 'Mace 15', rating: 3 } });
+    g.loot.push({ name: 'x f1', label: 'Mace 15', price: 0, evaluated: true, software: { id: 'p500', type: 'warrior', name: 'Mace 15', rating: 3 } });
     g.loot.push({ name: 'x f2', label: 'Owl', price: 0, evaluated: true, software: { id: 'p501', type: 'mapper', name: 'Owl 2', rating: 1 } });
     expect(g.loadProgram('Mace 15')).toBe(true);
-    expect(g.findProgram('attack')?.name).toBe('Mace 15');
+    expect(g.findProgram('warrior')?.name).toBe('Mace 15');
     expect(g.loadProgram('Owl 2')).toBe(false); // memory full
   });
 });
@@ -810,7 +849,7 @@ describe('software development', () => {
     const { finishProgram, newProject, rollRarity, RARITY_TRAITS } = await import('./development');
     expect(rollRarity(() => 0)).toBe('common');
     expect(rollRarity(() => 0.995)).toBe('legendary');
-    const leg = finishProgram(newProject('attack', 3, 'Spike'), 'p200', 'you', (() => { let first = true; return () => { if (first) { first = false; return 0.995; } return 0.3; }; })());
+    const leg = finishProgram(newProject('warrior', 3, 'Spike'), 'p200', 'you', (() => { let first = true; return () => { if (first) { first = false; return 0.995; } return 0.3; }; })());
     expect(leg.rarity).toBe('legendary');
     expect(leg.traits!.length).toBe(RARITY_TRAITS.legendary);
     expect(new Set(leg.traits).size).toBe(4);

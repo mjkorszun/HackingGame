@@ -9,7 +9,8 @@ import type { FxTarget, NodeDef, NodeKind, SimEvent } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
 import type { Sound } from './sound';
 import { drawNodeShape, halfHeight, hasTag } from './shapes';
-import { iconBody } from './icons';
+import { iconBody, iconName } from './icons';
+import { ALLY_HOP_TICKS, type Ally, type AllyOrder } from '../sim/game';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const W = 720;
@@ -218,6 +219,8 @@ export class NetworkView {
   private agentLayer: SVGGElement | null = null;
   private miniAgentLayer: SVGGElement | null = null;
   private readonly agentEls = new Map<string, { main: SVGGElement; mini: SVGGElement }>();
+  private readonly allyEls = new Map<string, { main: SVGGElement; mini: SVGGElement; hp: SVGRectElement }>();
+  private allyPos = new Map<string, { x: number; y: number }>();
   private alarmEl!: HTMLDivElement;
   private integrityEl!: HTMLDivElement;
   private queryBox!: HTMLDivElement;
@@ -321,6 +324,7 @@ export class NetworkView {
   private fxPoint(t: FxTarget): { x: number; y: number } | null {
     if (t.kind === 'player') return this.avatarPos;
     if (t.kind === 'agent') return this.agentPos.get(t.id) ?? null;
+    if (t.kind === 'ally') return this.allyPos.get(t.id) ?? null;
     if (t.kind === 'file') return this.filePos.get(t.id) ?? null;
     return t.id === this.game.currentNode ? { x: CX, y: CY } : this.positions.get(t.id) ?? null;
   }
@@ -335,7 +339,7 @@ export class NetworkView {
       if (!from || !to0) return;
       // A miss flies past the target.
       const ang = Math.atan2(to0.y - from.y, to0.x - from.x);
-      const to = ev.hit ? to0 : { x: to0.x + Math.cos(ang) * 40 - Math.sin(ang) * 22, y: to0.y + Math.sin(ang) * 40 + Math.cos(ang) * 22 };
+      const to = ev.hit || ev.recall ? to0 : { x: to0.x + Math.cos(ang) * 40 - Math.sin(ang) * 22, y: to0.y + Math.sin(ang) * 40 + Math.cos(ang) * 22 };
       const cls = ev.hostile ? 'is-hostile' : 'is-mine';
       const trail = svg('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: `fx-trail ${cls}` }, layer);
       const bolt = svg('circle', { r: 4.5, class: `fx-bolt ${cls}` }, layer);
@@ -360,7 +364,7 @@ export class NetworkView {
       if (!p || !this.fxLayer) return;
       const n = this.fxStack.get(key) ?? 0;
       this.fxStack.set(key, n + 1);
-      const lift = ev.at.kind === 'player' ? 34 : ev.at.kind === 'agent' ? 20 : 16;
+      const lift = ev.at.kind === 'player' ? 34 : ev.at.kind === 'agent' || ev.at.kind === 'ally' ? 22 : 16;
       const t = svg('text', { x: p.x, y: p.y - lift - n * 16, class: `fx-text ${ev.ok ? 'is-ok' : 'is-fail'}` }, this.fxLayer);
       t.textContent = ev.text;
       setTimeout(() => {
@@ -448,6 +452,7 @@ export class NetworkView {
     this.mapperLayer = svg('g', { class: 'mapper-layer' }, this.stage);
     this.drawMinimap();
     this.agentEls.clear();
+    this.allyEls.clear();
     // Effects outlive a redraw (a finished download redraws the files), so the layer is kept and put back on top.
     if (this.fxLayer) this.stage.appendChild(this.fxLayer);
     else this.fxLayer = svg('g', { class: 'fx-layer' }, this.stage);
@@ -516,6 +521,98 @@ export class NetworkView {
       els.mini.remove();
       this.agentEls.delete(id);
     }
+    this.updateAllies(layer, mini);
+  }
+
+  /** Your warriors in this node. */
+  private warriorsHere(): number {
+    return this.game.allies.filter((x) => x.node === this.game.currentNode && !x.hop && x.program.type === 'warrior').length;
+  }
+
+  /** Where one of your agents stands: to your left in your node, or beside a neighbour. */
+  private allySpot(nodeId: string, index: number): { x: number; y: number } | null {
+    if (nodeId === this.game.currentNode) return { x: CX - 60 - Math.floor(index / 4) * 64, y: CY - 30 + (index % 4) * 38 };
+    const p = this.positions.get(nodeId);
+    return p ? { x: p.x - NEIGHBOUR_R * 0.75 - Math.floor(index / 3) * 60, y: p.y - NEIGHBOUR_R * 0.75 + (index % 3) * 34 } : null;
+  }
+
+  private updateAllies(layer: SVGGElement, mini: SVGGElement): void {
+    const g = this.game;
+    const seen = new Set<string>();
+    const count = new Map<string, number>();
+    for (const a of g.allies) {
+      seen.add(a.id);
+      let els = this.allyEls.get(a.id);
+      if (!els) {
+        els = this.drawAlly(a, layer, mini);
+        this.allyEls.set(a.id, els);
+      }
+      let pos: { x: number; y: number } | null;
+      let miniPos: { x: number; y: number } | null;
+      if (a.hop) {
+        const from = a.node === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.node);
+        const to = a.hop.to === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.hop.to);
+        const k = a.hop.elapsed / ALLY_HOP_TICKS;
+        pos = from && to ? { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k } : null;
+        const m1 = this.miniXY(a.node);
+        const m2 = this.miniXY(a.hop.to);
+        miniPos = { x: m1.x + (m2.x - m1.x) * k, y: m1.y + (m2.y - m1.y) * k };
+      } else {
+        const i = count.get(a.node) ?? 0;
+        count.set(a.node, i + 1);
+        pos = this.allySpot(a.node, i);
+        miniPos = this.miniXY(a.node);
+      }
+      els.main.style.display = pos ? '' : 'none';
+      if (pos) {
+        els.main.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
+        this.allyPos.set(a.id, pos);
+      }
+      els.hp.setAttribute('width', String(Math.max(0, 24 * (a.hp / a.maxHp))));
+      els.main.dataset.order = a.order;
+      els.mini.setAttribute('cx', miniPos.x.toFixed(1));
+      els.mini.setAttribute('cy', miniPos.y.toFixed(1));
+    }
+    for (const [id, els] of this.allyEls) {
+      if (seen.has(id)) continue;
+      els.main.remove();
+      els.mini.remove();
+      this.allyEls.delete(id);
+    }
+  }
+
+  /** One of your agents: a green ring with its program's icon, its name and an HP bar. */
+  private drawAlly(a: Ally, parent: Element, mini: Element): { main: SVGGElement; mini: SVGGElement; hp: SVGRectElement } {
+    const grp = svg('g', { class: 'ally', 'data-ally': a.id }, parent) as SVGGElement;
+    svg('circle', { r: 13, class: 'ally-body' }, grp);
+    const icon = svg('svg', { x: -9, y: -9, width: 18, height: 18, viewBox: '0 0 512 512', class: 'ally-icon' }, grp);
+    if (a.program.color) icon.style.color = a.program.color;
+    icon.innerHTML = iconBody(iconName(a.program)) ?? '';
+    svg('rect', { x: -12, y: -21, width: 24, height: 3, class: 'ally-hp-bg' }, grp);
+    const hp = svg('rect', { x: -12, y: -21, width: 24, height: 3, class: 'ally-hp' }, grp);
+    const label = svg('text', { x: 0, y: 25, class: 'ally-name' }, grp);
+    label.textContent = a.program.name;
+    const dot = svg('circle', { r: 3.2, class: 'mini-ally' }, mini) as unknown as SVGGElement;
+    this.tip.attach(grp, () => {
+      const live = this.game.allies.find((x) => x.id === a.id);
+      if (!live) return [{ text: a.program.name, cls: 'tip-title' }];
+      const order = { stay: 'holds its node', follow: 'follows you', unload: 'coming back to you' }[live.order];
+      return [{ text: `${live.program.name}: your ${live.program.type} ${live.program.rating}`, cls: 'tip-title' }, { text: `HP ${live.hp}/${live.maxHp}` }, { text: order, cls: 'c-info' }, { text: 'right-click: stay / follow / unload', cls: 'c-system' }];
+    });
+    grp.addEventListener('mouseenter', () => this.actions.hover());
+    grp.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const live = this.game.allies.find((x) => x.id === a.id);
+      if (!live) return;
+      const item = (order: AllyOrder, label: string, hint: string) => ({ label, hint: live.order === order ? 'now' : hint, disabled: live.order === order, action: () => this.actions.command(`${order} ${live.program.name}`) });
+      this.menu.show(e.clientX, e.clientY, `${live.program.name} (yours)`, [
+        item('stay', 'Stay', 'hold this node'),
+        item('follow', 'Follow', 'go where you go'),
+        item('unload', 'Unload', 'back into your memory'),
+      ]);
+    });
+    return { main: grp, mini: dot, hp };
   }
 
   /** A warrior: a dot with a small sword inside, coloured by its type. */
@@ -542,13 +639,13 @@ export class NetworkView {
       const live = this.game.agentById(a.id);
       if (!live) return;
       const here = live.node === this.game.currentNode && !live.hop && !this.game.isMoving;
-      const odds = (type: 'attack' | 'silence', resist: number) => {
+      const odds = (type: 'warrior' | 'silence', resist: number) => {
         const p = this.game.findProgram(type);
         if (!p) return `needs ${type}`;
         return live.known === 'none' ? 'odds unknown' : oddsWord(versus(p.rating, resist));
       };
       this.menu.show(e.clientX, e.clientY, `${live.name}: ${live.stats.kind}`, [
-        { label: 'Attack', hint: here ? odds('attack', live.stats.armor) : 'not in your node', disabled: !here || !this.game.findProgram('attack'), action: () => this.actions.command(`attack ${live.name}`) },
+        { label: 'Attack', hint: here ? (this.warriorsHere() ? 'your warriors here' : this.game.findProgram('warrior') ? `release ${this.game.findProgram('warrior')!.name}` : 'needs a warrior') : 'not in your node', disabled: !here || (!this.warriorsHere() && !this.game.findProgram('warrior')), action: () => this.actions.command(`attack ${live.name}`) },
         { label: 'Silence', hint: here ? odds('silence', live.stats.silenceResist) : 'not in your node', disabled: !here || live.silenced || !this.game.findProgram('silence'), action: () => this.actions.command(`silence ${live.name}`) },
       ]);
     });
@@ -559,24 +656,24 @@ export class NetworkView {
   private updateQuery(): void {
     const g = this.game;
     const a = g.query ? g.agentById(g.query.agentId) : undefined;
-    const key = a ? `${a.id}|${a.known}|${a.strikes}|${g.privileges.size}|${g.programs.length}` : '';
+    const key = a ? `${a.id}|${a.known}|${a.strikes}|${g.privileges.size}|${g.programs.length}|${g.deckVersion}` : '';
     if (key === this.queryKey) return;
     this.queryKey = key;
     this.queryBox.hidden = !a;
     if (!a) return;
     const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
-    const odds = (type: 'deceive' | 'silence' | 'attack', resist: number): string => {
+    const odds = (type: 'deceive' | 'silence' | 'warrior', resist: number): string => {
       const p = g.findProgram(type);
       if (!p) return `needs a ${type} program`;
       return a.known === 'none' ? `${p.name}: odds unknown` : `${p.name}: odds ${oddsWord(versus(p.rating, resist))}`;
     };
-    const attack = g.findProgram('attack');
-    const oneShot = attack && a.known !== 'none' ? (10 * attack.rating >= a.hp ? ', can kill in one blow' : ', cannot kill in one blow') : '';
+    const warrior = g.findProgram('warrior');
+    const mine = this.warriorsHere();
     const options: { cmd: string; label: string; hint: string; disabled?: boolean }[] = [
       { cmd: 'present', label: 'Show privilege', hint: g.privileges.size ? `you hold: ${[...g.privileges].join(', ')}` : 'you hold no privilege', disabled: !g.privileges.size },
       { cmd: 'deceive', label: 'Deceive', hint: `${odds('deceive', a.stats.deceiveResist)}. if it fails: ${a.strikes ? 'RED alarm, hostile' : 'yellow alarm, it asks again'}`, disabled: !g.findProgram('deceive') },
       { cmd: 'silence', label: 'Silence', hint: `${odds('silence', a.stats.silenceResist)}. hostile, but no alarm leaves the node`, disabled: !g.findProgram('silence') },
-      { cmd: 'attack', label: 'Attack', hint: `${odds('attack', a.stats.armor)}${oneShot}. a kill in one blow is quiet`, disabled: !attack },
+      { cmd: 'attack', label: 'Warrior', hint: mine ? 'your warriors here attack it. a kill in one blow is quiet' : warrior ? `release ${odds('warrior', a.stats.armor)}. it fights for you; a kill in one blow is quiet` : 'no warrior free', disabled: !mine && !warrior },
       { cmd: 'ignore', label: 'Ignore', hint: a.strikes ? 'RED alarm, it turns hostile' : 'yellow alarm, it asks again' },
     ];
     this.queryBox.innerHTML = `
