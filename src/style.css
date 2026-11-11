@@ -595,3 +595,24 @@ body {
 .home-lock { color: var(--grey); font-size: 13px; }
 .home-news { color: var(--yellow); margin: -16px 0 22px; text-align: center; line-height: 1.5; }
 .cc-skim { color: var(--yellow); }
+
+/* ---------- software development ---------- */
+.dev-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; color: var(--green); }
+.dev-row select, .dev-row input { background: #000; color: var(--green); border: 1px solid var(--green-dim); font: inherit; padding: 3px 6px; }
+.dev-row input { flex: 1; }
+.dev-bar { white-space: pre; }
+.dev-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.dev-btns .cc-btn { padding: 5px 12px; }
+.dev-log { margin: 0 0 4px; color: var(--yellow); line-height: 1.5; }
+.dev-new { margin: 8px 0 14px; border: 1px solid currentColor; padding: 10px 12px; }
+.dev-trait { color: var(--green); }
+/* rarity colours: common white, enhanced green, rare blue, experimental violet, prototype gold */
+.rarity-common { color: #e6e6e6; }
+.rarity-enhanced { color: #5dff8a; }
+.rarity-rare { color: #6fb0ff; }
+.rarity-experimental { color: #b48cff; }
+.rarity-prototype { color: #ffc23a; }
+.deck-program.rarity-enhanced { color: #5dff8a; }
+.deck-program.rarity-rare { color: #6fb0ff; }
+.deck-program.rarity-experimental { color: #b48cff; }
+.deck-program.rarity-prototype { color: #ffc23a; }

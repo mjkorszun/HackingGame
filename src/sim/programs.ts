@@ -1,3 +1,4 @@
+import type { Rarity } from './development';
 /** A program in the player's deck. */
 export const PROGRAM_TYPES = ['attack', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'scout', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
 
@@ -28,6 +29,11 @@ export interface Program {
   efficiency?: number;
   /** Skimmer: chance per day, in %, that the business finds and removes it (5 is a poor skimmer). */
   detection?: number;
+  /** Programs you develop yourself get a rarity and random traits. */
+  rarity?: Rarity;
+  traits?: string[];
+  /** A prototype carries its author's name. */
+  author?: string;
 }
 
 /** Base size in GB of a rating-1 program of each type (placeholder numbers). */

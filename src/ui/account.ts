@@ -1,6 +1,7 @@
 import { DEFAULT_MEMORY, STARTING_PROGRAMS } from '../sim/game';
 import { programSize, usedMemory, type Program } from '../sim/programs';
 import { newPizzeria, type NetworkSeed } from '../sim/generate';
+import type { DevProject } from '../sim/development';
 
 /** What the player keeps between runs: sats and software. Saved in the browser. */
 export interface Account {
@@ -20,13 +21,18 @@ export interface Account {
   skimmers: { netId: string; program: Program }[];
   /** What happened on the last day (skimmer income, a skimmer found), shown on the main screen. */
   news: string[];
+  /** The program you are writing, if any. */
+  project?: DevProject;
 }
 
-/** One day passes: every skimmer takes its cut, and each may be found and removed (the business then tightens security). */
-export function passDay(a: Account, roll: () => number = Math.random): void {
+/**
+ * Days pass (one by default): every skimmer takes its cut each day, and each may be found and removed
+ * (the business then tightens security). The day counter moves on too.
+ */
+export function passDay(a: Account, roll: () => number = Math.random, days = 1): void {
   const news: string[] = [];
   let earned = 0;
-  for (const sk of [...a.skimmers]) {
+  for (let d = 0; d < days; d++) for (const sk of [...a.skimmers]) {
     const net = a.networks.find((n) => n.id === sk.netId);
     if (!net) continue;
     if (roll() * 100 < (sk.program.detection ?? 5)) {
@@ -40,8 +46,9 @@ export function passDay(a: Account, roll: () => number = Math.random): void {
   earned = Math.round(earned * 100) / 100;
   if (earned > 0) {
     a.sats = Math.round((a.sats + earned) * 100) / 100;
-    news.unshift(`skimmers brought in ${earned.toFixed(2)} §`);
+    news.unshift(`skimmers brought in ${earned.toFixed(2)} §${days > 1 ? ` in ${days} days` : ''}`);
   }
+  a.day += days;
   a.news = news;
 }
 

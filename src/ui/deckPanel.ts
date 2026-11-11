@@ -76,7 +76,7 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
   const list = root.querySelector('.deck-programs')!;
   const row = (p: Program, stored: boolean) => {
     const li = document.createElement('li');
-    li.className = 'deck-program';
+    li.className = `deck-program${p.rarity && p.rarity !== 'common' ? ` rarity-${p.rarity}` : ''}`;
     li.textContent = `${p.name.padEnd(18)} ${`${p.type} ${p.rating}`.padEnd(11)} ${String(programSize(p)).padStart(3)} GB`;
     if (opts.toggle) {
       li.classList.add(stored ? 'is-stored' : 'is-loaded');
@@ -91,6 +91,8 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
     } else {
       li.classList.add('is-static');
     }
+    // Developed programs: rarity and traits in the tooltip.
+    if (p.rarity) li.title = [li.title, `${p.rarity}${p.author ? ` by ${p.author}` : ''}`, ...(p.traits ?? []).map((t) => `+ ${t}`)].filter(Boolean).join('\n');
     list.appendChild(li);
   };
   for (const p of game.programs) row(p, false);

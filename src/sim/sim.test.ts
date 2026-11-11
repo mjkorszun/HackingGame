@@ -744,3 +744,51 @@ describe('skimmer and days', () => {
     expect(net.security).toBe(2);
   });
 });
+
+describe('software development', () => {
+  it('a day of work brings the project closer; a bug pushes the end back', async () => {
+    const { newProject, work } = await import('./development');
+    const p = newProject('hide', 2, 'Veil 1.0');
+    expect(p.daysLeft).toBe(6);
+    expect(work(p, 1, () => 0.99)).toEqual({ days: 1, bugs: [], done: false });
+    expect(p.daysLeft).toBe(5);
+    // bug roll (0) then extra-days roll (0.99 → 3 days)
+    const rolls = [0, 0.99];
+    const r = work(p, 1, () => rolls.shift() ?? 0.99);
+    expect(r.bugs).toEqual([3]);
+    expect(p.daysLeft).toBe(7);
+  });
+
+  it('finish works the days left; with no bug it ends, with a bug it does not', async () => {
+    const { newProject, work } = await import('./development');
+    const a = newProject('scan', 1, 'A');
+    expect(work(a, a.daysLeft, () => 0.99).done).toBe(true);
+    const b = newProject('scan', 1, 'B');
+    const rolls = [0.99, 0, 0];
+    const r = work(b, b.daysLeft, () => rolls.shift() ?? 0.99);
+    expect(r.days).toBe(3);
+    expect(r.done).toBe(false);
+    expect(b.daysLeft).toBe(1);
+  });
+
+  it('a finished program gets a rarity and that many different traits', async () => {
+    const { finishProgram, newProject, rollRarity, RARITY_TRAITS } = await import('./development');
+    expect(rollRarity(() => 0)).toBe('common');
+    expect(rollRarity(() => 0.995)).toBe('prototype');
+    const proto = finishProgram(newProject('attack', 3, 'Spike'), 'p200', 'you', (() => { let first = true; return () => { if (first) { first = false; return 0.995; } return 0.3; }; })());
+    expect(proto.rarity).toBe('prototype');
+    expect(proto.traits!.length).toBe(RARITY_TRAITS.prototype);
+    expect(new Set(proto.traits).size).toBe(4);
+    expect(proto.author).toBe('you');
+  });
+
+  it('several days pass at once: skimmers pay for each day and the counter moves', async () => {
+    const { newPizzeria } = await import('./generate');
+    const { passDay } = await import('../ui/account');
+    const net = newPizzeria(7);
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [] };
+    passDay(account, () => 0.99, 7);
+    expect(account.day).toBe(8);
+    expect(account.sats).toBeCloseTo(0.56);
+  });
+});
