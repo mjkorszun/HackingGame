@@ -338,6 +338,7 @@ export class Game {
     }
     const here = this.currentNode;
     const { identify, extend } = scoutChances(program.rating, this.network.def.encryption ?? 1);
+    this.events.push({ type: 'program', programType: program.type });
     this.noise.set(here, (this.noise.get(here) ?? 0) + SCOUT_NOISE);
     this.log(`${program.name} (scout ${program.rating}) launched. it is loud: noise in ${this.nameOf(here)} +${SCOUT_NOISE}`, 'system');
     const neighbours = this.network.neighbours(here).map((n) => n.id);

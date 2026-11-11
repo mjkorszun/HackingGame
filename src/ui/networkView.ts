@@ -303,7 +303,8 @@ export class NetworkView {
     let n = 0;
     for (const p of positions) {
       for (const far of g.network.neighbours(p.node.id)) {
-        if (far.id === current.id) continue;
+        // Only links to nodes the player knows about: no hints of what is still unseen.
+        if (far.id === current.id || !g.isKnown(far.id)) continue;
         const other = shown.get(far.id);
         if (other) {
           if (p.node.id < far.id) svg('line', { x1: p.x, y1: p.y, x2: other.x, y2: other.y, class: 'link' }, parent);

@@ -195,6 +195,7 @@ function flush(): void {
     else if (ev.type === 'hop') sfx.play('hop');
     else if (ev.type === 'moved') sfx.play('arrive');
     else if (ev.type === 'paused') sfx.play(ev.paused ? 'pause' : 'resume');
+    else if (ev.type === 'program') sfx.play(ev.programType);
   }
 }
 
