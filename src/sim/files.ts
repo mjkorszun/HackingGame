@@ -1,5 +1,6 @@
 /** What a data file turns out to hold once scanned. */
-export type FileContent = 'worthless' | 'valuable' | 'program';
+/** quest: data a contract needs (to download, alter or delete). */
+export type FileContent = 'worthless' | 'valuable' | 'program' | 'quest';
 
 export interface DataFile {
   /** f1, f2, ... within its node. */
@@ -26,13 +27,13 @@ function seeded(text: string): () => number {
   };
 }
 
-/** Placeholder content: 6-12 files, mostly worthless, some valuable, a few programs. */
+/** Placeholder content: 6-12 files, mostly worthless, some valuable, a few programs, rarely contract data. */
 export function generateFiles(nodeId: string): DataFile[] {
   const rand = seeded(nodeId);
   const count = 6 + Math.floor(rand() * 7);
   return Array.from({ length: count }, (_, i) => {
     const r = rand();
-    const content: FileContent = r < 0.6 ? 'worthless' : r < 0.9 ? 'valuable' : 'program';
+    const content: FileContent = r < 0.58 ? 'worthless' : r < 0.86 ? 'valuable' : r < 0.95 ? 'program' : 'quest';
     return { id: `f${i + 1}`, content, scanned: false };
   });
 }
@@ -41,4 +42,5 @@ export const CONTENT_LABEL: Record<FileContent, string> = {
   worthless: 'worthless',
   valuable: 'valuable data',
   program: 'a program',
+  quest: 'data a contract needs (contracts come later)',
 };

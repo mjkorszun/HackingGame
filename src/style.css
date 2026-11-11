@@ -358,7 +358,9 @@ body {
 .data-block.is-worthless rect { fill: #2a2508; }
 .data-block.is-valuable { --fc: var(--blue); }
 .data-block.is-valuable rect { fill: #0a1f33; }
-.data-block.is-program { --fc: #b98cff; }
-.data-block.is-program rect { fill: #1f1233; }
+.data-block.is-program { --fc: #9fe4ff; }
+.data-block.is-program rect { fill: #0c2630; }
+.data-block.is-quest { --fc: #b98cff; }
+.data-block.is-quest rect { fill: #1f1233; }
 .data-block.is-scanning rect { animation: file-scan 0.5s ease-in-out infinite alternate; }
 @keyframes file-scan { from { stroke: #5dff8a; } to { stroke: #ffffff; fill: #1f6b38; } }
