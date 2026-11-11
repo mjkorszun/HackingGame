@@ -30,6 +30,8 @@ export class Game {
   private route: string[] = [];
   private events: SimEvent[] = [];
   private readonly identified = new Set<string>();
+  /** Nodes the player knows exist: visited ones and their neighbours. The rest of the map is unseen. */
+  private readonly known = new Set<string>();
   /** Stable number of each hidden node in this system, used for its ?N name. */
   private readonly unknownNumber = new Map<string, number>();
   /** Privileges the player holds in this system. */
@@ -38,10 +40,8 @@ export class Game {
   constructor(system: SystemDef) {
     this.network = new Network(system);
     this.currentNode = system.entry;
-    for (const n of system.nodes) {
-      if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
-      else this.unknownNumber.set(n.id, this.unknownNumber.size + 1);
-    }
+    for (const n of system.nodes) if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
+    this.discoverAround(this.currentNode);
     this.log(`link up: ${system.name} (${system.location})`, 'system');
     this.log(`you are at ${this.nameOf(this.currentNode)}`);
   }
@@ -64,6 +64,34 @@ export class Game {
     this.setPaused(!this.paused);
   }
 
+  /** Whether the player knows this node exists (it is drawn and can be targeted). */
+  isKnown(id: string): boolean {
+    return this.known.has(id);
+  }
+
+  /** How many nodes are known (changes as the map is discovered). */
+  get knownCount(): number {
+    return this.known.size;
+  }
+
+  /** Makes every node of the system known, without identifying hidden ones. */
+  revealMap(): void {
+    for (const n of this.network.def.nodes) this.learn(n.id);
+  }
+
+  /** A node becomes known; a hidden one gets its ?N number in the order it was found. */
+  private learn(id: string): void {
+    if (this.known.has(id)) return;
+    this.known.add(id);
+    if (!this.identified.has(id)) this.unknownNumber.set(id, this.unknownNumber.size + 1);
+  }
+
+  /** Standing in a node shows it and its neighbours. */
+  private discoverAround(id: string): void {
+    this.learn(id);
+    for (const n of this.network.neighbours(id)) this.learn(n.id);
+  }
+
   /** Whether the player knows what this node is. */
   isIdentified(id: string): boolean {
     return this.identified.has(id);
@@ -76,7 +104,7 @@ export class Game {
 
   /** The node's name as the player knows it. */
   nameOf(id: string): string {
-    return this.isIdentified(id) ? this.network.node(id).name : `${UNKNOWN_PREFIX}${this.unknownNumber.get(id)}`;
+    return this.isIdentified(id) ? this.network.node(id).name : `${UNKNOWN_PREFIX}${this.unknownNumber.get(id) ?? ''}`;
   }
 
   /** The node's kind as the player knows it. */
@@ -98,10 +126,10 @@ export class Game {
         const near = this.network.neighbours(this.currentNode).filter(unknown);
         return near.length === 1 ? near[0] : undefined;
       }
-      return this.network.def.nodes.find((n) => unknown(n) && this.nameOf(n.id).toLowerCase() === q);
+      return this.network.def.nodes.find((n) => this.isKnown(n.id) && unknown(n) && this.nameOf(n.id).toLowerCase() === q);
     }
     const node = this.network.find(q);
-    return node && this.isIdentified(node.id) ? node : undefined;
+    return node && this.isKnown(node.id) && this.isIdentified(node.id) ? node : undefined;
   }
 
   /** Actions available in the current node, as the player sees them. */
@@ -130,6 +158,7 @@ export class Game {
     }
     if (action.id === 'download-map') {
       const before = this.identified.size;
+      this.revealMap();
       for (const n of this.network.def.nodes) this.identified.add(n.id);
       this.log(`map downloaded: ${this.identified.size - before} unknown nodes identified`, 'info');
       return true;
@@ -163,10 +192,11 @@ export class Game {
    * Returns false if the target cannot be reached.
    */
   travelTo(target: string): boolean {
-    if (!this.network.has(target)) return false;
+    if (!this.network.has(target) || !this.isKnown(target)) return false;
     const start = this.move ? this.move.to : this.currentNode;
     if (target === this.currentNode && !this.move) return false;
-    const path = this.network.path(start, target);
+    // Routes only go through nodes the player knows.
+    const path = this.network.path(start, target, (id) => this.isKnown(id));
     if (target !== start && path.length === 0) return false;
     this.route = path;
     if (!this.move) this.startNextHop();
@@ -201,6 +231,7 @@ export class Game {
       this.move = null;
       this.events.push({ type: 'moved', nodeId: this.currentNode });
       this.log(`arrived: ${this.nameOf(this.currentNode)}`, 'info');
+      this.discoverAround(this.currentNode);
       if (!this.isIdentified(this.currentNode)) {
         this.identified.add(this.currentNode);
         this.log(`node identified: ${this.nameOf(this.currentNode)}`, 'info');

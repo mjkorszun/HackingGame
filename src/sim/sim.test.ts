@@ -49,6 +49,7 @@ describe('Game', () => {
 
   it('travels hop by hop to a distant node', () => {
     const g = new Game(testSystem);
+    g.revealMap();
     g.travelTo('ai');
     const hops = new Network(testSystem).path('gw', 'ai').length;
     run(g, hops * MOVE_TICKS);
@@ -69,6 +70,7 @@ describe('Game', () => {
 
   it('stops after the current hop when travel is cancelled', () => {
     const g = new Game(testSystem);
+    g.revealMap();
     g.travelTo('ai');
     run(g, 1);
     g.cancelTravel();
@@ -91,6 +93,7 @@ describe('Game', () => {
 describe('Game.moveTarget', () => {
   it('reports the final destination, not the next hop', () => {
     const g = new Game(testSystem);
+    g.revealMap();
     g.travelTo('ai');
     expect(g.moveTarget).toBe('ai');
   });
@@ -101,6 +104,7 @@ describe('Game hop state', () => {
     const g = new Game(testSystem);
     expect(g.nextHop).toBeNull();
     expect(g.hopProgress).toBe(0);
+    g.revealMap();
     g.travelTo('ai');
     expect(g.nextHop).toBe('edge');
     run(g, MOVE_TICKS / 2);
@@ -111,11 +115,12 @@ describe('Game hop state', () => {
 describe('hidden nodes', () => {
   it('show as unknown until the player enters them', () => {
     const game = new Game(testSystem);
-    expect(game.nameOf('orders')).toBe('?1');
-    expect(game.nameOf('staff')).toBe('?2');
     expect(game.kindOf('staff')).toBe('unknown');
     expect(game.findNode('Staff Records')).toBeUndefined();
     expect(game.findNode('staff')).toBeUndefined();
+    game.revealMap();
+    expect(game.nameOf('orders')).toBe('?1');
+    expect(game.nameOf('staff')).toBe('?2');
     expect(game.findNode('?2')?.id).toBe('staff');
     expect(game.findNode('?')).toBeUndefined(); // not next to any unknown node yet
     game.travelTo('staff');
@@ -127,9 +132,30 @@ describe('hidden nodes', () => {
   });
 });
 
+describe('discovery', () => {
+  it('knows only the entry and its neighbours at the start', () => {
+    const game = new Game(testSystem);
+    expect(game.isKnown('gw')).toBe(true);
+    expect(game.isKnown('edge')).toBe(true);
+    expect(game.isKnown('auth')).toBe(false);
+    expect(game.findNode('Auth Service')).toBeUndefined();
+  });
+  it('reveals neighbours on arrival', () => {
+    const game = new Game(testSystem);
+    game.travelTo('edge');
+    run(game, MOVE_TICKS * 2);
+    expect(game.currentNode).toBe('edge');
+    expect(game.isKnown('auth')).toBe(true);
+    expect(game.isKnown('orders')).toBe(true);
+    expect(game.nameOf('orders')).toBe('?1');
+    expect(game.isKnown('core')).toBe(false);
+  });
+});
+
 describe('node actions', () => {
   function at(id: string) {
     const g = new Game(testSystem);
+    g.revealMap();
     g.travelTo(id);
     run(g, MOVE_TICKS * 20);
     expect(g.currentNode).toBe(id);
@@ -172,5 +198,26 @@ describe('gates', () => {
     expect(net.hasGate('edge', 'auth')).toBe(true);
     expect(net.hasGate('auth', 'edge')).toBe(true);
     expect(net.hasGate('gw', 'edge')).toBe(false);
+  });
+});
+
+describe('discovering the map', () => {
+  it('starts knowing only the entry and its neighbours, and grows as you move', () => {
+    const g = new Game(testSystem);
+    expect(g.isKnown('gw')).toBe(true);
+    expect(g.isKnown('edge')).toBe(true);
+    expect(g.isKnown('auth')).toBe(false);
+    expect(g.travelTo('ai')).toBe(false); // cannot route to a node you have not found
+    g.travelTo('edge');
+    run(g, MOVE_TICKS * 2);
+    expect(g.isKnown('auth')).toBe(true);
+    expect(g.isKnown('orders')).toBe(true);
+    expect(g.isKnown('core')).toBe(false);
+  });
+
+  it('download-map reveals the whole system', () => {
+    const g = new Game(testSystem);
+    g.revealMap();
+    expect(g.isKnown('ai')).toBe(true);
   });
 });

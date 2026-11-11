@@ -50,14 +50,14 @@ export class Network {
   }
 
   /** Shortest path (breadth-first), excluding the start node. Empty if unreachable or same node. */
-  path(from: string, to: string): string[] {
+  path(from: string, to: string, allowed?: (id: string) => boolean): string[] {
     if (from === to) return [];
     const prev = new Map<string, string>([[from, from]]);
     const queue = [from];
     while (queue.length) {
       const cur = queue.shift()!;
       for (const next of this.adjacency.get(cur) ?? []) {
-        if (prev.has(next)) continue;
+        if (prev.has(next) || (allowed && !allowed(next))) continue;
         prev.set(next, cur);
         if (next === to) {
           const out = [to];
