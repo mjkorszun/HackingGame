@@ -160,6 +160,10 @@ body {
   cursor: pointer;
 }
 .pause-btn:hover { background: var(--green-faint); }
+.pause-btn { display: flex; align-items: center; gap: 8px; }
+.time-spinner { animation: time-spin 1s linear infinite; }
+.view-header.is-paused .time-spinner { animation-play-state: paused; }
+@keyframes time-spin { to { transform: rotate(360deg); } }
 .view-header.is-paused .pause-btn { color: var(--yellow); border-color: var(--yellow); }
 .view-header.is-paused .clock { color: var(--yellow); }
 

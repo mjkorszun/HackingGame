@@ -48,6 +48,8 @@ export interface SystemDef {
   encryption?: number;
 }
 
+import type { ProgramType } from './programs';
+
 export type LogColor = 'normal' | 'info' | 'system' | 'command' | 'alarm1' | 'alarm2' | 'alarm3';
 
 export interface LogLine {
@@ -68,4 +70,5 @@ export type SimEvent =
   | { type: 'progress'; line: ProgressLine }
   | { type: 'hop'; nodeId: string }
   | { type: 'moved'; nodeId: string }
-  | { type: 'paused'; paused: boolean };
+  | { type: 'paused'; paused: boolean }
+  | { type: 'program'; programType: ProgramType };

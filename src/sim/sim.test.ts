@@ -315,6 +315,25 @@ describe('auto-pause', () => {
     expect(g.paused).toBe(true);
   });
 
+  it('a new action lets time run again', () => {
+    const g = new Game(testSystem);
+    g.setAutoPause(true);
+    g.setPaused(true);
+    g.travelTo('edge');
+    expect(g.paused).toBe(false);
+    run(g, MOVE_TICKS);
+    expect(g.paused).toBe(true);
+    g.runProgram('scout');
+    expect(g.paused).toBe(false);
+  });
+
+  it('without auto-pause a route set while paused waits', () => {
+    const g = new Game(testSystem);
+    g.setPaused(true);
+    g.travelTo('edge');
+    expect(g.paused).toBe(true);
+  });
+
   it('is off by default', () => {
     const g = new Game(testSystem);
     g.travelTo('edge');
