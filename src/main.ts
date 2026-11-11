@@ -74,7 +74,7 @@ function leaveNet(): void {
   }
   account.programs = [...account.programs, ...report.software];
   // Programs loaded mid-run stay loaded.
-  for (const l of game.loot) if (l.loaded && l.software && account.loaded.length < account.memory) account.loaded.push(l.software.id);
+  for (const l of game.loot) if (l.loaded && l.software) account.loaded.push(l.software.id);
   saveAccount(account);
   flush();
   showRunSummary(report, account.sats, () => location.reload());

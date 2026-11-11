@@ -30,6 +30,22 @@ export interface Program {
   detection?: number;
 }
 
+/** Base size in GB of a rating-1 program of each type (placeholder numbers). */
+const BASE_SIZE: Record<ProgramType, number> = {
+  attack: 60, silence: 40, deceive: 50, hide: 40, analyze: 30, skimmer: 30, scout: 50, scan: 30,
+  evaluate: 20, identify: 20, defuse: 30, decrypt: 50, scrub: 30, forge: 40,
+};
+
+/** Size of a program in GB: bigger for higher ratings. */
+export function programSize(p: Pick<Program, 'type' | 'rating'>): number {
+  return Math.round(BASE_SIZE[p.type] * (1 + 0.5 * (p.rating - 1)));
+}
+
+/** GB taken by a set of programs. */
+export function usedMemory(list: Pick<Program, 'type' | 'rating'>[]): number {
+  return list.reduce((sum, p) => sum + programSize(p), 0);
+}
+
 /** How long the scout's eyes take to reach the next ring of nodes. */
 export const SCOUT_HOP_TICKS = 15;
 

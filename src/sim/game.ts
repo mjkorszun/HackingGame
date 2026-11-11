@@ -1,8 +1,9 @@
 import { sats } from './money';
-import { versus, WARRIOR, type Agent } from './agents';
+import { codeName, versus, WARRIORS, type Agent } from './agents';
 import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
+import { programSize, usedMemory } from './programs';
 import { FILE_PROGRAMS, PROGRAM_STUBS, SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
 import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
@@ -98,7 +99,7 @@ export class Game {
   readonly privileges = new Set<Privilege>();
   /** Programs loaded in the player's memory: the ones usable in this run. */
   readonly programs: Program[];
-  /** How many programs the memory holds. */
+  /** Memory size in GB: loaded programs must fit in it. */
   readonly memorySlots: number;
   /** What the player took in this run: paid out (sats, programs) only when the run ends. */
   readonly loot: LootItem[] = [];
@@ -137,7 +138,7 @@ export class Game {
   constructor(system: SystemDef, rng: Rng = Math.random, programs: Program[] = STARTING_PROGRAMS, opts: { memory?: number; nextId?: number } = {}) {
     this.d100 = () => Math.floor(rng() * 100) + 1;
     this.programs = programs.map((p) => ({ ...p }));
-    this.memorySlots = opts.memory ?? Math.max(DEFAULT_MEMORY, this.programs.length);
+    this.memorySlots = opts.memory ?? Math.max(DEFAULT_MEMORY, usedMemory(this.programs));
     this.nextProgramId = Math.max(100, opts.nextId ?? 0, ...this.programs.map((p) => Number(p.id.slice(1)) + 1 || 0));
     this.network = new Network(system);
     this.currentNode = system.entry;
@@ -149,9 +150,10 @@ export class Game {
     const target = job && this.files.get(job.node);
     if (job && target) target.push({ id: `f${target.length + 1}`, content: 'contract', scanned: false, need: job.need });
     (system.agents ?? []).forEach((a, i) => {
+      const stats = WARRIORS[a.variant ?? 0] ?? WARRIORS[0];
       this.agents.push({
-        id: `a${i + 1}`, name: `W${i + 1}`, stats: WARRIOR, hp: WARRIOR.hp, node: a.node, hop: null,
-        stayLeft: WARRIOR.stay[0], queryLeft: WARRIOR.queryEvery, attackLeft: WARRIOR.attackEvery,
+        id: `a${i + 1}`, name: codeName(`${system.id}/${i}`), stats, hp: stats.hp, node: a.node, hop: null,
+        stayLeft: stats.stay[0], queryLeft: stats.queryEvery, attackLeft: stats.attackEvery,
         mood: 'patrol', strikes: 0, silenced: false, known: 'none',
       });
     });
@@ -207,14 +209,15 @@ export class Game {
       this.log(q ? `no downloaded program "${name}" to load` : 'usage: load <program>', 'alarm1');
       return false;
     }
-    if (this.programs.length >= this.memorySlots) {
-      this.log(`memory full (${this.memorySlots} programs). it waits in your data until you leave the net`, 'alarm1');
+    const size = programSize(item.software!);
+    if (usedMemory(this.programs) + size > this.memorySlots) {
+      this.log(`not enough memory: ${item.software!.name} needs ${size} GB, ${this.memorySlots - usedMemory(this.programs)} GB free. it waits in your data until you leave the net`, 'alarm1');
       return false;
     }
     item.loaded = true;
     this.programs.push(item.software!);
     this.deckVersion++;
-    this.log(`${item.software!.name} loaded into memory (${this.programs.length}/${this.memorySlots})`, 'info');
+    this.log(`${item.software!.name} loaded into memory (${usedMemory(this.programs)}/${this.memorySlots} GB)`, 'info');
     return true;
   }
 
@@ -466,12 +469,12 @@ export class Game {
     this.scout = null;
     this.scan = null;
     const job = this.network.def.contract;
-    const success = this.contractDone && !this.kicked;
+    const success = this.contractDone;
     const files = this.loot.filter((l) => !l.software).map((l) => ({ name: l.name, label: l.label, price: l.price }));
     const software = this.loot.filter((l) => l.software).map((l) => l.software!);
     const pay = job && success ? job.pay : 0;
     // Placeholder reputation: a contract done +5; a local job +1 if you took something and the alarm never went red.
-    const reputation = job ? (success ? 5 : 0) : this.loot.length && this.alarm < 3 && !this.kicked ? 1 : 0;
+    const reputation = job ? (success ? 5 : 0) : this.loot.length && this.alarm < 3 ? 1 : 0;
     const filesTotal = files.reduce((sum, f) => sum + f.price, 0);
     this.log('link down: you left the net', 'system');
     return { contract: job ? { title: job.title, pay: job.pay } : undefined, success, files, software, pay, filesTotal, total: pay + filesTotal, reputation };
@@ -1125,8 +1128,8 @@ export class Game {
   }
 }
 
-/** Memory slots of the starting hardware. */
-export const DEFAULT_MEMORY = 10;
+/** Memory of the starting hardware, in GB. */
+export const DEFAULT_MEMORY = 500;
 
 /** The deck a new player starts with. */
 export const STARTING_PROGRAMS: Program[] = [

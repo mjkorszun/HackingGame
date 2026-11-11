@@ -12,7 +12,7 @@ export interface ContractOffer {
 export type Choice = { kind: 'network'; net: NetworkSeed } | { kind: 'contract'; offer: ContractOffer };
 
 /** Reputation needed before anyone offers you contracts. */
-export const CONTRACT_REPUTATION = 3;
+export const CONTRACT_REPUTATION = 0;
 
 export interface HomeState {
   day: number;

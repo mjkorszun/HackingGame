@@ -1,5 +1,5 @@
 import { DEFAULT_MEMORY, STARTING_PROGRAMS } from '../sim/game';
-import type { Program } from '../sim/programs';
+import { programSize, usedMemory, type Program } from '../sim/programs';
 import { newPizzeria, type NetworkSeed } from '../sim/generate';
 
 /** What the player keeps between runs: sats and software. Saved in the browser. */
@@ -72,7 +72,8 @@ export function toggleLoaded(a: Account, id: string): boolean {
     a.loaded = a.loaded.filter((x) => x !== id);
     return true;
   }
-  if (a.loaded.length >= a.memory) return false;
+  const p = a.programs.find((x) => x.id === id);
+  if (!p || usedMemory(loadedPrograms(a)) + programSize(p) > a.memory) return false;
   a.loaded.push(id);
   return true;
 }
@@ -104,19 +105,22 @@ export function saveAccount(a: Account): void {
 function migrate(a: Account): Account {
   const programs = a.programs as { type: string; name: string }[];
   renameOld(programs);
-  if (typeof a.memory !== 'number') a.memory = DEFAULT_MEMORY;
+  // Memory used to count programs; now it is GB.
+  if (typeof a.memory !== 'number' || a.memory < 100) a.memory = DEFAULT_MEMORY;
   if (typeof a.day !== 'number') a.day = 1;
   if (typeof a.reputation !== 'number') a.reputation = 0;
   if (!Array.isArray(a.networks) || !a.networks.length) a.networks = [newPizzeria(randomSeed())];
   if (!Array.isArray(a.skimmers)) a.skimmers = [];
   if (!Array.isArray(a.news)) a.news = [];
-  if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).slice(0, a.memory).map((p) => p.id);
+  if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id);
+  // Unload from the end until what is loaded fits.
+  while (a.loaded.length && usedMemory(loadedPrograms(a)) > a.memory) a.loaded.pop();
   // New starting programs reach old saves too.
   for (const p of STARTING_PROGRAMS) {
     if (a.programs.some((q) => q.type === p.type)) continue;
     const added = { ...p, id: `p${nextProgramId(a)}` };
     a.programs.push(added);
-    if (a.loaded.length < a.memory) a.loaded.push(added.id);
+    if (usedMemory(loadedPrograms(a)) + programSize(added) <= a.memory) a.loaded.push(added.id);
   }
   return a;
 }

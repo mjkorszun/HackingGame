@@ -53,7 +53,8 @@ export interface SystemDef {
   /** Security level: how valuable the data kept here is (and, later, how hard it fights back). */
   security?: number;
   /** Agents that start in this system. */
-  agents?: { kind: 'warrior'; node: string }[];
+  /** variant: which of the warrior kinds (0-2). */
+  agents?: { kind: 'warrior'; node: string; variant?: number }[];
   /** The job the player was hired for in this system. */
   contract?: ContractDef;
 }
