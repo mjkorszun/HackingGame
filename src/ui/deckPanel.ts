@@ -14,7 +14,18 @@ export function renderDeck(root: HTMLElement, game: Game, run: (program: Program
         <h3>software</h3>
         <ul class="deck-programs"></ul>
       </div>
+      <div>
+        <h3>data</h3>
+        <ul class="deck-data"></ul>
+      </div>
     </div>`;
+  const data = root.querySelector('.deck-data')!;
+  if (!game.downloads.length) data.innerHTML = '<li class="deck-empty">nothing yet</li>';
+  for (const d of game.downloads) {
+    const li = document.createElement('li');
+    li.textContent = d.price !== undefined ? `${d.name}  ${d.price} cr` : `${d.name}  ? cr`;
+    data.appendChild(li);
+  }
   const list = root.querySelector('.deck-programs')!;
   for (const p of game.programs) {
     const n = game.programsOf(p.type).indexOf(p) + 1;

@@ -347,6 +347,43 @@ describe('data files and scan', () => {
     expect(g.scanCommand('all')).toBe(false); // nothing left
   });
 
+  it('scanned files offer actions by content; evaluate, identify and download work', () => {
+    const g = inOrders();
+    g.scanCommand('all');
+    finish(g);
+    const files = g.filesIn('orders');
+    const valuable = files.find((f) => f.content === 'valuable')!;
+    const worthless = files.find((f) => f.content === 'worthless')!;
+    expect(g.fileAction('download', worthless.id)).toBe(false);
+    expect(g.fileAction('evaluate', valuable.id)).toBe(true);
+    expect(valuable.evaluated).toBe(true);
+    expect(g.fileAction('download', valuable.id)).toBe(true);
+    expect(g.downloads[0].price).toBe(valuable.price);
+    expect(g.fileAction('download', valuable.id)).toBe(false); // only once
+    const software = files.find((f) => f.content === 'software');
+    if (software) {
+      const before = g.programs.length;
+      expect(g.fileAction('identify', software.id)).toBe(true);
+      expect(g.fileAction('download', software.id)).toBe(true);
+      expect(g.programs.length).toBe(before + 1);
+      expect(g.programs[before].name).toBe(software.software!.name);
+    }
+    const contract = files.find((f) => f.content === 'contract');
+    if (contract) {
+      expect(g.fileAction(contract.need === 'alter' ? 'delete' : 'alter', contract.id)).toBe(false);
+      expect(g.fileAction(contract.need!, contract.id)).toBe(true);
+    }
+  });
+
+  it('evaluate needs an evaluate program', () => {
+    const g = inOrders();
+    g.scanCommand('all');
+    finish(g);
+    g.programs.splice(g.programs.findIndex((p) => p.type === 'evaluate'), 1);
+    const valuable = g.filesIn('orders').find((f) => f.content === 'valuable')!;
+    expect(g.fileAction('evaluate', valuable.id)).toBe(false);
+  });
+
   it('there is nothing to scan outside databases', () => {
     const g = new Game(testSystem);
     expect(g.scanCommand('')).toBe(false);

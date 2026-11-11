@@ -7,6 +7,7 @@ import { renderDeck } from './ui/deckPanel';
 import { ContextMenu } from './ui/contextMenu';
 import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
+import { fileActions } from './sim/files';
 import { PROGRAM_TYPES, type ProgramType } from './sim/programs';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
@@ -89,6 +90,13 @@ function runCommand(raw: string): void {
     case 'scan':
       if (!game.scanCommand(arg)) sfx.play('error');
       break;
+    case 'evaluate':
+    case 'identify':
+    case 'download':
+    case 'alter':
+    case 'delete':
+      if (!game.fileAction(cmd.name, arg)) sfx.play('error');
+      break;
     case 'attack':
     case 'hide':
     case 'scout':
@@ -137,7 +145,14 @@ function ui(cmd: string): void {
 
 const nodeName = (id: string) => game.nameOf(id);
 
-renderDeck(document.getElementById('deck')!, game, (p) => ui(p.name));
+const deckEl = document.getElementById('deck')!;
+let deckVersion = -1;
+function updateDeck(): void {
+  if (game.deckVersion === deckVersion) return;
+  deckVersion = game.deckVersion;
+  renderDeck(deckEl, game, (p) => ui(p.name));
+}
+updateDeck();
 
 const term = new Console(document.getElementById('console')!, (cmd) => {
   sfx.play('command');
@@ -151,6 +166,8 @@ term.completer = (value) =>
     names: (kind) =>
       kind === 'action'
         ? game.currentActions.map((a) => a.id)
+        : kind === 'file' || kind === 'evaluate' || kind === 'identify'
+          ? game.filesIn(game.currentNode).filter((f) => fileActions(f).length).map((f) => f.id)
         : (PROGRAM_TYPES as readonly string[]).includes(kind)
           ? game.programsOf(kind as ProgramType).map((p) => p.name)
           : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes.filter((n) => game.isKnown(n.id))).map((n) => game.nameOf(n.id)))],
@@ -162,6 +179,7 @@ const view = new NetworkView(document.getElementById('view')!, game, menu, {
   run: (p) => ui(p.name),
   scanFile: (fileId, all) => ui(all ? `scan all ${fileId}` : `scan ${fileId}`),
   scanAll: () => ui('scan all'),
+  fileAction: (action, fileId) => ui(`${action} ${fileId}`),
   togglePause: () => ui(game.paused ? 'resume' : 'pause'),
   mute: () => ui('mute'),
   autoPause: () => ui('autopause'),
@@ -216,6 +234,7 @@ function frame(now: number): void {
   for (let i = 0; i < ticks; i++) game.step();
   flush();
   view.update();
+  updateDeck();
   requestAnimationFrame(frame);
 }
 flush();

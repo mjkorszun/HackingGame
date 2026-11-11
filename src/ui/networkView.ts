@@ -1,4 +1,5 @@
-import { CONTENT_LABEL } from '../sim/files';
+import { CONTENT_LABEL, fileActions, type DataFile, type FileAction } from '../sim/files';
+import { Tooltip, type TipLine } from './tooltip';
 import type { Program } from '../sim/programs';
 import type { Game } from '../sim/game';
 import { TICKS_PER_SECOND } from '../sim/game';
@@ -92,6 +93,21 @@ const ICON_AUTO_PAUSE = icon(
   '<circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 2.5h4M12 2.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="9" y="10" width="2.2" height="7" fill="currentColor"/><rect x="12.8" y="10" width="2.2" height="7" fill="currentColor"/>',
 );
 
+/** What the game tooltip says about a data file. */
+function fileTip(f: DataFile): TipLine[] {
+  const lines: TipLine[] = [{ text: f.id, cls: 'tip-title' }];
+  if (!f.scanned) return [...lines, { text: 'not scanned', cls: 'c-system' }, { text: 'click to scan', cls: 'c-system' }];
+  lines.push({ text: CONTENT_LABEL[f.content], cls: `tip-${f.content}` });
+  if (f.content === 'valuable') lines.push({ text: f.evaluated ? `worth ${f.price} cr` : 'value unknown (evaluate)' });
+  if (f.content === 'software') {
+    const sw = f.software!;
+    lines.push({ text: f.identified ? `${sw.name}  ${sw.type} ${sw.rating}` : 'unknown program (identify)' });
+  }
+  if (f.content === 'contract') lines.push({ text: f.altered ? 'altered' : `the contract wants it ${f.need === 'alter' ? 'altered' : 'deleted'}` });
+  if (f.downloaded) lines.push({ text: 'downloaded', cls: 'c-info' });
+  return lines;
+}
+
 function formatTime(tick: number): string {
   const total = Math.floor(tick / TICKS_PER_SECOND);
   const m = Math.floor(total / 60);
@@ -108,6 +124,7 @@ export interface ViewActions {
   /** Scan one file, or all unscanned files starting at it. */
   scanFile(fileId: string, all: boolean): void;
   scanAll(): void;
+  fileAction(action: FileAction, fileId: string): void;
   togglePause(): void;
   mute(): void;
   autoPause(): void;
@@ -135,6 +152,7 @@ export class NetworkView {
   /** Outline of the current room, used to find where links leave it. */
   private roomShape: SVGGeometryElement | null = null;
   private roomR = ROOM_R;
+  private readonly tip = new Tooltip();
   /** Layers redrawn every frame with the scout's eyes. */
   private scoutLayer: SVGGElement | null = null;
   private miniScoutLayer: SVGGElement | null = null;
@@ -436,26 +454,36 @@ export class NetworkView {
       if (!inside || nearAvatar || taken.has(key)) continue;
       taken.add(key);
       const file = files[i++];
+      if (file.deleted) continue;
       const cls = ['data-block', file.scanned ? `is-${file.content}` : 'is-unscanned'];
       if (scanning?.fileId === file.id) cls.push('is-scanning');
+      if (file.downloaded || file.altered) cls.push('is-done');
       const blk = svg('g', { class: cls.join(' '), 'data-file': file.id }, parent);
       const pad = 5;
       svg('rect', { x: x + pad, y: y + pad, width: CELL - 2 * pad, height: CELL - 2 * pad }, blk);
       const mid = y + CELL / 2;
       svg('line', { x1: x + pad + 4, y1: mid - 2.5, x2: x + CELL - pad - 4, y2: mid - 2.5 }, blk);
       svg('line', { x1: x + pad + 4, y1: mid + 2.5, x2: x + CELL - pad - 7, y2: mid + 2.5 }, blk);
-      const tip = svg('title', {}, blk);
-      tip.textContent = `${file.id}: ${file.scanned ? CONTENT_LABEL[file.content] : 'not scanned'}`;
+      this.tip.attach(blk, () => fileTip(file));
       blk.addEventListener('mouseenter', () => this.actions.hover());
-      blk.addEventListener('click', () => this.actions.scanFile(file.id, false));
+      blk.addEventListener('click', () => {
+        if (!file.scanned) this.actions.scanFile(file.id, false);
+      });
       blk.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const busy = this.game.isBusy;
-        this.menu.show(e.clientX, e.clientY, `${file.id}${file.scanned ? `: ${CONTENT_LABEL[file.content]}` : ''}`, [
-          { label: 'Scan', hint: 'click', disabled: busy || file.scanned, action: () => this.actions.scanFile(file.id, false) },
-          { label: 'Scan all', hint: 'from this file', disabled: busy, action: () => this.actions.scanFile(file.id, true) },
-        ]);
+        const items = [];
+        if (!file.scanned) items.push({ label: 'Scan', hint: 'click', disabled: busy, action: () => this.actions.scanFile(file.id, false) });
+        for (const act of fileActions(file)) {
+          const needs = (act === 'evaluate' || act === 'identify') && !this.game.findProgram(act);
+          const done = act === 'download' && file.downloaded;
+          items.push({ label: act, hint: needs ? `needs ${act}` : done ? 'done' : undefined, disabled: busy || needs || done, action: () => this.actions.fileAction(act, file.id) });
+        }
+        if (this.game.filesIn(nodeId).some((f) => !f.scanned)) {
+          items.push({ label: 'Scan all', hint: 'starting from this file', disabled: busy, action: () => this.actions.scanFile(file.id, true) });
+        }
+        this.menu.show(e.clientX, e.clientY, `${file.id}${file.scanned ? `: ${CONTENT_LABEL[file.content]}` : ''}`, items);
       });
     }
   }

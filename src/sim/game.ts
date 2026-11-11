@@ -1,5 +1,5 @@
 import { actionsFor, type NodeAction, type Privilege } from './actions';
-import { CONTENT_LABEL, generateFiles, scanTicks, type DataFile } from './files';
+import { CONTENT_LABEL, fileActions, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
 import { PROGRAM_STUBS, SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
 import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
@@ -75,7 +75,14 @@ export class Game {
     { id: 'p4', type: 'hide', name: 'Ghost 1.2', rating: 1 },
     { id: 'p5', type: 'scan', name: 'Sieve 2.0', rating: 1 },
     { id: 'p6', type: 'decrypt', name: 'Lockpick 1.0', rating: 1 },
+    { id: 'p7', type: 'evaluate', name: 'Appraiser 1.0', rating: 1 },
+    { id: 'p8', type: 'identify', name: 'Inspector 1.0', rating: 1 },
   ];
+  /** Valuable data the player downloaded. */
+  readonly downloads: { name: string; price?: number }[] = [];
+  /** Changes whenever the deck's contents change (programs or downloads). */
+  deckVersion = 0;
+  private nextProgramId = 100;
   /** Noise the player made in each node. Nothing reacts to it yet. */
   readonly noise = new Map<string, number>();
 
@@ -362,6 +369,10 @@ export class Game {
       return false;
     }
     if (program.type === 'scan') return this.startScan(program, 0, true);
+    if (program.type === 'evaluate' || program.type === 'identify') {
+      this.log(`${program.name}: pick a file, e.g. ${program.type} f3`, 'system');
+      return false;
+    }
     if (program.type !== 'scout') {
       this.log(`${program.name} (${program.type} ${program.rating}): ${PROGRAM_STUBS[program.type]}`, 'info');
       return true;
@@ -410,7 +421,7 @@ export class Game {
   /** Changes whenever a file's look changes (for redrawing). */
   get filesKey(): string {
     const scanned = this.filesIn(this.currentNode).filter((f) => f.scanned).length;
-    return `${scanned}:${this.scanningFile?.fileId ?? ''}`;
+    return `${scanned}:${this.filesChanged}:${this.scanningFile?.fileId ?? ''}`;
   }
 
   /**
@@ -503,6 +514,82 @@ export class Game {
     this.log('scan finished', 'info');
     this.actionEnded();
   }
+
+  /**
+   * An action on a scanned file here: evaluate (needs an evaluate program), identify
+   * (needs an identify program), download, alter or delete. Instant for now.
+   */
+  fileAction(action: FileAction, fileId: string): boolean {
+    const id = fileId.trim().toLowerCase();
+    const file = this.filesIn(this.currentNode).find((f) => f.id === id);
+    if (!id || !file || file.deleted) {
+      this.log(id ? `no file "${id}" here` : `usage: ${action} <file>, e.g. ${action} f3`, 'alarm1');
+      return false;
+    }
+    if (!file.scanned) {
+      this.log(`${file.id} is not scanned yet`, 'alarm1');
+      return false;
+    }
+    if (!fileActions(file).includes(action)) {
+      this.log(`${file.id} (${CONTENT_LABEL[file.content]}): cannot ${action}`, 'alarm1');
+      return false;
+    }
+    if (this.move || this.isBusy) {
+      this.log('busy: wait for the current action to finish', 'alarm1');
+      return false;
+    }
+    if (this.network.node(this.currentNode).kind === 'honeypot') {
+      this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
+      return true;
+    }
+    if (action === 'evaluate' || action === 'identify') {
+      const program = this.findProgram(action);
+      if (!program) {
+        this.log(`${action} needs an ${action} program in your deck`, 'alarm1');
+        return false;
+      }
+      if (action === 'evaluate') {
+        file.evaluated = true;
+        this.log(`${program.name}: ${file.id} is worth ${file.price} cr`, 'info');
+      } else {
+        file.identified = true;
+        const sw = file.software!;
+        this.log(`${program.name}: ${file.id} is ${sw.name} (${sw.type} ${sw.rating})`, 'info');
+      }
+      this.filesChanged++;
+      return true;
+    }
+    if (action === 'download') {
+      if (file.downloaded) {
+        this.log(`${file.id} is already downloaded`, 'system');
+        return false;
+      }
+      file.downloaded = true;
+      if (file.content === 'software') {
+        const sw = file.software!;
+        this.programs.push({ id: `p${this.nextProgramId++}`, ...sw });
+        this.log(`${file.id} downloaded: ${sw.name} (${sw.type} ${sw.rating}) added to your software`, 'info');
+      } else {
+        this.downloads.push({ name: `${this.nameOf(this.currentNode)} ${file.id}`, price: file.evaluated ? file.price : undefined });
+        this.log(`${file.id} downloaded to your deck`, 'info');
+      }
+      this.deckVersion++;
+      this.filesChanged++;
+      return true;
+    }
+    if (action === 'alter') {
+      file.altered = true;
+      this.log(`${file.id} altered (contracts come later)`, 'info');
+    } else {
+      file.deleted = true;
+      this.log(`${file.id} deleted (contracts come later)`, 'info');
+    }
+    this.filesChanged++;
+    return true;
+  }
+
+  /** Bumped when a file changes in a way the view shows. */
+  private filesChanged = 0;
 
   /** Stops a running scan; files already scanned stay scanned. */
   cancelScan(): boolean {

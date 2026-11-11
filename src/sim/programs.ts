@@ -1,9 +1,9 @@
 /** A program in the player's deck. */
-export const PROGRAM_TYPES = ['attack', 'hide', 'scout', 'scan', 'decrypt'] as const;
+export const PROGRAM_TYPES = ['attack', 'hide', 'scout', 'scan', 'decrypt', 'evaluate', 'identify'] as const;
 export type ProgramType = (typeof PROGRAM_TYPES)[number];
 
 /** Placeholder results for programs whose systems don't exist yet. */
-export const PROGRAM_STUBS: Record<Exclude<ProgramType, 'scout' | 'scan'>, string> = {
+export const PROGRAM_STUBS: Record<Exclude<ProgramType, 'scout' | 'scan' | 'evaluate' | 'identify'>, string> = {
   attack: 'no agent here to attack (agents come later)',
   hide: 'you blend into the normal traffic (hiding comes later)',
   decrypt: 'nothing encrypted here (encryption comes later)',

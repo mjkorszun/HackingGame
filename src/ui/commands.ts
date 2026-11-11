@@ -2,7 +2,7 @@
 
 import { PROGRAM_TYPES, type ProgramType } from '../sim/programs';
 
-export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | ProgramType;
+export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'file' | ProgramType;
 
 export interface CommandSpec {
   name: string;
@@ -13,14 +13,23 @@ export interface CommandSpec {
   help: string;
 }
 
+const PROGRAM_HELP: Partial<Record<ProgramType, string>> = {
+  scan: 'scan files here: scan [all] [fN], or pick the program by name',
+  evaluate: 'price of a valuable file (needs an evaluate program)',
+  identify: 'what software a file holds (needs an identify program)',
+};
+
 export const COMMANDS: CommandSpec[] = [
   { name: 'help', aliases: ['?'], arg: 'none', usage: 'help', help: 'this list' },
   { name: 'connect', aliases: ['go', 'move'], arg: 'neighbour', usage: 'connect <node>', help: 'travel to a node (Tab completes names)' },
   { name: 'look', aliases: ['l'], arg: 'node', usage: 'look [node]', help: 'describe the current node, or another one' },
   { name: 'do', arg: 'action', usage: 'do <action>', help: "use an action of the current node (look lists them)" },
   ...PROGRAM_TYPES.map(
-    (t): CommandSpec => ({ name: t, arg: t, usage: `${t} [n|name]`, help: t === 'scan' ? 'scan files here: scan [all] [fN], or pick the program by name' : `run your best ${t} program, or the Nth one, or one by name` }),
+    (t): CommandSpec => ({ name: t, arg: t, usage: t === 'evaluate' || t === 'identify' ? `${t} <file>` : `${t} [n|name]`, help: PROGRAM_HELP[t] ?? `run your best ${t} program, or the Nth one, or one by name` }),
   ),
+  { name: 'download', arg: 'file', usage: 'download <file>', help: 'copy a scanned file (valuable data or software) into your deck' },
+  { name: 'alter', arg: 'file', usage: 'alter <file>', help: 'change contract data' },
+  { name: 'delete', arg: 'file', usage: 'delete <file>', help: 'destroy contract data' },
   { name: 'map', arg: 'none', usage: 'map', help: 'list all nodes' },
   { name: 'pause', arg: 'none', usage: 'pause', help: 'stop time (Space)' },
   { name: 'resume', aliases: ['unpause'], arg: 'none', usage: 'resume', help: 'continue time (Space)' },
