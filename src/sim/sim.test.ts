@@ -534,6 +534,10 @@ describe('file left click', () => {
     f.downloaded = true;
     expect(clickAction(f)).toBeUndefined();
   });
+  it('downloads software', () => {
+    expect(clickAction({ ...base, content: 'software' } as DataFile)).toBe('download');
+    expect(clickAction({ ...base, content: 'software', downloaded: true } as DataFile)).toBeUndefined();
+  });
   it('does what a contract needs', () => {
     expect(clickAction({ ...base, content: 'contract', need: 'delete' } as DataFile)).toBe('delete');
     expect(clickAction({ ...base, content: 'contract', need: 'alter' } as DataFile)).toBe('alter');

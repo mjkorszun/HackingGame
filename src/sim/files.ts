@@ -75,6 +75,8 @@ export function clickAction(f: DataFile): FileAction | undefined {
     case 'valuable':
       if (!f.evaluated) return 'evaluate';
       return f.downloaded ? undefined : 'download';
+    case 'software':
+      return f.downloaded ? undefined : 'download';
     case 'contract':
       return f.altered ? undefined : f.need;
     default:

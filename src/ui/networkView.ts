@@ -117,6 +117,21 @@ function drawProtection(p: Protection, cx: number, cy: number, parent: Element):
   }
 }
 
+/** A price squeezed into a file cell: 900, 1.2k, 4k. */
+function shortPrice(cr: number): string {
+  if (cr < 1000) return String(cr);
+  const k = cr / 1000;
+  return `${k >= 10 || Number.isInteger(k) ? Math.round(k) : k.toFixed(1)}k`;
+}
+
+/** Generic program icon on a software file (each program type gets its own later): a code bracket pair. */
+function drawProgramIcon(cx: number, cy: number, parent: Element): void {
+  const g = svg('g', { class: 'file-guard' }, parent);
+  svg('path', { d: `M ${cx - 3} ${cy - 4.5} L ${cx - 7} ${cy} L ${cx - 3} ${cy + 4.5}` }, g);
+  svg('path', { d: `M ${cx + 3} ${cy - 4.5} L ${cx + 7} ${cy} L ${cx + 3} ${cy + 4.5}` }, g);
+  svg('line', { x1: cx + 1.5, y1: cy - 5.5, x2: cx - 1.5, y2: cy + 5.5 }, g);
+}
+
 /** What the game tooltip says about a data file. */
 function fileTip(f: DataFile): TipLine[] {
   const lines: TipLine[] = [{ text: f.id, cls: 'tip-title' }];
@@ -494,8 +509,14 @@ export class NetworkView {
       const pad = 5;
       svg('rect', { x: x + pad, y: y + pad, width: CELL - 2 * pad, height: CELL - 2 * pad }, blk);
       const mid = y + CELL / 2;
+      const seen = file.decrypted ? apparentContent(file) : undefined;
       if (file.protection) {
         drawProtection(file.protection, x + CELL / 2, mid, blk);
+      } else if (seen === 'valuable' && file.evaluated) {
+        const t = svg('text', { x: x + CELL / 2, y: mid, class: 'file-price' }, blk);
+        t.textContent = shortPrice(file.price!);
+      } else if (seen === 'software') {
+        drawProgramIcon(x + CELL / 2, mid, blk);
       } else {
         svg('line', { x1: x + pad + 4, y1: mid - 2.5, x2: x + CELL - pad - 4, y2: mid - 2.5 }, blk);
         svg('line', { x1: x + pad + 4, y1: mid + 2.5, x2: x + CELL - pad - 7, y2: mid + 2.5 }, blk);
