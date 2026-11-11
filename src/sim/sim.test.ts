@@ -298,8 +298,58 @@ describe('stub programs', () => {
   });
   it('each first-version program can be run and only prints for now', () => {
     const g = new Game(testSystem);
-    for (const t of ['attack', 'hide', 'scan', 'decrypt'] as const) expect(g.runProgram(t)).toBe(true);
+    for (const t of ['attack', 'hide', 'decrypt'] as const) expect(g.runProgram(t)).toBe(true);
     expect(g.isScouting).toBe(false);
+  });
+});
+
+describe('data files and scan', () => {
+  const inOrders = () => {
+    const g = new Game(testSystem);
+    g.autoPause = false;
+    g.setPaused(false);
+    g.revealMap();
+    g.travelTo('orders');
+    run(g, MOVE_TICKS * 3);
+    expect(g.currentNode).toBe('orders');
+    return g;
+  };
+  const finish = (g: Game) => {
+    for (let i = 0; i < 2000 && g.isBusy; i++) g.step();
+  };
+
+  it('databases hold 6-12 files, the same every run; other nodes none', () => {
+    const a = new Game(testSystem).filesIn('orders');
+    expect(a.length).toBeGreaterThanOrEqual(6);
+    expect(a.length).toBeLessThanOrEqual(12);
+    expect(new Game(testSystem).filesIn('orders').map((f) => f.content)).toEqual(a.map((f) => f.content));
+    expect(new Game(testSystem).filesIn('gw')).toEqual([]);
+  });
+
+  it('scans one file', () => {
+    const g = inOrders();
+    expect(g.scanCommand('f2')).toBe(true);
+    expect(g.travelTo('edge')).toBe(false); // busy
+    finish(g);
+    expect(g.filesIn('orders').filter((f) => f.scanned).map((f) => f.id)).toEqual(['f2']);
+  });
+
+  it('scan all starts at the chosen file, wraps around and skips scanned ones', () => {
+    const g = inOrders();
+    g.scanCommand('f1');
+    finish(g);
+    const n = g.filesIn('orders').length;
+    g.scanCommand('all f3');
+    expect(g.scanningFile?.fileId).toBe('f3');
+    finish(g);
+    expect(g.filesIn('orders').every((f) => f.scanned)).toBe(true);
+    expect(n).toBeGreaterThan(3);
+    expect(g.scanCommand('all')).toBe(false); // nothing left
+  });
+
+  it('there is nothing to scan outside databases', () => {
+    const g = new Game(testSystem);
+    expect(g.scanCommand('')).toBe(false);
   });
 });
 
