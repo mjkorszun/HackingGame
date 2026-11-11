@@ -121,6 +121,7 @@ export class NetworkView {
   private readonly pauseBtn: HTMLButtonElement;
   private readonly muteBtn: HTMLButtonElement;
   private readonly autoBtn: HTMLButtonElement;
+  private readonly pauseLabel: HTMLSpanElement;
   private readonly stage: SVGSVGElement;
   /** The minimap is its own small SVG pinned to the bottom-right corner of the view. */
   private readonly miniSvg: SVGSVGElement;
@@ -161,6 +162,9 @@ export class NetworkView {
     this.pauseBtn.className = 'pause-btn';
     this.pauseBtn.title = 'Pause / resume (Space)';
     this.pauseBtn.addEventListener('click', () => actions.togglePause());
+    // A spinning arc shows that time runs; it stops (yellow) while paused.
+    this.pauseBtn.innerHTML = '<svg class="time-spinner" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M10 2.5a7.5 7.5 0 0 1 7.5 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="2.6"/></svg><span></span>';
+    this.pauseLabel = this.pauseBtn.querySelector('span')!;
     const soundBox = document.createElement('div');
     soundBox.className = 'sound-box';
     this.muteBtn = document.createElement('button');
@@ -203,7 +207,8 @@ export class NetworkView {
   /** Called every frame. Redraws the stage only when something visible changed. */
   update(): void {
     this.clock.textContent = formatTime(this.game.tick);
-    this.pauseBtn.textContent = this.game.paused ? '▶ RESUME' : '❚❚ PAUSE';
+    const label = this.game.paused ? 'RESUME' : 'PAUSE';
+    if (this.pauseLabel.textContent !== label) this.pauseLabel.textContent = label;
     const muted = this.actions.sound.muted;
     if (this.muteBtn.dataset.muted !== String(muted)) {
       this.muteBtn.dataset.muted = String(muted);

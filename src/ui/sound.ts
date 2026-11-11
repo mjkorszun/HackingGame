@@ -17,7 +17,7 @@ const SOUNDS = {
   error: 'error_005.wav',
   key: 'click1.wav',
   // One sound per program type, played when it starts.
-  scout: 'force_field_001.ogg',
+  scout: 'zap_three_tone_up.ogg',
 } as const;
 
 export type SoundName = keyof typeof SOUNDS;

@@ -101,6 +101,11 @@ export class Game {
     this.log(on ? 'auto-pause on: time stops after every action' : 'auto-pause off', 'system');
   }
 
+  /** In auto-pause mode, choosing a new lasting action lets time run again. */
+  private actionStarted(): void {
+    if (this.autoPause && this.paused) this.setPaused(false);
+  }
+
   /** A lasting action (travel, a program) has ended. */
   private actionEnded(): void {
     if (this.autoPause) this.setPaused(true);
@@ -246,6 +251,7 @@ export class Game {
     if (target !== start && path.length === 0) return false;
     this.route = path;
     if (!this.move) this.startNextHop();
+    this.actionStarted();
     return true;
   }
 
@@ -352,6 +358,7 @@ export class Game {
       progressId: this.nextProgressId++,
     };
     this.scoutProgress(false);
+    this.actionStarted();
     return true;
   }
 
