@@ -376,6 +376,19 @@ describe('data files and scan', () => {
     expect(g.scanCommand('all')).toBe(false); // nothing left
   });
 
+  it('about a third of the archives that look valuable are worth nothing once evaluated', async () => {
+    const { generateFiles, isEmpty, clickAction, EMPTY_SHARE } = await import('./files');
+    const all = Array.from({ length: 200 }, (_, i) => generateFiles(`n${i}`, 1)).flat().filter((f) => f.content === 'valuable');
+    const empty = all.filter((f) => f.price === 0).length / all.length;
+    expect(Math.abs(empty - EMPTY_SHARE)).toBeLessThan(0.07);
+    const f = { ...all.find((x) => x.price === 0)!, scanned: true, protection: undefined };
+    expect(isEmpty(f)).toBe(false); // not known until evaluated
+    expect(clickAction(f)).toBe('evaluate');
+    f.evaluated = true;
+    expect(isEmpty(f)).toBe(true);
+    expect(clickAction(f)).toBeUndefined();
+  });
+
   it('scanned files offer actions by content; evaluate, identify and download work', () => {
     const g = inOrders();
     g.scanCommand('all');

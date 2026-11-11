@@ -60,6 +60,11 @@ export function apparentContent(f: DataFile): FileContent {
   return f.content === 'honeytoken' && !f.detected ? 'valuable' : f.content;
 }
 
+/** An evaluated archive that turned out to be worth nothing. */
+export function isEmpty(f: DataFile): boolean {
+  return apparentContent(f) === 'valuable' && !!f.evaluated && !f.price;
+}
+
 export function fileActions(f: DataFile): FileAction[] {
   if (f.deleted) return [];
   // Removing a protection works on an encrypted file too.
@@ -76,7 +81,7 @@ export function clickAction(f: DataFile): FileAction | undefined {
   switch (apparentContent(f)) {
     case 'valuable':
       if (!f.evaluated) return 'evaluate';
-      return f.downloaded ? undefined : 'download';
+      return f.downloaded || isEmpty(f) ? undefined : 'download';
     case 'software':
       return f.downloaded ? undefined : 'download';
     case 'contract':
@@ -136,8 +141,13 @@ export function filePrice(security: number, rand: () => number): number {
 }
 
 /** Placeholder content: 6-12 files, mostly worthless, some valuable, a few programs and keyrings. Contract data comes from the contract. */
+/** Share of archives that look valuable but turn out to be worth nothing once evaluated (placeholder). */
+export const EMPTY_SHARE = 0.35;
+
 export function generateFiles(nodeId: string, security = 1): DataFile[] {
   const rand = seeded(nodeId);
+  // A separate stream, so the other rolls stay as they were.
+  const emptyRoll = seeded(`${nodeId}:empty`);
   const count = 6 + Math.floor(rand() * 7);
   return Array.from({ length: count }, (_, i) => {
     const r = rand();
@@ -146,6 +156,8 @@ export function generateFiles(nodeId: string, security = 1): DataFile[] {
     const file: DataFile = { id: `f${i + 1}`, content, scanned: false };
     // A honeytoken carries a believable price too: that is the bait.
     if (content === 'valuable' || content === 'honeytoken') file.price = filePrice(security, rand);
+    // Many archives that look valuable are worth nothing: that is what evaluate is for.
+    if (content === 'valuable' && emptyRoll() < EMPTY_SHARE) file.price = 0;
     if (content === 'keyring') {
       const g = rand();
       file.grant = g < 0.5 ? 'worker' : g < 0.8 ? 'keys' : g < 0.95 ? 'security' : 'admin';

@@ -1467,8 +1467,13 @@ export class Game {
         this.log(`${program.name}: ${file.id} is a ${CONTENT_LABEL.honeytoken}. good catch: leave it alone`, 'alarm2');
       } else if (action === 'evaluate') {
         file.evaluated = true;
-        this.outcome({ kind: 'file', id: file.id }, true, sats(file.price!));
-        this.log(`${program.name}: ${file.id} is worth ${sats(file.price!)}`, 'info');
+        if (file.price) {
+          this.outcome({ kind: 'file', id: file.id }, true, sats(file.price));
+          this.log(`${program.name}: ${file.id} is worth ${sats(file.price)}`, 'info');
+        } else {
+          this.outcome({ kind: 'file', id: file.id }, false, 'WORTH 0');
+          this.log(`${program.name}: ${file.id} is worth nothing. no need to download it`, 'system');
+        }
       } else {
         file.identified = true;
         this.outcome({ kind: 'file', id: file.id }, true, 'IDENTIFIED');

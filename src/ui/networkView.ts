@@ -1,6 +1,6 @@
 import { sats } from '../sim/money';
 import { agentInfo, oddsWord, versus, type Agent } from '../sim/agents';
-import { apparentContent, clickAction, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
+import { apparentContent, clickAction, isEmpty, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
 import { Tooltip, type TipLine } from './tooltip';
 import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
 import type { Game } from '../sim/game';
@@ -153,7 +153,7 @@ function fileTip(f: DataFile): TipLine[] {
   const seen = apparentContent(f);
   lines.push({ text: CONTENT_LABEL[seen], cls: `tip-${seen}` });
   if (seen === 'keyring') lines.push({ text: f.extracted ? `extracted: ${f.grant === 'keys' ? 'encryption keys' : `${f.grant} privilege`}` : 'extract to see what it opens' });
-  if (seen === 'valuable') lines.push({ text: f.evaluated ? `worth ${sats(f.price!)}` : 'value unknown (evaluate)' });
+  if (seen === 'valuable') lines.push(f.evaluated ? (f.price ? { text: `worth ${sats(f.price)}` } : { text: 'worth nothing', cls: 'tip-empty' }) : { text: 'value unknown (evaluate)' });
   if (f.content === 'software') {
     const sw = f.software!;
     lines.push({ text: f.identified ? `${sw.name}  ${sw.type} ${sw.rating}` : 'unknown program (identify)' });
@@ -881,6 +881,7 @@ export class NetworkView {
       if (file.deleted) continue;
       this.filePos.set(file.id, { x: x + CELL / 2, y: y + CELL / 2 });
       const cls = ['data-block', file.scanned ? `is-${apparentContent(file)}` : 'is-encrypted'];
+      if (file.scanned && isEmpty(file)) cls.push('is-empty');
       if (scanning?.fileId === file.id) cls.push('is-scanning');
       if (file.downloaded || file.altered || file.extracted) cls.push('is-done');
       const blk = svg('g', { class: cls.join(' '), 'data-file': file.id }, parent);

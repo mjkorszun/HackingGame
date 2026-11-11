@@ -368,6 +368,9 @@ body {
 .data-block.is-worthless rect { fill: #1a1d1b; }
 .data-block.is-valuable { --fc: var(--yellow); }
 .data-block.is-valuable rect { fill: #2a2508; }
+/* Evaluated, but worth nothing: a greyish yellow. */
+.data-block.is-valuable.is-empty { --fc: #b5ad78; }
+.data-block.is-valuable.is-empty rect { fill: #1e1c12; }
 .data-block.is-software { --fc: #9fe4ff; }
 .data-block.is-software rect { fill: #0c2630; }
 .data-block.is-contract { --fc: #b98cff; }
@@ -401,6 +404,7 @@ body {
 .game-tip .tip-title { color: #d4ffe0; }
 .tip-worthless { color: var(--grey); }
 .tip-valuable { color: var(--yellow); }
+.tip-empty { color: #b5ad78; }
 .tip-software { color: #9fe4ff; }
 .tip-contract { color: #b98cff; }
 .tip-honeytoken { color: #ff4d4d; }
