@@ -181,7 +181,7 @@ function runCommand(raw: string): void {
       game.setPaused(false);
       break;
     case 'stop':
-      if (game.cancelScout() || game.cancelScan()) break;
+      if (game.cancelScout() || game.cancelScan() || game.cancelFileJob()) break;
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
       break;

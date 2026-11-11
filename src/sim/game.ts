@@ -82,6 +82,27 @@ interface ScanTask {
   progressId: number;
 }
 
+/** A file action that takes time (download, decrypt...); its effect lands when the bar is full. */
+interface FileJob {
+  nodeId: string;
+  fileId: string;
+  action: FileAction;
+  program: Program | null;
+  elapsed: number;
+  ticks: number;
+  progressId: number;
+}
+
+/**
+ * Ticks a file action takes (10 ticks = 1 s). Placeholders: actions that need a program
+ * get faster with its rating; download will later depend on the file's size.
+ */
+export function fileActionTicks(action: FileAction, rating = 1): number {
+  const base: Record<FileAction, number> = { download: 15, decrypt: 25, defuse: 25, scrub: 25, forge: 25, evaluate: 12, identify: 12, extract: 12, alter: 10, delete: 8 };
+  const byRating = action !== 'download' && action !== 'extract' && action !== 'alter' && action !== 'delete';
+  return byRating ? Math.max(3, Math.round(base[action] / Math.max(1, rating))) : base[action];
+}
+
 interface MoveTask {
   to: string;
   elapsed: number;
@@ -491,6 +512,7 @@ export class Game {
     this.route = [];
     this.scout = null;
     this.scan = null;
+    this.fileJob = null;
     const job = this.network.def.contract;
     const success = this.contractDone;
     const files = this.loot.filter((l) => !l.software).map((l) => ({ name: l.name, label: l.label, price: l.price }));
@@ -499,11 +521,10 @@ export class Game {
     // Placeholder reputation: a contract done +5; a local job +1 if you took something and the alarm never went red.
     const reputation = job ? (success ? 5 : 0) : this.loot.length && this.alarm < 3 ? 1 : 0;
     const filesTotal = files.reduce((sum, f) => sum + f.price, 0);
-    // Placeholder experience: the goal met (a contract done, or a local job where you took something),
-    // more for a harder system, plus every feat counted during the run.
+    // Placeholder experience: a contract done (more for a harder system), plus every feat counted during the run.
     const security = this.network.def.security ?? 1;
     const xpLines: { what: string; xp: number }[] = [];
-    if (job ? success : this.loot.length > 0) xpLines.push({ what: `${job ? 'contract done' : 'job done'} (security ${security})`, xp: (job ? 30 : 15) * security });
+    if (job && success) xpLines.push({ what: `contract done (security ${security})`, xp: 30 * security });
     for (const f of Object.keys(FEAT_XP) as Feat[]) {
       const n = this.feats.filter((x) => x === f).length;
       if (n) xpLines.push({ what: `${FEAT_LABEL[f]} x${n}`, xp: n * FEAT_XP[f] });
@@ -521,6 +542,7 @@ export class Game {
     this.updateMove();
     this.updateScout();
     this.updateScan();
+    this.updateFileJob();
     this.updateAgents();
     this.updateAlarm();
   }
@@ -685,7 +707,7 @@ export class Game {
   travelTo(target: string): boolean {
     if (!this.network.has(target) || !this.isKnown(target)) return false;
     if (this.isBusy) {
-      this.log(`${this.scout ? 'scout' : 'scan'} is running: wait for it or stop it first`, 'alarm1');
+      this.log(`${this.busyName} is running: wait for it or stop it first`, 'alarm1');
       return false;
     }
     const start = this.move ? this.move.to : this.currentNode;
@@ -803,7 +825,7 @@ export class Game {
       return this.agentCommand(program.type, '', program);
     }
     if (this.isBusy) {
-      this.log(`${this.scout ? 'scout' : 'scan'} is already running`, 'alarm1');
+      this.log(`${this.busyName} is already running`, 'alarm1');
       return false;
     }
     const here = this.currentNode;
@@ -828,8 +850,15 @@ export class Game {
 
   /** A program is running (the player can't travel meanwhile). */
   get isBusy(): boolean {
-    return this.scout !== null || this.scan !== null;
+    return this.scout !== null || this.scan !== null || this.fileJob !== null;
   }
+
+  /** What keeps the player busy, for messages. */
+  private get busyName(): string {
+    return this.scout ? 'scout' : this.scan ? 'scan' : this.fileJob?.action ?? 'nothing';
+  }
+
+  private fileJob: FileJob | null = null;
 
   /** Data files in a node, as the player sees them (empty for other kinds). */
   filesIn(nodeId: string): readonly DataFile[] {
@@ -838,6 +867,8 @@ export class Game {
 
   /** The file being scanned right now, if any. */
   get scanningFile(): { nodeId: string; fileId: string; progress: number } | null {
+    const j = this.fileJob;
+    if (j) return { nodeId: j.nodeId, fileId: j.fileId, progress: j.elapsed / j.ticks };
     const s = this.scan;
     if (!s) return null;
     return { nodeId: s.nodeId, fileId: this.files.get(s.nodeId)![s.queue[0]].id, progress: s.elapsed / s.ticksPerFile };
@@ -892,7 +923,7 @@ export class Game {
       return false;
     }
     if (this.isBusy) {
-      this.log(`${this.scout ? 'scout' : 'scan'} is already running`, 'alarm1');
+      this.log(`${this.busyName} is already running`, 'alarm1');
       return false;
     }
     if (this.network.node(here).kind === 'honeypot') {
@@ -958,7 +989,8 @@ export class Game {
 
   /**
    * An action on a scanned file here: evaluate (needs an evaluate program), identify
-   * (needs an identify program), download, alter or delete. Instant for now.
+   * (needs an identify program), download, alter or delete. It takes a moment (a loading bar);
+   * the effect lands when it is done.
    */
   fileAction(action: FileAction, fileId: string): boolean {
     const id = fileId.trim().toLowerCase();
@@ -984,26 +1016,69 @@ export class Game {
       this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
       return true;
     }
-    if (action === guard) {
-      const program = this.findProgram(action);
+    let program: Program | null = null;
+    if (action === guard || action === 'evaluate' || action === 'identify') {
+      program = this.findProgram(action) ?? null;
       if (!program) {
-        this.log(`${action} needs a ${action} program in your gear`, 'alarm1');
+        this.log(`${action} needs ${action === guard ? 'a' : 'an'} ${action} program in your gear`, 'alarm1');
         return false;
       }
+    }
+    if (action === 'download' && file.downloaded) {
+      this.log(`${file.id} is already downloaded`, 'system');
+      return false;
+    }
+    if (program) this.events.push({ type: 'program', programType: program.type });
+    this.fileJob = { nodeId: this.currentNode, fileId: file.id, action, program, elapsed: 0, ticks: fileActionTicks(action, program?.rating), progressId: this.nextProgressId++ };
+    this.log(`${program ? `${program.name}: ` : ''}${action} ${file.id}`, 'system');
+    this.fileJobProgress(false);
+    this.filesChanged++;
+    this.actionStarted();
+    return true;
+  }
+
+  private fileJobProgress(done: boolean): void {
+    const j = this.fileJob!;
+    this.events.push({ type: 'progress', line: { id: j.progressId, label: `${j.action} ${j.fileId}`, progress: j.elapsed / j.ticks, done } });
+  }
+
+  private updateFileJob(): void {
+    const j = this.fileJob;
+    if (!j) return;
+    j.elapsed++;
+    const done = j.elapsed >= j.ticks;
+    this.fileJobProgress(done);
+    if (!done) return;
+    this.fileJob = null;
+    const file = this.filesIn(j.nodeId).find((f) => f.id === j.fileId);
+    if (file && !file.deleted) this.finishFileAction(j.action, file, j.program);
+    this.filesChanged++;
+    this.actionEnded();
+  }
+
+  /** Stops a running file action; nothing happens to the file. */
+  cancelFileJob(): boolean {
+    if (!this.fileJob) return false;
+    const j = this.fileJob;
+    this.fileJobProgress(true);
+    this.fileJob = null;
+    this.filesChanged++;
+    this.log(`${j.action} ${j.fileId} stopped`, 'system');
+    return true;
+  }
+
+  /** What a file action does once its bar is full. */
+  private finishFileAction(action: FileAction, file: DataFile, program: Program | null): void {
+    const guard = file.protection ? PROTECTION_PROGRAM[file.protection] : null;
+    if (action === guard && program) {
       const was = file.protection!;
       file.protection = undefined;
       const done = { killswitch: 'kill switch defused', seal: 'seal cracked', tracker: 'tracker scrubbed', lock: 'lock forged open' }[was];
       this.feats.push('protection');
       this.log(`${program.name}: ${file.id} ${done}`, 'info');
-      this.filesChanged++;
-      return true;
+      return;
     }
-    if (action === 'evaluate' || action === 'identify') {
-      const program = this.findProgram(action);
-      if (!program) {
-        this.log(`${action} needs an ${action} program in your gear`, 'alarm1');
-        return false;
-      }
+    if ((action === 'evaluate' || action === 'identify') && program) {
       if (action === 'evaluate' && file.content === 'honeytoken' && this.d100() <= this.trapChance(program.rating)) {
         file.detected = true;
         this.feats.push('honeytoken');
@@ -1016,14 +1091,9 @@ export class Game {
         const sw = file.software!;
         this.log(`${program.name}: ${file.id} is ${sw.name} (${sw.type} ${sw.rating})`, 'info');
       }
-      this.filesChanged++;
-      return true;
+      return;
     }
     if (action === 'download') {
-      if (file.downloaded) {
-        this.log(`${file.id} is already downloaded`, 'system');
-        return false;
-      }
       file.downloaded = true;
       if (file.protection === 'tracker') {
         this.log(`TRACKER: ${file.id} tagged you on the way out`, 'alarm2');
@@ -1042,8 +1112,7 @@ export class Game {
         this.log(`${file.id} downloaded to your gear. it pays out when you leave the net`, 'info');
       }
       this.deckVersion++;
-      this.filesChanged++;
-      return true;
+      return;
     }
     if (action === 'extract') {
       file.extracted = true;
@@ -1056,8 +1125,7 @@ export class Game {
         this.log(`${file.id}: ${grant} privilege extracted`, 'info');
       }
       this.deckVersion++;
-      this.filesChanged++;
-      return true;
+      return;
     }
     if (action === 'alter') {
       file.altered = true;
@@ -1067,8 +1135,6 @@ export class Game {
       this.log(`${file.id} deleted`, 'info');
     }
     if (file.content === 'contract') this.log(this.contractDone ? 'contract task done. leave the net to get paid' : 'that is not what the contract asked for', this.contractDone ? 'info' : 'alarm1');
-    this.filesChanged++;
-    return true;
   }
 
   /** The system's encryption keys were extracted: scanning here is twice as fast. */
