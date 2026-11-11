@@ -8,10 +8,11 @@ import { ContextMenu } from './ui/contextMenu';
 import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
 import { fileActions } from './sim/files';
-import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from './sim/programs';
+import { FILE_PROGRAMS, PROGRAM_TYPES, type Program, type ProgramType } from './sim/programs';
 import { loadAccount, loadedPrograms, nextProgramId, passDay, saveAccount, toggleLoaded } from './ui/account';
 import { showRunSummary } from './ui/runSummary';
 import { HomeScreen, type Choice, type ContractOffer } from './ui/homeScreen';
+import { finishProgram, newProject, work } from './sim/development';
 import { generate } from './sim/generate';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
@@ -203,9 +204,40 @@ function updateDeck(): void {
 }
 
 const offers: ContractOffer[] = testSystem.contract ? [{ contract: testSystem.contract, system: testSystem }] : [];
-const home = new HomeScreen(document.getElementById('home')!, { day: account.day, reputation: account.reputation, networks: account.networks, offers, skimmers: account.skimmers, news: account.news }, {
+const homeState = { day: account.day, reputation: account.reputation, networks: account.networks, offers, skimmers: account.skimmers, news: account.news };
+const home = new HomeScreen(document.getElementById('home')!, homeState, {
   enter: (choice) => enterNetwork(choice),
   click: () => sfx.play('menuItem'),
+  dev: {
+    project: () => account.project,
+    start: (type, rating, name) => {
+      account.project = newProject(type, rating, name);
+      saveAccount(account);
+    },
+    work: (mode) => {
+      const p = account.project;
+      if (!p) return { lines: [] };
+      const days = mode === 'day' ? 1 : mode === 'week' ? 7 : p.daysLeft;
+      const r = work(p, days);
+      // Days spent writing code pass like any other: skimmers pay out, and may be found.
+      passDay(account, Math.random, r.days);
+      const lines = [`${r.days} day${r.days === 1 ? '' : 's'} of work on ${p.name}`];
+      for (const extra of r.bugs) lines.push(`bug found: +${extra} day${extra === 1 ? '' : 's'} of work`);
+      let program: Program | undefined;
+      if (r.done) {
+        program = finishProgram(p, `p${nextProgramId(account)}`, 'you');
+        account.programs.push(program);
+        account.project = undefined;
+        lines.push(`${p.name} is done`);
+        sfx.play('linkUp');
+      } else if (mode === 'finish') lines.push('not finished: the bugs need more work');
+      saveAccount(account);
+      homeState.day = account.day;
+      homeState.news = account.news;
+      renderHomeGear();
+      return { lines, program };
+    },
+  },
 });
 function renderHomeGear(): void {
   const loaded = loadedPrograms(account);
@@ -226,7 +258,6 @@ renderHomeGear();
 function enterNetwork(choice: Choice): void {
   const system = choice.kind === 'contract' ? { ...choice.offer.system, contract: choice.offer.contract } : generate(choice.net);
   // Every trip into the net is one day: skimmers pay out, and may be found.
-  account.day++;
   passDay(account);
   saveAccount(account);
   game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account) });
