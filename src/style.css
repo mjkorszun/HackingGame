@@ -566,3 +566,15 @@ body {
 .qb-label { min-width: 110px; font-weight: bold; }
 .qb-hint { color: #d9b0b0; font-size: 13px; }
 .qb-btn:disabled .qb-hint { color: #9a8a8a; }
+
+/* ---------- memory ---------- */
+.deck-hw { margin: 0; padding: 0; list-style: none; }
+.deck-mem.is-full { color: var(--yellow); }
+.deck-program.is-stored { color: var(--grey); }
+.deck-program.is-blocked { cursor: not-allowed; }
+.deck-program.is-blocked:hover { text-decoration: none; color: var(--grey); }
+.deck-stored-head { margin-top: 6px; }
+.deck-loot-sw { color: #9fe4ff; }
+.deck-loot-sw.is-loadable { cursor: pointer; text-decoration: underline dotted; }
+.deck-loot-sw.is-loadable:hover { color: #d6f5ff; }
+.file-swname { fill: #9fe4ff; font: 8px var(--font); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: #000; stroke-width: 2.5px; }

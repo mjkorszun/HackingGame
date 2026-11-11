@@ -9,7 +9,7 @@ import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
 import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from './sim/programs';
-import { loadAccount, saveAccount } from './ui/account';
+import { loadAccount, loadedPrograms, nextProgramId, saveAccount, toggleLoaded } from './ui/account';
 import { showRunSummary } from './ui/runSummary';
 import { HomeScreen, type ContractOffer } from './ui/homeScreen';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
@@ -64,7 +64,9 @@ function leaveNet(): void {
   sfx.play('pause');
   const report = game.endRun();
   account.sats += report.total;
-  account.programs = [...game.programs, ...report.software];
+  account.programs = [...account.programs, ...report.software];
+  // Programs loaded mid-run stay loaded.
+  for (const l of game.loot) if (l.loaded && l.software && account.loaded.length < account.memory) account.loaded.push(l.software.id);
   saveAccount(account);
   flush();
   showRunSummary(report, account.sats, () => location.reload());
@@ -167,6 +169,9 @@ function runCommand(raw: string): void {
     case 'exit':
       leaveNet();
       break;
+    case 'load':
+      if (!game.loadProgram(arg)) sfx.play('error');
+      break;
   }
 }
 
@@ -185,7 +190,7 @@ let deckVersion = -1;
 function updateDeck(): void {
   if (game.deckVersion === deckVersion) return;
   deckVersion = game.deckVersion;
-  renderDeck(deckEl, game, account.sats, (p) => ui(p.name));
+  renderDeck(deckEl, game, account.sats, { run: (p) => ui(p.name), load: (p) => ui(`load ${p.name}`) });
 }
 
 const offers: ContractOffer[] = testSystem.contract ? [{ contract: testSystem.contract, system: testSystem }] : [];
@@ -194,12 +199,25 @@ const home = new HomeScreen(document.getElementById('home')!, offers, {
   enter: () => enterNetwork(home.contract),
   click: () => sfx.play('menuItem'),
 });
-renderDeck(home.gear, { programs: account.programs, loot: [], privileges: new Set(), keysFound: false }, account.sats);
+function renderHomeGear(): void {
+  const loaded = loadedPrograms(account);
+  renderDeck(home.gear, { programs: loaded, memorySlots: account.memory, loot: [], privileges: new Set(), keysFound: false }, account.sats, {
+    stored: account.programs.filter((p) => !account.loaded.includes(p.id)),
+    toggle: (p) => {
+      if (toggleLoaded(account, p.id)) {
+        saveAccount(account);
+        sfx.play('menuItem');
+        renderHomeGear();
+      } else sfx.play('error');
+    },
+  });
+}
+renderHomeGear();
 
 /** Leaves the main screen and starts the run: the console, the network view and the clock. */
 function enterNetwork(offer: ContractOffer | undefined): void {
   const system = { ...(offer?.system ?? testSystem), contract: offer?.contract };
-  game = new Game(system, Math.random, account.programs);
+  game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account) });
   home.hide();
   document.getElementById('app')!.hidden = false;
   updateDeck();
@@ -227,6 +245,8 @@ term.completer = (value) =>
         ? game.currentActions.map((a) => a.id)
         : kind === 'agent'
           ? game.agentsIn(game.currentNode).map((a) => a.name)
+        : kind === 'loot'
+          ? game.loot.filter((l) => l.software && !l.loaded).map((l) => l.software!.name)
         : kind === 'file' || (FILE_PROGRAMS as readonly string[]).includes(kind)
           ? game.filesIn(game.currentNode).filter((f) => fileActions(f).length).map((f) => f.id)
         : (PROGRAM_TYPES as readonly string[]).includes(kind)

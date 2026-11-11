@@ -713,6 +713,11 @@ export class NetworkView {
         svg('line', { x1: x + pad + 4, y1: mid - 2.5, x2: x + CELL - pad - 4, y2: mid - 2.5 }, blk);
         svg('line', { x1: x + pad + 4, y1: mid + 2.5, x2: x + CELL - pad - 7, y2: mid + 2.5 }, blk);
       }
+      if (seen === 'software' && file.identified) {
+        // An identified program shows its name over the archive.
+        const t = svg('text', { x: x + CELL / 2, y: y + 3, class: 'file-swname' }, parent);
+        t.textContent = file.software!.name;
+      }
       this.tip.attach(blk, () => fileTip(file));
       blk.addEventListener('mouseenter', () => this.actions.hover());
       blk.addEventListener('click', () => {

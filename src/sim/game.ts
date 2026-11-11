@@ -27,6 +27,8 @@ export interface LootItem {
   /** The player knew its price when taking it. */
   evaluated: boolean;
   software?: Program;
+  /** A downloaded program already loaded into memory during the run. */
+  loaded?: boolean;
 }
 
 /** The summary shown when a run ends. */
@@ -93,8 +95,10 @@ export class Game {
   private readonly unknownNumber = new Map<string, number>();
   /** Privileges the player holds in this system. */
   readonly privileges = new Set<Privilege>();
-  /** Programs in the player's deck. */
+  /** Programs loaded in the player's memory: the ones usable in this run. */
   readonly programs: Program[];
+  /** How many programs the memory holds. */
+  readonly memorySlots: number;
   /** What the player took in this run: paid out (sats, programs) only when the run ends. */
   readonly loot: LootItem[] = [];
   /** The run is over: the player left the net. */
@@ -125,10 +129,15 @@ export class Game {
   private nextProgressId = 1;
   private readonly d100: () => number;
 
-  constructor(system: SystemDef, rng: Rng = Math.random, programs: Program[] = STARTING_PROGRAMS) {
+  /**
+   * programs: the ones loaded in your memory (usable in this run).
+   * opts.memory: memory slots; opts.nextId: first free program id number (ids stay unique across the account).
+   */
+  constructor(system: SystemDef, rng: Rng = Math.random, programs: Program[] = STARTING_PROGRAMS, opts: { memory?: number; nextId?: number } = {}) {
     this.d100 = () => Math.floor(rng() * 100) + 1;
     this.programs = programs.map((p) => ({ ...p }));
-    this.nextProgramId = Math.max(100, ...this.programs.map((p) => Number(p.id.slice(1)) + 1 || 0));
+    this.memorySlots = opts.memory ?? Math.max(DEFAULT_MEMORY, this.programs.length);
+    this.nextProgramId = Math.max(100, opts.nextId ?? 0, ...this.programs.map((p) => Number(p.id.slice(1)) + 1 || 0));
     this.network = new Network(system);
     this.currentNode = system.entry;
     for (const n of system.nodes) if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
@@ -163,6 +172,25 @@ export class Game {
     const job = this.network.def.contract;
     if (!f || !job) return false;
     return job.need === 'alter' ? !!f.altered && !f.deleted : !!f.deleted;
+  }
+
+  /** Loads a downloaded program from this run's data into a free memory slot, so it can be used at once. */
+  loadProgram(name: string): boolean {
+    const q = name.trim().toLowerCase();
+    const item = this.loot.find((l) => l.software && !l.loaded && l.software.name.toLowerCase() === q);
+    if (!item) {
+      this.log(q ? `no downloaded program "${name}" to load` : 'usage: load <program>', 'alarm1');
+      return false;
+    }
+    if (this.programs.length >= this.memorySlots) {
+      this.log(`memory full (${this.memorySlots} programs). it waits in your data until you leave the net`, 'alarm1');
+      return false;
+    }
+    item.loaded = true;
+    this.programs.push(item.software!);
+    this.deckVersion++;
+    this.log(`${item.software!.name} loaded into memory (${this.programs.length}/${this.memorySlots})`, 'info');
+    return true;
   }
 
   // ---------- agents ----------
@@ -942,7 +970,7 @@ export class Game {
       } else if (file.content === 'software') {
         const sw = file.software!;
         this.loot.push({ name: `${this.nameOf(this.currentNode)} ${file.id}`, label: sw.name, price: 0, evaluated: true, software: { id: `p${this.nextProgramId++}`, ...sw } });
-        this.log(`${file.id} downloaded: ${file.identified ? sw.name : 'a program'}. it joins your software when you leave the net`, 'info');
+        this.log(`${file.id} downloaded: ${file.identified ? sw.name : 'a program'}. it is in your data: load it into memory to use it now (click it), or keep it for later`, 'info');
       } else {
         this.loot.push({ name: `${this.nameOf(this.currentNode)} ${file.id}`, label: CONTENT_LABEL.valuable, price: file.price ?? 0, evaluated: !!file.evaluated });
         this.log(`${file.id} downloaded to your gear. it pays out when you leave the net`, 'info');
@@ -1068,6 +1096,9 @@ export class Game {
     this.events.push({ type: 'log', line: { text, color } });
   }
 }
+
+/** Memory slots of the starting hardware. */
+export const DEFAULT_MEMORY = 10;
 
 /** The deck a new player starts with. */
 export const STARTING_PROGRAMS: Program[] = [

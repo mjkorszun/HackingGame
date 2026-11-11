@@ -2,7 +2,7 @@
 
 import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from '../sim/programs';
 
-export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'file' | 'agent' | ProgramType;
+export type ArgKind = 'none' | 'node' | 'neighbour' | 'action' | 'file' | 'agent' | 'loot' | ProgramType;
 
 export interface CommandSpec {
   name: string;
@@ -36,6 +36,7 @@ export const COMMANDS: CommandSpec[] = [
   ...PROGRAM_TYPES.map(
     (t): CommandSpec => ({ name: t, arg: t === 'attack' || t === 'silence' ? 'agent' : t, usage: (FILE_PROGRAMS as readonly string[]).includes(t) ? `${t} <file>` : t === 'attack' || t === 'silence' ? `${t} [agent]` : `${t} [n|name]`, help: PROGRAM_HELP[t] ?? `run your best ${t} program, or the Nth one, or one by name` }),
   ),
+  { name: 'load', arg: 'loot', usage: 'load <program>', help: 'load a program you downloaded in this run into a free memory slot' },
   { name: 'present', arg: 'none', usage: 'present', help: 'answer a query by showing a privilege you hold' },
   { name: 'ignore', arg: 'none', usage: 'ignore', help: 'ignore a query (the agent grows suspicious)' },
   { name: 'download', arg: 'file', usage: 'download <file>', help: 'copy a scanned file (valuable data or software) into your gear' },
