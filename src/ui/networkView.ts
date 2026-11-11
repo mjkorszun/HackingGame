@@ -1,5 +1,5 @@
 import { sats } from '../sim/money';
-import { agentInfo, oddsWord, versus, type Agent } from '../sim/agents';
+import { agentInfo, oddsWord, versus, WARRIORS, type Agent, type WarriorType } from '../sim/agents';
 import { apparentContent, clickAction, isEmpty, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
 import { Tooltip, type TipLine } from './tooltip';
 import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
@@ -9,7 +9,9 @@ import type { FxTarget, NodeDef, NodeKind, SimEvent } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
 import type { Sound } from './sound';
 import { drawNodeShape, halfHeight, hasTag } from './shapes';
-import { iconBody, iconName } from './icons';
+import { agentIcon, iconBody, iconName } from './icons';
+
+const WARRIOR_TYPES = Object.keys(WARRIORS) as WarriorType[];
 import { ALLY_HOP_TICKS, type Ally, type AllyOrder } from '../sim/game';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -195,6 +197,16 @@ export interface ViewActions {
   sound: Sound;
 }
 
+
+/** Integrity colour: green when (almost) full, then yellow-green, yellow, orange and red. */
+export function integrityColor(frac: number): string {
+  if (frac >= 0.8) return 'var(--green)';
+  if (frac >= 0.6) return '#b8f040';
+  if (frac >= 0.4) return 'var(--yellow)';
+  if (frac >= 0.2) return 'var(--orange)';
+  return 'var(--red)';
+}
+
 /**
  * The graphical half of the screen: the current node large in the centre,
  * its neighbours around it, and a minimap. Everything is clickable.
@@ -231,7 +243,7 @@ export class NetworkView {
   private miniXY: (id: string) => { x: number; y: number } = () => ({ x: 0, y: 0 });
 
   constructor(
-    root: HTMLElement,
+    private readonly root: HTMLElement,
     private readonly game: Game,
     private readonly menu: ContextMenu,
     private readonly actions: ViewActions,
@@ -251,7 +263,7 @@ export class NetworkView {
     this.alarmEl = alarm;
     this.integrityEl = document.createElement('div');
     this.integrityEl.className = 'integrity';
-    this.integrityEl.title = 'Integrity: at 0 you are thrown out of the net';
+    this.integrityEl.innerHTML = '<span class="integrity-label">INTEGRITY</span><span class="integrity-bar"><span class="integrity-fill"></span></span>';
     this.clock = document.createElement('div');
     this.clock.className = 'clock';
     this.pauseBtn = document.createElement('button');
@@ -403,12 +415,17 @@ export class NetworkView {
     if (this.alarmEl.dataset.level !== String(lvl)) {
       this.alarmEl.dataset.level = String(lvl);
       this.alarmEl.className = `alarm alarm-${lvl}`;
+      // Other parts of the view (network name, exit button, frames) take the alarm colour too.
+      this.root.dataset.alarm = String(lvl);
       this.alarmEl.textContent = `ALARM: ${['GREEN', 'YELLOW', 'ORANGE', 'RED'][lvl]}`;
     }
-    const integ = `INTEGRITY ${this.game.integrity}/${this.game.maxIntegrity}`;
-    if (this.integrityEl.textContent !== integ) {
-      this.integrityEl.textContent = integ;
-      this.integrityEl.classList.toggle('is-low', this.game.integrity <= this.game.maxIntegrity / 2);
+    const integ = `Integrity ${this.game.integrity}/${this.game.maxIntegrity}: at 0 you are thrown out of the net`;
+    if (this.integrityEl.title !== integ) {
+      this.integrityEl.title = integ;
+      const frac = Math.max(0, this.game.integrity / this.game.maxIntegrity);
+      const fill = this.integrityEl.querySelector<HTMLElement>('.integrity-fill')!;
+      fill.style.width = `${frac * 100}%`;
+      this.integrityEl.style.setProperty('--integ', integrityColor(frac));
     }
     const busy = this.game.scanningFile;
     if (this.fileBar && busy) this.fileBar.fill.setAttribute('width', String(this.fileBar.width * Math.min(1, busy.progress)));
@@ -465,9 +482,9 @@ export class NetworkView {
   /** Where an agent in a node is drawn: in the room around you, or beside a neighbour. */
   private agentSpot(nodeId: string, index: number): { x: number; y: number } | null {
     // Several agents in one node stand in a column (then a second one), so their code names don't overlap.
-    if (nodeId === this.game.currentNode) return { x: CX + 55 + Math.floor(index / 4) * 70, y: CY - 30 + (index % 4) * 36 };
+    if (nodeId === this.game.currentNode) return { x: CX + 55 + Math.floor(index / 4) * 70, y: CY - 30 + (index % 4) * 46 };
     const p = this.positions.get(nodeId);
-    return p ? { x: p.x + NEIGHBOUR_R * 0.75 + Math.floor(index / 3) * 62, y: p.y - NEIGHBOUR_R * 0.75 + (index % 3) * 34 } : null;
+    return p ? { x: p.x + NEIGHBOUR_R * 0.75 + Math.floor(index / 3) * 62, y: p.y - NEIGHBOUR_R * 0.75 + (index % 3) * 44 } : null;
   }
 
   /** Agents move every tick: their dots are kept and only moved, so hover and menus keep working. */
@@ -511,6 +528,13 @@ export class NetworkView {
       els.main.classList.toggle('is-hostile', a.mood === 'hostile');
       els.main.classList.toggle('is-trusting', a.mood === 'trusting');
       els.main.classList.toggle('is-silenced', a.silenced);
+      const frac = Math.max(0, a.hp / a.stats.hp);
+      els.main.classList.toggle('is-hurt', frac < 1);
+      if (frac < 1) {
+        const bar = els.main.querySelector<SVGRectElement>('.agent-hp')!;
+        bar.setAttribute('width', (24 * frac).toFixed(1));
+        bar.style.fill = integrityColor(frac);
+      }
       els.mini.style.display = miniPos ? '' : 'none';
       if (miniPos) {
         els.mini.setAttribute('cx', miniPos.x.toFixed(1));
@@ -630,8 +654,11 @@ export class NetworkView {
   private drawAgent(a: Agent, parent: Element): SVGGElement {
     const grp = svg('g', { class: `agent is-${a.stats.type}`, 'data-agent': a.id }, parent) as SVGGElement;
     svg('circle', { r: 11, class: 'agent-body' }, grp);
-    svg('line', { x1: -4.5, y1: 4.5, x2: 5, y2: -5, class: 'agent-sword' }, grp);
-    svg('line', { x1: -5.5, y1: 0.5, x2: -0.5, y2: 5.5, class: 'agent-sword' }, grp);
+    const icon = svg('svg', { x: -7, y: -7, width: 14, height: 14, viewBox: '0 0 512 512', class: 'agent-icon' }, grp);
+    icon.innerHTML = iconBody(agentIcon(this.game.network.def.id, WARRIOR_TYPES.indexOf(a.stats.type))) ?? '';
+    // Integrity bar over its head, shown once it has taken damage.
+    svg('rect', { x: -12, y: -18, width: 24, height: 3, class: 'agent-hp-bg' }, grp);
+    svg('rect', { x: -12, y: -18, width: 24, height: 3, class: 'agent-hp' }, grp);
     const label = svg('text', { x: 0, y: 22, class: 'agent-name' }, grp);
     label.textContent = a.name;
     const alert = svg('text', { x: 0, y: -15, class: 'agent-alert' }, grp);
