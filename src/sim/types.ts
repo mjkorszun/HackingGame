@@ -70,5 +70,6 @@ export type SimEvent =
   | { type: 'progress'; line: ProgressLine }
   | { type: 'hop'; nodeId: string }
   | { type: 'moved'; nodeId: string }
-  | { type: 'paused'; paused: boolean }
+  /** auto: caused by auto-pause, not by the player (played without a sound). */
+  | { type: 'paused'; paused: boolean; auto?: boolean }
   | { type: 'program'; programType: ProgramType };
