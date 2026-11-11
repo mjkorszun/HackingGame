@@ -36,6 +36,7 @@ const KIND_TAG: Record<NodeKind, string> = {
   identity: 'ID',
   uplink: 'UP',
   database: 'DB',
+  payment: 'PG',
   vault: 'KEY',
   overseer: 'AI',
   orchestrator: 'ORC',
@@ -56,6 +57,7 @@ const KIND_LABEL: Record<NodeKind, string> = {
   identity: 'identity service',
   uplink: 'uplink',
   database: 'database',
+  payment: 'payment gateway',
   vault: 'key vault',
   overseer: 'overseer core (system AI)',
   orchestrator: 'orchestrator',
@@ -569,6 +571,7 @@ export class NetworkView {
         miniPos = this.miniXY(a.node);
       }
       els.main.classList.toggle('is-shield', a.program.type === 'shield');
+      els.main.classList.toggle('is-resident', !!a.resident);
       els.main.style.display = pos ? '' : 'none';
       if (pos) {
         els.main.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
@@ -602,6 +605,7 @@ export class NetworkView {
     this.tip.attach(grp, () => {
       const live = this.game.allies.find((x) => x.id === a.id);
       if (!live) return [{ text: a.program.name, cls: 'tip-title' }];
+      if (live.resident) return [{ text: `${live.program.name}: your ${live.program.type}`, cls: 'tip-title' }, { text: `planted here: takes a cut every day (x${live.program.efficiency ?? 1}, ${live.program.detection ?? 5}% a day to be found)`, cls: 'c-info' }];
       const order = { stay: 'holds its node', follow: 'follows you', unload: 'coming back to you', explore: 'exploring on its own' }[live.order];
       return [{ text: `${live.program.name}: your ${live.program.type} ${live.program.rating}`, cls: 'tip-title' }, { text: `HP ${live.hp}/${live.maxHp}` }, { text: order, cls: 'c-info' }, { text: 'right-click: stay / follow / unload', cls: 'c-system' }];
     });
@@ -610,7 +614,7 @@ export class NetworkView {
       e.preventDefault();
       e.stopPropagation();
       const live = this.game.allies.find((x) => x.id === a.id);
-      if (!live) return;
+      if (!live || live.resident) return;
       const item = (order: AllyOrder, label: string, hint: string) => ({ label, hint: live.order === order ? 'now' : hint, disabled: live.order === order, action: () => this.actions.command(`${order} ${live.program.name}`) });
       this.menu.show(e.clientX, e.clientY, `${live.program.name} (yours)`, [
         item('stay', 'Stay', 'hold this node'),

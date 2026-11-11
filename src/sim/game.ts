@@ -100,6 +100,8 @@ export interface Ally {
   dest?: string | null;
   /** Scout: nodes it has been to. */
   visited?: Set<string>;
+  /** Stays in this system between runs (a planted skimmer): not from your memory, takes no orders. */
+  resident?: boolean;
 }
 
 /** explore: a scout flies on to unknown nodes by itself. */
@@ -269,17 +271,19 @@ export class Game {
       this.log(`${program.name}: skimmers go into local businesses, not contract targets`, 'alarm1');
       return false;
     }
-    if (this.kindOf(this.currentNode) !== 'database') {
-      this.log(`${program.name}: plant it in a database (where the money moves)`, 'alarm1');
+    if (this.kindOf(this.currentNode) !== 'payment') {
+      this.log(`${program.name}: plant it in the payment gateway (where the money moves)`, 'alarm1');
       return false;
     }
-    if (this.planted) {
+    if (this.planted || this.allies.some((x) => x.resident)) {
       this.log('a skimmer is already planted here', 'alarm1');
       return false;
     }
     this.planted = program;
     this.programs.splice(this.programs.indexOf(program), 1);
     this.deckVersion++;
+    const ally = this.addResident(program, this.currentNode);
+    this.outcome({ kind: 'ally', id: ally.id }, true, 'PLANTED');
     this.log(`${program.name} planted in ${this.nameOf(this.currentNode)}. it will skim a little every day (x${program.efficiency ?? 1}, ${program.detection ?? 5}% a day to be found)`, 'info');
     return true;
   }
@@ -351,7 +355,7 @@ export class Game {
       const together = a.node === playerHere;
       if (a.mood === 'hostile') {
         // Your agents in its node draw its fire first: the one fighting it, or any.
-        const near = this.allies.filter((x) => x.node === a.node && !x.hop);
+        const near = this.allies.filter((x) => x.node === a.node && !x.hop && !x.resident);
         const foe = near.find((x) => x.id === this.foes.get(a.id)) ?? near[0];
         if (foe) {
           if (--a.attackLeft <= 0) {
@@ -602,11 +606,19 @@ export class Game {
     return true;
   }
 
-  /** One of your agents, by its program's name (or the only one out). */
+  /** One of your agents that takes orders, by its program's name (or the only one out). */
   allyByName(name: string): Ally | undefined {
     const q = name.trim().toLowerCase();
-    if (!q) return this.allies.length === 1 ? this.allies[0] : undefined;
-    return this.allies.find((x) => x.program.name.toLowerCase() === q || x.id === q);
+    const mine = this.allies.filter((x) => !x.resident);
+    if (!q) return mine.length === 1 ? mine[0] : undefined;
+    return mine.find((x) => x.program.name.toLowerCase() === q || x.id === q);
+  }
+
+  /** A program of yours that lives in this system (a skimmer planted earlier), shown as your agent. */
+  addResident(program: Program, node: string): Ally {
+    const ally: Ally = { id: `y${this.nextAllyId++}`, program, hp: 1, maxHp: 1, node, hop: null, order: 'stay', attackLeft: 0, target: null, resident: true };
+    this.allies.push(ally);
+    return ally;
   }
 
   /** Gives one of your agents an order: stay, follow, or unload (come back and be loaded again). */
@@ -643,6 +655,7 @@ export class Game {
   private updateAllies(): void {
     for (const ally of [...this.allies]) {
       if (this.ended) return;
+      if (ally.resident) continue;
       if (ally.hop) {
         if (++ally.hop.elapsed >= ALLY_HOP_TICKS) {
           ally.node = ally.hop.to;

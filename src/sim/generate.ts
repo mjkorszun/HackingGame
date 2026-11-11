@@ -41,7 +41,7 @@ export function newPizzeria(seed: number): NetworkSeed {
 /**
  * A small pizzeria: orders come in through the order intake (the real way in, no "public gateway"),
  * land in an orders database next to the customer database, and a camera controller watches the shop.
- * Some shops also have a payments table, kitchen control, a delivery robot or a relay in between.
+ * Every shop has a payment gateway to the banks; some also have kitchen control, a delivery robot or a relay in between.
  */
 export function generate(seed: NetworkSeed): SystemDef {
   const r = rng(seed.seed * 7919 + 17);
@@ -62,10 +62,10 @@ export function generate(seed: NetworkSeed): SystemDef {
   links.push(['orders', 'customers']);
   add('cams', 'Shop Cameras', 'camera', x0 - 1, 2);
   links.push([hub, 'cams']);
-  if (r() < 0.5) {
-    add('payments', 'Payments', 'database', x0 + 1, 2, true);
-    links.push(['orders', 'payments']);
-  }
+  // Every business takes card payments: a payment gateway links it to the banks (where a skimmer goes).
+  r(); // keeps the other rolls as they were, so known networks keep their shape
+  add('payments', 'Payment Gateway', 'payment', x0 + 1, 2, true);
+  links.push(['orders', 'payments']);
   if (r() < 0.4) {
     add('kitchen', 'Kitchen Control', 'physical', x0 + 1, 1);
     links.push(['orders', 'kitchen']);

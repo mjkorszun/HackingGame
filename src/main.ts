@@ -325,6 +325,9 @@ function enterNetwork(choice: Choice): void {
   passDay(account);
   saveAccount(account);
   game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account) });
+  // Skimmers planted here earlier are still at work in the payment gateway.
+  const gateway = system.nodes.find((n) => n.kind === 'payment');
+  if (gateway) for (const sk of account.skimmers.filter((k) => k.netId === system.id)) game.addResident(sk.program, gateway.id);
   home.hide();
   document.getElementById('app')!.hidden = false;
   updateDeck();

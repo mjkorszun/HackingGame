@@ -31,6 +31,7 @@ export function halfHeight(kind: NodeKind): number {
     identity: 0.85,
     uplink: 0.8,
     database: 0.95,
+    payment: 0.62,
     vault: 0.91,
     overseer: 1.02,
     orchestrator: 0.89,
@@ -68,6 +69,8 @@ export function drawNodeShape(kind: NodeKind, x: number, y: number, r: number, c
       const c = r * 0.32;
       return poly([[x - h + c, y - h], [x + h - c, y - h], [x + h, y - h + c], [x + h, y + h - c], [x + h - c, y + h], [x - h + c, y + h], [x - h, y + h - c], [x - h, y - h + c]]);
     }
+    case 'payment': // a card
+      return el('rect', { x: x - r * 1.2, y: y - r * 0.62, width: r * 2.4, height: r * 1.24, rx: r * 0.16, class: cls }, parent);
     case 'vault': // hexagon
       return poly(regular(x, y, r * 1.05, 6, 0));
     case 'overseer': // octagon

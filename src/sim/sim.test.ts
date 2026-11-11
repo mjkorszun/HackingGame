@@ -834,7 +834,7 @@ describe('generated networks', () => {
 });
 
 describe('skimmer and days', () => {
-  it('plants only in a database of a local business; each day pays out or gets found', async () => {
+  it('plants only in the payment gateway of a local business; each day pays out or gets found', async () => {
     const { generate, newPizzeria } = await import('./generate');
     const { passDay } = await import('../ui/account');
     const net = newPizzeria(42);
@@ -842,12 +842,17 @@ describe('skimmer and days', () => {
     const g = new Game(sys);
     g.autoPause = false;
     g.setPaused(false);
-    expect(g.runProgram('skimmer')).toBe(false); // at the intake, not a database
+    expect(g.runProgram('skimmer')).toBe(false); // at the intake, not a payment gateway
     g.revealMap();
     g.travelTo('orders');
     run(g, MOVE_TICKS * 3);
+    expect(g.runProgram('skimmer')).toBe(false); // a database is not enough
+    g.travelTo('payments');
+    run(g, MOVE_TICKS * 3);
     expect(g.runProgram('skimmer')).toBe(true);
     expect(g.planted?.name).toBe('Skimmer 1.0');
+    expect(g.allies.some((a) => a.resident && a.node === 'payments')).toBe(true);
+    expect(g.runProgram('skimmer')).toBe(false); // one skimmer per gateway
     const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {} };
     passDay(account, () => 0.99);
     expect(account.sats).toBeCloseTo(0.08);
