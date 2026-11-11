@@ -2,7 +2,7 @@ import type { ContractDef, SystemDef } from '../sim/types';
 import type { NetworkSeed } from '../sim/generate';
 import { sats } from '../sim/money';
 import { devDays, MAX_DEV_RATING, RARITY_TRAITS, type DevProject } from '../sim/development';
-import { SKILLS, xpToNext } from '../sim/progression';
+import { cleanGameCode, SKILLS, xpToNext } from '../sim/progression';
 import { PROGRAM_TYPES, programSize, type Program, type ProgramType } from '../sim/programs';
 
 /** A contract on offer: the job and the system it is in. */
@@ -32,7 +32,9 @@ export interface HomeActions {
   enter(choice: Choice): void;
   click(): void;
   /** Your character: level, XP into it, skills, and level ups not picked yet. */
-  character(): { level: number; xp: number; skills: string[]; picks: number };
+  character(): { level: number; xp: number; skills: string[]; picks: number; code: string };
+  /** Sets the game code (for testing for now). */
+  setCode(code: string): void;
   /** Opens the skill choice for the level ups not picked yet; `done` runs after. */
   pickSkills(done: () => void): void;
   /** Software development: the project in progress, starting one, and working on it. */
@@ -172,7 +174,21 @@ export class HomeScreen {
       <div class="cc-line home-dim">next level in ${need - c.xp} XP</div>
       ${c.picks ? `<button type="button" class="home-btn cc-btn" data-pick>Choose a skill${c.picks > 1 ? ` (${c.picks})` : ''}</button>` : ''}
       <div class="cc-line ch-head">skills</div>
-      ${owned.length ? owned.map((s) => `<div class="cc-line"><span class="ch-skill">${s.name}</span> <span class="home-dim">${s.text}</span></div>`).join('') : '<div class="cc-line home-dim">none yet. every level up lets you pick one of three</div>'}`;
+      ${owned.length ? owned.map((s) => `<div class="cc-line"><span class="ch-skill">${s.name}</span> <span class="home-dim">${s.text}</span></div>`).join('') : '<div class="cc-line home-dim">none yet. every level up lets you pick one of three</div>'}
+      <div class="cc-line ch-head">game code</div>
+      <label class="dev-row"><input class="ch-code" maxlength="16" value="${c.code}"><button type="button" class="home-btn ch-code-btn">Set</button></label>
+      <div class="cc-line home-dim">the code decides which skills every level offers: playing a mission again gives the same choice</div>`;
+    const codeEl = box.querySelector<HTMLInputElement>('.ch-code')!;
+    box.querySelector('.ch-code-btn')!.addEventListener('click', () => {
+      const code = cleanGameCode(codeEl.value);
+      if (!code) {
+        codeEl.classList.add('is-bad');
+        return;
+      }
+      this.actions.click();
+      this.actions.setCode(code);
+      this.render();
+    });
     box.querySelector('[data-pick]')?.addEventListener('click', () => {
       this.actions.click();
       this.actions.pickSkills(() => this.render());

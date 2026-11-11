@@ -2,6 +2,7 @@ import { DEFAULT_MEMORY, STARTING_PROGRAMS } from '../sim/game';
 import { programSize, usedMemory, type Program } from '../sim/programs';
 import { newPizzeria, type NetworkSeed } from '../sim/generate';
 import type { DevProject } from '../sim/development';
+import { newGameCode } from '../sim/progression';
 
 /** What the player keeps between runs: sats and software. Saved in the browser. */
 export interface Account {
@@ -29,6 +30,8 @@ export interface Account {
   skills: string[];
   /** Level ups whose skill has not been picked yet. */
   skillPicks: number;
+  /** The game's code: it alone decides which skills each level offers. */
+  code: string;
 }
 
 /**
@@ -63,7 +66,7 @@ const START_STORED = ['Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mimic 1.0', 'Skimm
 
 function fresh(): Account {
   const programs = STARTING_PROGRAMS.map((p) => ({ ...p }));
-  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0 };
+  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode() };
 }
 
 function randomSeed(): number {
@@ -129,6 +132,7 @@ function migrate(a: Account): Account {
   if (typeof a.xp !== 'number') a.xp = 0;
   if (!Array.isArray(a.skills)) a.skills = [];
   if (typeof a.skillPicks !== 'number') a.skillPicks = 0;
+  if (typeof a.code !== 'string' || !a.code) a.code = newGameCode();
   if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id);
   // Unload from the end until what is loaded fits.
   while (a.loaded.length && usedMemory(loadedPrograms(a)) > a.memory) a.loaded.pop();

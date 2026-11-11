@@ -648,3 +648,6 @@ body {
 .sp-text { color: #c8d4cc; }
 .ch-head { margin-top: 14px; color: var(--blue, #5ab4ff); }
 .ch-skill { color: var(--yellow); }
+.ch-code { letter-spacing: 2px; text-transform: uppercase; }
+.ch-code.is-bad { border-color: var(--red, #ff5050); }
+.ch-code-btn { width: auto; font-size: 14px; padding: 4px 14px; }

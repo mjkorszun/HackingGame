@@ -91,7 +91,7 @@ function leaveNet(): void {
 /** One skill choice for every level gained and not yet picked, then `done`. */
 function pickSkills(done: () => void): void {
   if (account.skillPicks <= 0) return done();
-  showSkillPick(account.level - account.skillPicks + 1, account.skills, (skill) => {
+  showSkillPick(account.level - account.skillPicks + 1, account.skills, account.code, (skill) => {
     account.skills.push(skill.id);
     account.skillPicks--;
     saveAccount(account);
@@ -227,7 +227,11 @@ const homeState = { day: account.day, reputation: account.reputation, networks: 
 const home = new HomeScreen(document.getElementById('home')!, homeState, {
   enter: (choice) => enterNetwork(choice),
   click: () => sfx.play('menuItem'),
-  character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks }),
+  character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks, code: account.code }),
+  setCode: (code) => {
+    account.code = code;
+    saveAccount(account);
+  },
   pickSkills: (done) => pickSkills(done),
   dev: {
     project: () => account.project,

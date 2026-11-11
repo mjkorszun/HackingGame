@@ -46,6 +46,33 @@ export const SKILLS: Skill[] = [
   { id: 'overclock', name: 'Overclocker', text: 'programs run faster' },
 ];
 
+/** Letters for a game code (no 0/O or 1/I, so it is easy to read and type). */
+const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/** A new game's code: 8 characters. */
+export function newGameCode(roll: () => number = Math.random): string {
+  return Array.from({ length: 8 }, () => CODE_LETTERS[Math.floor(roll() * CODE_LETTERS.length)]).join('');
+}
+
+/** Cleans a typed code: capitals and allowed characters only, 4-16 long; empty string when not valid. */
+export function cleanGameCode(text: string): string {
+  const c = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return c.length >= 4 && c.length <= 16 ? c : '';
+}
+
+/**
+ * The roll for the skill choice at one level: it comes only from the game code and the level,
+ * so loading a save and playing the mission again gives exactly the same three skills.
+ */
+export function levelRoll(code: string, level: number): () => number {
+  let s = 2166136261;
+  for (const ch of `${code}#${level}`) s = Math.imul(s ^ ch.charCodeAt(0), 16777619) >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 2 ** 32;
+  };
+}
+
 /** Three different skills you don't have yet, to choose from. */
 export function skillChoices(owned: string[], roll: () => number = Math.random): Skill[] {
   const pool = SKILLS.filter((s) => !owned.includes(s.id));
