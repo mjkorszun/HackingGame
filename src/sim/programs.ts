@@ -32,7 +32,7 @@ export interface Program {
   /** Programs you develop yourself get a rarity and random traits. */
   rarity?: Rarity;
   traits?: string[];
-  /** A prototype carries its author's name. */
+  /** A legendary program carries its author's name. */
   author?: string;
 }
 

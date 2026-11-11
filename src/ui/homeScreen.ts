@@ -173,7 +173,7 @@ export class HomeScreen {
         <label class="dev-row">type <select class="dev-type">${PROGRAM_TYPES.map((t) => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
         <label class="dev-row">rating <select class="dev-rating">${Array.from({ length: MAX_DEV_RATING }, (_, i) => `<option${i + 1 === f.rating ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></label>
         <label class="dev-row">name <input class="dev-name" maxlength="20" value="${esc(name)}"></label>
-        <div class="cc-line home-dim">size ${programSize(f)} GB. bugs can make it take longer. rarity and traits are rolled when it is done: common ${RARITY_TRAITS.common} traits, enhanced ${RARITY_TRAITS.enhanced}, rare ${RARITY_TRAITS.rare}, experimental ${RARITY_TRAITS.experimental}, prototype ${RARITY_TRAITS.prototype} and your name</div>
+        <div class="cc-line home-dim">size ${programSize(f)} GB. bugs can make it take longer. rarity and traits are rolled when it is done: common ${RARITY_TRAITS.common} traits, uncommon ${RARITY_TRAITS.uncommon}, rare ${RARITY_TRAITS.rare}, epic ${RARITY_TRAITS.epic}, legendary ${RARITY_TRAITS.legendary} and your name</div>
         <button type="button" class="home-btn cc-btn" data-dev="start">Start project</button>`;
       const type = box.querySelector<HTMLSelectElement>('.dev-type')!;
       const rating = box.querySelector<HTMLSelectElement>('.dev-rating')!;

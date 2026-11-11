@@ -5,14 +5,14 @@
  */
 import type { Program, ProgramType } from './programs';
 
-export const RARITIES = ['common', 'enhanced', 'rare', 'experimental', 'prototype'] as const;
+export const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'] as const;
 export type Rarity = (typeof RARITIES)[number];
 
-/** Traits each rarity gets: common 0, enhanced 1, rare 2, experimental 3, prototype 4 (plus the author's name). */
-export const RARITY_TRAITS: Record<Rarity, number> = { common: 0, enhanced: 1, rare: 2, experimental: 3, prototype: 4 };
+/** Traits each rarity gets: common 0, uncommon 1, rare 2, epic 3, legendary 4 (plus the author's name). */
+export const RARITY_TRAITS: Record<Rarity, number> = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
 
 /** Chance of each rarity in %, rolled when a program is finished (placeholder). */
-export const RARITY_WEIGHTS: Record<Rarity, number> = { common: 60, enhanced: 25, rare: 10, experimental: 4, prototype: 1 };
+export const RARITY_WEIGHTS: Record<Rarity, number> = { common: 60, uncommon: 25, rare: 10, epic: 4, legendary: 1 };
 
 /** The pool traits are drawn from (placeholder; none of them works yet). */
 export const TRAIT_POOL = [
@@ -106,7 +106,7 @@ export function rollTraits(count: number, roll: () => number = Math.random): str
 export function finishProgram(p: DevProject, id: string, author: string, roll: () => number = Math.random): Program {
   const rarity = rollRarity(roll);
   const program: Program = { id, type: p.type, name: p.name, rating: p.rating, rarity, traits: rollTraits(RARITY_TRAITS[rarity], roll) };
-  if (rarity === 'prototype') program.author = author;
+  if (rarity === 'legendary') program.author = author;
   if (p.type === 'skimmer') {
     program.efficiency = 1;
     program.detection = 2;

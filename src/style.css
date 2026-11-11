@@ -606,13 +606,13 @@ body {
 .dev-log { margin: 0 0 4px; color: var(--yellow); line-height: 1.5; }
 .dev-new { margin: 8px 0 14px; border: 1px solid currentColor; padding: 10px 12px; }
 .dev-trait { color: var(--green); }
-/* rarity colours: common white, enhanced green, rare blue, experimental violet, prototype gold */
+/* rarity colours: common white, uncommon green, rare blue, epic violet, legendary orange */
 .rarity-common { color: #e6e6e6; }
-.rarity-enhanced { color: #5dff8a; }
+.rarity-uncommon { color: #5dff8a; }
 .rarity-rare { color: #6fb0ff; }
-.rarity-experimental { color: #b48cff; }
-.rarity-prototype { color: #ffc23a; }
-.deck-program.rarity-enhanced { color: #5dff8a; }
+.rarity-epic { color: #b48cff; }
+.rarity-legendary { color: #ff9f2e; }
+.deck-program.rarity-uncommon { color: #5dff8a; }
 .deck-program.rarity-rare { color: #6fb0ff; }
-.deck-program.rarity-experimental { color: #b48cff; }
-.deck-program.rarity-prototype { color: #ffc23a; }
+.deck-program.rarity-epic { color: #b48cff; }
+.deck-program.rarity-legendary { color: #ff9f2e; }

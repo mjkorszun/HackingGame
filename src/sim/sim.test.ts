@@ -774,12 +774,12 @@ describe('software development', () => {
   it('a finished program gets a rarity and that many different traits', async () => {
     const { finishProgram, newProject, rollRarity, RARITY_TRAITS } = await import('./development');
     expect(rollRarity(() => 0)).toBe('common');
-    expect(rollRarity(() => 0.995)).toBe('prototype');
-    const proto = finishProgram(newProject('attack', 3, 'Spike'), 'p200', 'you', (() => { let first = true; return () => { if (first) { first = false; return 0.995; } return 0.3; }; })());
-    expect(proto.rarity).toBe('prototype');
-    expect(proto.traits!.length).toBe(RARITY_TRAITS.prototype);
-    expect(new Set(proto.traits).size).toBe(4);
-    expect(proto.author).toBe('you');
+    expect(rollRarity(() => 0.995)).toBe('legendary');
+    const leg = finishProgram(newProject('attack', 3, 'Spike'), 'p200', 'you', (() => { let first = true; return () => { if (first) { first = false; return 0.995; } return 0.3; }; })());
+    expect(leg.rarity).toBe('legendary');
+    expect(leg.traits!.length).toBe(RARITY_TRAITS.legendary);
+    expect(new Set(leg.traits).size).toBe(4);
+    expect(leg.author).toBe('you');
   });
 
   it('several days pass at once: skimmers pay for each day and the counter moves', async () => {
