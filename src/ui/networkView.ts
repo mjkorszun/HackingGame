@@ -497,7 +497,7 @@ export class NetworkView {
       { cmd: 'ignore', label: 'Ignore', hint: a.strikes ? 'RED alarm, it turns hostile' : 'yellow alarm, it asks again' },
     ];
     this.queryBox.innerHTML = `
-      <div class="qb-title">${esc(a.name)} (${a.stats.type}) QUERIES YOU${a.strikes ? ' AGAIN' : ''}</div>
+      <div class="qb-title">${esc(a.name)} (${esc(a.typeName)}) QUERIES YOU${a.strikes ? ' AGAIN' : ''}</div>
       <div class="qb-info">${agentInfo(a).slice(1).map(esc).join('<br>')}</div>
       <div class="qb-options"></div>`;
     const box = this.queryBox.querySelector('.qb-options')!;

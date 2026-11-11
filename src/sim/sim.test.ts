@@ -631,9 +631,9 @@ describe('agents', () => {
 
   it('analyzing one agent reveals every agent of the same type in the system', () => {
     const g = new Game({ ...testSystem, agents: [
-      { kind: 'warrior', node: 'gw', type: 'knight' },
-      { kind: 'warrior', node: 'core', type: 'knight' },
-      { kind: 'warrior', node: 'core', type: 'ranger' },
+      { kind: 'warrior', node: 'gw', type: 'heavy' },
+      { kind: 'warrior', node: 'core', type: 'heavy' },
+      { kind: 'warrior', node: 'core', type: 'watchful' },
     ] });
     g.autoPause = false;
     g.setPaused(false);
@@ -646,6 +646,8 @@ describe('agents', () => {
     expect(k2.known).toBe('full');
     expect(r.known).toBe('none');
     expect(k1.name).not.toBe(k2.name);
+    expect(k1.typeName).toBe(k2.typeName);
+    expect(r.typeName).not.toBe(k1.typeName);
   });
 
   it('a successful deceive leaves you alone until you leave the node', () => {
