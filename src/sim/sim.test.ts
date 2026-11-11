@@ -1,4 +1,4 @@
-import { clickAction, type DataFile } from './files';
+import { clickAction, filePrice, type DataFile } from './files';
 import { SCOUT_NOISE, scoutChances } from './programs';
 import { describe, expect, it } from 'vitest';
 import { testSystem } from '../data/testSystem';
@@ -361,15 +361,15 @@ describe('data files and decrypt', () => {
     expect(g.fileAction('evaluate', valuable.id)).toBe(true);
     expect(valuable.evaluated).toBe(true);
     expect(g.fileAction('download', valuable.id)).toBe(true);
-    expect(g.downloads[0].price).toBe(valuable.price);
+    expect(g.loot[0].price).toBe(valuable.price);
     expect(g.fileAction('download', valuable.id)).toBe(false); // only once
     const software = files.find((f) => f.content === 'software');
     if (software) {
       const before = g.programs.length;
       expect(g.fileAction('identify', software.id)).toBe(true);
       expect(g.fileAction('download', software.id)).toBe(true);
-      expect(g.programs.length).toBe(before + 1);
-      expect(g.programs[before].name).toBe(software.software!.name);
+      expect(g.programs.length).toBe(before); // paid out only when the run ends
+      expect(g.loot.at(-1)!.software!.name).toBe(software.software!.name);
     }
     const contract = files.find((f) => f.content === 'contract');
     if (contract) {
@@ -393,7 +393,7 @@ describe('data files and decrypt', () => {
     fail.drainEvents();
     expect(fail.fileAction('download', f.id)).toBe(true);
     expect(fail.drainEvents().some((e) => e.type === 'log' && e.line.color === 'alarm3')).toBe(true);
-    expect(fail.downloads.length).toBe(0);
+    expect(fail.loot.length).toBe(0);
 
     const ok = new Game(testSystem, () => 0); // every detection roll succeeds
     ok.revealMap();
@@ -542,5 +542,46 @@ describe('file left click', () => {
     expect(clickAction({ ...base, content: 'contract', need: 'delete' } as DataFile)).toBe('delete');
     expect(clickAction({ ...base, content: 'contract', need: 'alter' } as DataFile)).toBe('alter');
     expect(clickAction({ ...base, content: 'contract', need: 'alter', altered: true } as DataFile)).toBeUndefined();
+  });
+});
+
+describe('run and contract', () => {
+  it('the contract file sits in its database; altering it completes the contract and the report pays out', () => {
+    const g = new Game(testSystem, () => 0);
+    g.autoPause = false;
+    g.setPaused(false);
+    g.revealMap();
+    g.travelTo('orders');
+    run(g, MOVE_TICKS * 3);
+    expect(g.currentNode).toBe('orders');
+    const c = g.filesIn('orders').find((f) => f.content === 'contract')!;
+    expect(c.need).toBe('alter');
+    Object.assign(c, { decrypted: true, protection: undefined });
+    const v = g.filesIn('orders').find((f) => f.content === 'valuable')!;
+    Object.assign(v, { decrypted: true, protection: undefined });
+    expect(g.contractDone).toBe(false);
+    expect(g.fileAction('alter', c.id)).toBe(true);
+    expect(g.contractDone).toBe(true);
+    expect(g.fileAction('download', v.id)).toBe(true);
+    const r = g.endRun();
+    expect(r.success).toBe(true);
+    expect(r.pay).toBe(50);
+    expect(r.files[0].price).toBe(v.price);
+    expect(r.total).toBe(50 + v.price!);
+    expect(g.ended).toBe(true);
+  });
+
+  it('without the contract task the run pays only the files', () => {
+    const r = new Game(testSystem).endRun();
+    expect(r.success).toBe(false);
+    expect(r.total).toBe(0);
+  });
+
+  it('file prices at security 1 are d30+20', () => {
+    for (const r of [0, 0.5, 0.999]) {
+      const p = filePrice(1, () => r);
+      expect(p).toBeGreaterThanOrEqual(21);
+      expect(p).toBeLessThanOrEqual(50);
+    }
   });
 });
