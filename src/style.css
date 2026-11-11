@@ -376,8 +376,8 @@ body {
 .data-block.is-keyring { --fc: #d2a67a; }
 .data-block.is-keyring rect { fill: #2a1e12; }
 .data-block.is-done { opacity: 0.55; }
-.data-block.is-decrypting rect { animation: file-decrypt 0.5s ease-in-out infinite alternate; }
-@keyframes file-decrypt { from { stroke: #5dff8a; } to { stroke: #ffffff; fill: #1f6b38; } }
+.data-block.is-scanning rect { animation: file-scan 0.5s ease-in-out infinite alternate; }
+@keyframes file-scan { from { stroke: #5dff8a; } to { stroke: #ffffff; fill: #1f6b38; } }
 
 /* ---------- game tooltip ---------- */
 .game-tip {

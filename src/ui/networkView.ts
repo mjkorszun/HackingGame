@@ -141,8 +141,8 @@ function drawProgramIcon(cx: number, cy: number, parent: Element): void {
 function fileTip(f: DataFile): TipLine[] {
   const lines: TipLine[] = [{ text: f.id, cls: 'tip-title' }];
   if (f.protection) lines.push({ text: PROTECTION_LABEL[f.protection] + (f.protection === 'lock' ? `: ${f.lockPrivilege}` : ''), cls: 'tip-protection' });
-  if (!f.decrypted) {
-    const hint = f.protection === 'seal' ? 'click to brute the seal first' : f.protection === 'lock' ? 'needs the privilege, or forge' : f.protection === 'killswitch' ? 'defuse it first, or it is lost' : 'click to decrypt';
+  if (!f.scanned) {
+    const hint = f.protection === 'seal' ? 'click to decrypt the seal first' : f.protection === 'lock' ? 'needs the privilege, or forge' : f.protection === 'killswitch' ? 'defuse it first, or it is lost' : 'click to scan';
     return [...lines, { text: 'encrypted', cls: 'c-system' }, { text: hint, cls: 'c-system' }];
   }
   const seen = apparentContent(f);
@@ -173,9 +173,9 @@ export interface ViewActions {
   look(nodeId: string): void;
   act(actionId: string): void;
   run(program: Program): void;
-  /** Decrypt one file, or all encrypted files starting at it. */
-  decryptFile(fileId: string, all: boolean): void;
-  decryptAll(): void;
+  /** Scan one file, or all encrypted files starting at it. */
+  scanFile(fileId: string, all: boolean): void;
+  scanAll(): void;
   fileAction(action: FileAction, fileId: string): void;
   togglePause(): void;
   mute(): void;
@@ -304,7 +304,7 @@ export class NetworkView {
     if (key !== this.lastKey) this.render();
     this.updateAvatar();
     this.updateScout();
-    const busy = this.game.decryptingFile;
+    const busy = this.game.scanningFile;
     if (this.fileBar && busy) this.fileBar.fill.setAttribute('width', String(this.fileBar.width * Math.min(1, busy.progress)));
   }
 
@@ -507,7 +507,7 @@ export class NetworkView {
     const y0 = CY - span;
     const cols = Math.floor((2 * span) / CELL);
     const files = this.game.filesIn(nodeId);
-    const decrypting = this.game.decryptingFile;
+    const scanning = this.game.scanningFile;
     const taken = new Set<string>();
     for (let i = 0, tries = 0; i < files.length && tries < 2000; tries++) {
       const c = Math.floor(rand() * cols);
@@ -522,21 +522,21 @@ export class NetworkView {
       taken.add(key);
       const file = files[i++];
       if (file.deleted) continue;
-      const cls = ['data-block', file.decrypted ? `is-${apparentContent(file)}` : 'is-encrypted'];
-      if (decrypting?.fileId === file.id) cls.push('is-decrypting');
+      const cls = ['data-block', file.scanned ? `is-${apparentContent(file)}` : 'is-encrypted'];
+      if (scanning?.fileId === file.id) cls.push('is-scanning');
       if (file.downloaded || file.altered || file.extracted) cls.push('is-done');
       const blk = svg('g', { class: cls.join(' '), 'data-file': file.id }, parent);
       const pad = 5;
       svg('rect', { x: x + pad, y: y + pad, width: CELL - 2 * pad, height: CELL - 2 * pad }, blk);
       const mid = y + CELL / 2;
-      if (decrypting?.fileId === file.id) {
+      if (scanning?.fileId === file.id) {
         // A small loading bar over the file while a lasting action works on it.
         const w = CELL - 2 * pad;
         svg('rect', { x: x + pad, y: y, width: w, height: 4, class: 'file-bar-bg' }, parent);
-        const fill = svg('rect', { x: x + pad, y: y, width: w * decrypting.progress, height: 4, class: 'file-bar' }, parent);
+        const fill = svg('rect', { x: x + pad, y: y, width: w * scanning.progress, height: 4, class: 'file-bar' }, parent);
         this.fileBar = { fill, width: w };
       }
-      const seen = file.decrypted ? apparentContent(file) : undefined;
+      const seen = file.scanned ? apparentContent(file) : undefined;
       if (file.protection) {
         drawProtection(file.protection, x + CELL / 2, mid, blk);
       } else if (seen === 'valuable' && file.evaluated) {
@@ -553,23 +553,23 @@ export class NetworkView {
       blk.addEventListener('click', () => {
         const act = clickAction(file);
         if (act) this.actions.fileAction(act, file.id);
-        else if (!file.decrypted) this.actions.decryptFile(file.id, false);
+        else if (!file.scanned) this.actions.scanFile(file.id, false);
       });
       blk.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const busy = this.game.isBusy;
         const items = [];
-        if (!file.decrypted) items.push({ label: 'Decrypt', hint: clickAction(file) ? undefined : 'click', disabled: busy, action: () => this.actions.decryptFile(file.id, false) });
+        if (!file.scanned) items.push({ label: 'Scan', hint: clickAction(file) ? undefined : 'click', disabled: busy, action: () => this.actions.scanFile(file.id, false) });
         for (const act of fileActions(file)) {
           const needs = (FILE_PROGRAMS as readonly string[]).includes(act) && !this.game.findProgram(act as FileProgram);
           const done = act === 'download' && file.downloaded;
           items.push({ label: act, hint: needs ? `needs ${act}` : done ? 'done' : act === clickAction(file) ? 'click' : undefined, disabled: busy || needs || done, action: () => this.actions.fileAction(act, file.id) });
         }
-        if (this.game.filesIn(nodeId).some((f) => !f.decrypted)) {
-          items.push({ label: 'Decrypt all', hint: 'starting from this file', disabled: busy, action: () => this.actions.decryptFile(file.id, true) });
+        if (this.game.filesIn(nodeId).some((f) => !f.scanned)) {
+          items.push({ label: 'Scan all', hint: 'starting from this file', disabled: busy, action: () => this.actions.scanFile(file.id, true) });
         }
-        this.menu.show(e.clientX, e.clientY, `${file.id}${file.decrypted ? `: ${CONTENT_LABEL[apparentContent(file)]}` : ''}`, items);
+        this.menu.show(e.clientX, e.clientY, `${file.id}${file.scanned ? `: ${CONTENT_LABEL[apparentContent(file)]}` : ''}`, items);
       });
     }
   }
@@ -704,9 +704,9 @@ export class NetworkView {
       const busy = this.game.isBusy;
       const scout = this.game.findProgram('scout');
       if (scout) items.push({ label: 'Scout', hint: scout.name, disabled: busy, action: () => this.actions.run(scout) });
-      const decrypt = this.game.findProgram('decrypt');
-      if (decrypt && this.game.filesIn(node.id).some((f) => !f.decrypted)) {
-        items.push({ label: 'Decrypt all', hint: decrypt.name, disabled: busy, action: () => this.actions.decryptAll() });
+      const scan = this.game.findProgram('scan');
+      if (scan && this.game.filesIn(node.id).some((f) => !f.scanned)) {
+        items.push({ label: 'Scan all', hint: scan.name, disabled: busy, action: () => this.actions.scanAll() });
       }
     }
     this.menu.show(x, y, this.game.nameOf(node.id), items);
