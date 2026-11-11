@@ -3,6 +3,24 @@ import type { Program, ProgramType } from './programs';
 /** What a data file turns out to hold once decrypted. contract: data a contract needs altered or deleted. */
 export type FileContent = 'worthless' | 'valuable' | 'software' | 'contract' | 'honeytoken' | 'keyring';
 
+/**
+ * Extra protection on an archive, beyond its encryption. Each needs its own program:
+ * killswitch (destroys itself if decrypted before Defuse), seal (too strong for decrypt
+ * until Brute cracks it), tracker (downloading tags you until Scrub removes it),
+ * lock (opens only with a privilege, or after Forge fakes one).
+ */
+export type Protection = 'killswitch' | 'seal' | 'tracker' | 'lock';
+
+/** The program that removes each protection. */
+export const PROTECTION_PROGRAM = { killswitch: 'defuse', seal: 'brute', tracker: 'scrub', lock: 'forge' } as const;
+
+export const PROTECTION_LABEL: Record<Protection, string> = {
+  killswitch: 'kill switch: destroys itself if decrypted (defuse)',
+  seal: 'heavy seal: too strong for decrypt (brute)',
+  tracker: 'tracker: tags whoever downloads it (scrub)',
+  lock: 'privilege lock (needs the privilege, or forge)',
+};
+
 /** What a keyring holds: a privilege, or the system's encryption keys. */
 export type KeyringGrant = 'worker' | 'security' | 'admin' | 'keys';
 
@@ -22,6 +40,10 @@ export interface DataFile {
   /** keyring: what it holds, and whether it was already extracted. */
   grant?: KeyringGrant;
   extracted?: boolean;
+  /** Extra protection, if any (removed by its program). */
+  protection?: Protection;
+  /** lock: the privilege that opens it. */
+  lockPrivilege?: 'worker' | 'security' | 'admin';
   /** contract: what the contract wants done with it. */
   need?: 'alter' | 'delete';
   /** Done to this file: downloaded (a copy taken), altered or deleted. */
@@ -31,7 +53,7 @@ export interface DataFile {
 }
 
 /** Actions a file offers once decrypted. */
-export type FileAction = 'evaluate' | 'identify' | 'download' | 'alter' | 'delete' | 'extract';
+export type FileAction = 'evaluate' | 'identify' | 'download' | 'alter' | 'delete' | 'extract' | 'defuse' | 'brute' | 'scrub' | 'forge';
 
 /** What the player believes the file is: an undetected honeytoken looks valuable. */
 export function apparentContent(f: DataFile): FileContent {
@@ -39,7 +61,14 @@ export function apparentContent(f: DataFile): FileContent {
 }
 
 export function fileActions(f: DataFile): FileAction[] {
-  if (!f.decrypted || f.deleted) return [];
+  if (f.deleted) return [];
+  // Removing a protection works on an encrypted file too.
+  const guard: FileAction[] = f.protection ? [PROTECTION_PROGRAM[f.protection]] : [];
+  if (!f.decrypted) return guard;
+  return [...guard, ...contentActions(f)];
+}
+
+function contentActions(f: DataFile): FileAction[] {
   switch (apparentContent(f)) {
     case 'keyring':
       return f.extracted ? [] : ['extract'];
@@ -101,6 +130,12 @@ export function generateFiles(nodeId: string): DataFile[] {
       file.software = { type, name: names[Math.floor(rand() * names.length)], rating: 1 + Math.floor(rand() * 4) };
     }
     if (content === 'contract') file.need = rand() < 0.5 ? 'alter' : 'delete';
+    // About one archive in four that is worth anything carries an extra protection.
+    if (content !== 'worthless' && rand() < 0.25) {
+      const kinds: Protection[] = ['killswitch', 'seal', 'tracker', 'lock'];
+      file.protection = kinds[Math.floor(rand() * kinds.length)];
+      if (file.protection === 'lock') file.lockPrivilege = rand() < 0.6 ? 'worker' : rand() < 0.8 ? 'security' : 'admin';
+    }
     return file;
   });
 }

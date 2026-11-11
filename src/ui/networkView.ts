@@ -1,6 +1,6 @@
-import { apparentContent, CONTENT_LABEL, fileActions, type DataFile, type FileAction } from '../sim/files';
+import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
 import { Tooltip, type TipLine } from './tooltip';
-import type { Program } from '../sim/programs';
+import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
 import type { Game } from '../sim/game';
 import { TICKS_PER_SECOND } from '../sim/game';
 import type { NodeDef, NodeKind } from '../sim/types';
@@ -93,10 +93,38 @@ const ICON_AUTO_PAUSE = icon(
   '<circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 2.5h4M12 2.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="9" y="10" width="2.2" height="7" fill="currentColor"/><rect x="12.8" y="10" width="2.2" height="7" fill="currentColor"/>',
 );
 
+/** The symbol drawn on an archive in place of its two lines, one per kind of protection. */
+function drawProtection(p: Protection, cx: number, cy: number, parent: Element): void {
+  const g = svg('g', { class: 'file-guard' }, parent);
+  switch (p) {
+    case 'killswitch': // exclamation mark
+      svg('line', { x1: cx, y1: cy - 6, x2: cx, y2: cy + 1.5 }, g);
+      svg('circle', { cx, cy: cy + 5, r: 1.3, class: 'guard-fill' }, g);
+      break;
+    case 'seal': // two rings
+      svg('circle', { cx, cy, r: 5.5 }, g);
+      svg('circle', { cx, cy, r: 2.2 }, g);
+      break;
+    case 'tracker': // crosshair
+      svg('circle', { cx, cy, r: 4 }, g);
+      svg('line', { x1: cx - 7, y1: cy, x2: cx + 7, y2: cy }, g);
+      svg('line', { x1: cx, y1: cy - 7, x2: cx, y2: cy + 7 }, g);
+      break;
+    case 'lock': // keyhole
+      svg('circle', { cx, cy: cy - 2, r: 2.6, class: 'guard-fill' }, g);
+      svg('path', { d: `M ${cx - 1.6} ${cy} L ${cx - 2.6} ${cy + 5.5} L ${cx + 2.6} ${cy + 5.5} L ${cx + 1.6} ${cy} Z`, class: 'guard-fill' }, g);
+      break;
+  }
+}
+
 /** What the game tooltip says about a data file. */
 function fileTip(f: DataFile): TipLine[] {
   const lines: TipLine[] = [{ text: f.id, cls: 'tip-title' }];
-  if (!f.decrypted) return [...lines, { text: 'not decrypted', cls: 'c-system' }, { text: 'click to decrypt', cls: 'c-system' }];
+  if (f.protection) lines.push({ text: PROTECTION_LABEL[f.protection] + (f.protection === 'lock' ? `: ${f.lockPrivilege}` : ''), cls: 'tip-protection' });
+  if (!f.decrypted) {
+    const hint = f.protection === 'seal' ? 'brute it first' : f.protection === 'lock' ? 'needs the privilege, or forge' : f.protection === 'killswitch' ? 'defuse it first, or it is lost' : 'click to decrypt';
+    return [...lines, { text: 'encrypted', cls: 'c-system' }, { text: hint, cls: 'c-system' }];
+  }
   const seen = apparentContent(f);
   lines.push({ text: CONTENT_LABEL[seen], cls: `tip-${seen}` });
   if (seen === 'keyring') lines.push({ text: f.extracted ? `extracted: ${f.grant === 'keys' ? 'encryption keys' : `${f.grant} privilege`}` : 'extract to see what it opens' });
@@ -464,8 +492,12 @@ export class NetworkView {
       const pad = 5;
       svg('rect', { x: x + pad, y: y + pad, width: CELL - 2 * pad, height: CELL - 2 * pad }, blk);
       const mid = y + CELL / 2;
-      svg('line', { x1: x + pad + 4, y1: mid - 2.5, x2: x + CELL - pad - 4, y2: mid - 2.5 }, blk);
-      svg('line', { x1: x + pad + 4, y1: mid + 2.5, x2: x + CELL - pad - 7, y2: mid + 2.5 }, blk);
+      if (file.protection) {
+        drawProtection(file.protection, x + CELL / 2, mid, blk);
+      } else {
+        svg('line', { x1: x + pad + 4, y1: mid - 2.5, x2: x + CELL - pad - 4, y2: mid - 2.5 }, blk);
+        svg('line', { x1: x + pad + 4, y1: mid + 2.5, x2: x + CELL - pad - 7, y2: mid + 2.5 }, blk);
+      }
       this.tip.attach(blk, () => fileTip(file));
       blk.addEventListener('mouseenter', () => this.actions.hover());
       blk.addEventListener('click', () => {
@@ -478,7 +510,7 @@ export class NetworkView {
         const items = [];
         if (!file.decrypted) items.push({ label: 'Decrypt', hint: 'click', disabled: busy, action: () => this.actions.decryptFile(file.id, false) });
         for (const act of fileActions(file)) {
-          const needs = (act === 'evaluate' || act === 'identify') && !this.game.findProgram(act);
+          const needs = (FILE_PROGRAMS as readonly string[]).includes(act) && !this.game.findProgram(act as FileProgram);
           const done = act === 'download' && file.downloaded;
           items.push({ label: act, hint: needs ? `needs ${act}` : done ? 'done' : undefined, disabled: busy || needs || done, action: () => this.actions.fileAction(act, file.id) });
         }

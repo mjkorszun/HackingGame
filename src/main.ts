@@ -8,7 +8,7 @@ import { ContextMenu } from './ui/contextMenu';
 import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
 import { fileActions } from './sim/files';
-import { PROGRAM_TYPES, type ProgramType } from './sim/programs';
+import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from './sim/programs';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const game = new Game(testSystem);
@@ -92,6 +92,10 @@ function runCommand(raw: string): void {
       break;
     case 'evaluate':
     case 'identify':
+    case 'defuse':
+    case 'brute':
+    case 'scrub':
+    case 'forge':
     case 'download':
     case 'alter':
     case 'delete':
@@ -167,7 +171,7 @@ term.completer = (value) =>
     names: (kind) =>
       kind === 'action'
         ? game.currentActions.map((a) => a.id)
-        : kind === 'file' || kind === 'evaluate' || kind === 'identify'
+        : kind === 'file' || (FILE_PROGRAMS as readonly string[]).includes(kind)
           ? game.filesIn(game.currentNode).filter((f) => fileActions(f).length).map((f) => f.id)
         : (PROGRAM_TYPES as readonly string[]).includes(kind)
           ? game.programsOf(kind as ProgramType).map((p) => p.name)

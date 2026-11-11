@@ -312,6 +312,8 @@ describe('data files and decrypt', () => {
     g.travelTo('orders');
     run(g, MOVE_TICKS * 3);
     expect(g.currentNode).toBe('orders');
+    // Protections get their own tests.
+    for (const f of g.filesIn('orders') as import('./files').DataFile[]) f.protection = undefined;
     return g;
   };
   const finish = (g: Game) => {
@@ -383,7 +385,7 @@ describe('data files and decrypt', () => {
     fail.travelTo('orders');
     run(fail, MOVE_TICKS * 3);
     const f = fail.filesIn('orders')[0] as import('./files').DataFile;
-    Object.assign(f, { content: 'honeytoken', price: 500 });
+    Object.assign(f, { content: 'honeytoken', price: 500, protection: undefined });
     fail.decryptCommand(f.id);
     finish(fail);
     expect(f.detected).toBeFalsy();
@@ -400,10 +402,37 @@ describe('data files and decrypt', () => {
     run(ok, MOVE_TICKS * 3);
     const h = ok.filesIn('orders')[0] as import('./files').DataFile;
     Object.assign(h, { content: 'honeytoken', price: 500 });
+    h.protection = undefined;
     ok.decryptCommand(h.id);
     finish(ok);
-    expect(h.detected).toBe(true);
+    expect(h.detected).toBeFalsy(); // decrypt alone doesn't tell
+    expect(ok.fileAction('evaluate', h.id)).toBe(true);
+    expect(h.detected).toBe(true); // evaluate sees through it
     expect(ok.fileAction('download', h.id)).toBe(false);
+  });
+
+  it('protections: kill switch, seal, tracker, lock', () => {
+    const g = inOrders();
+    const fs = g.filesIn('orders') as import('./files').DataFile[];
+    Object.assign(fs[0], { protection: 'killswitch' });
+    Object.assign(fs[1], { protection: 'seal' });
+    Object.assign(fs[2], { protection: 'lock', lockPrivilege: 'admin' });
+    g.decryptCommand(fs[0].id);
+    finish(g);
+    expect(fs[0].deleted).toBe(true); // decrypted before defusing
+    expect(g.decryptCommand(fs[1].id)).toBe(false); // sealed
+    expect(g.fileAction('brute', fs[1].id)).toBe(true);
+    expect(g.decryptCommand(fs[1].id)).toBe(true);
+    finish(g);
+    expect(fs[1].decrypted).toBe(true);
+    expect(g.decryptCommand(fs[2].id)).toBe(false); // locked, no admin
+    expect(g.fileAction('forge', fs[2].id)).toBe(true);
+    expect(g.decryptCommand(fs[2].id)).toBe(true);
+    finish(g);
+    const t = fs[3];
+    t.protection = 'killswitch';
+    expect(g.fileAction('defuse', t.id)).toBe(true);
+    expect(t.protection).toBeUndefined();
   });
 
   it('a keyring gives a privilege or the keys', () => {

@@ -42,7 +42,7 @@ export function renderDeck(root: HTMLElement, game: Game, run: (program: Program
     const n = game.programsOf(p.type).indexOf(p) + 1;
     const li = document.createElement('li');
     li.className = 'deck-program';
-    li.textContent = `${p.name.padEnd(14)} ${p.type} ${p.rating}`;
+    li.textContent = `${p.name.padEnd(18)} ${p.type} ${p.rating}`;
     li.title = `${p.name}  /  ${p.type} ${n}`;
     li.addEventListener('click', () => run(p));
     list.appendChild(li);

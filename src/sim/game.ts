@@ -1,7 +1,7 @@
 import { actionsFor, type NodeAction, type Privilege } from './actions';
-import { apparentContent, CONTENT_LABEL, fileActions, generateFiles, decryptTicks, type DataFile, type FileAction } from './files';
+import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, decryptTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
-import { PROGRAM_STUBS, SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
+import { FILE_PROGRAMS, PROGRAM_STUBS, SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
 import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
 /** Unidentified nodes are called ?1, ?2, ... */
@@ -77,6 +77,10 @@ export class Game {
     { id: 'p6', type: 'decrypt', name: 'Lockpick 1.0', rating: 1 },
     { id: 'p7', type: 'evaluate', name: 'Appraiser 1.0', rating: 1 },
     { id: 'p8', type: 'identify', name: 'Inspector 1.0', rating: 1 },
+    { id: 'p9', type: 'defuse', name: 'Sapper 1.0', rating: 1 },
+    { id: 'p10', type: 'brute', name: 'Battering Ram 2.0', rating: 1 },
+    { id: 'p11', type: 'scrub', name: 'Bleach 1.1', rating: 1 },
+    { id: 'p12', type: 'forge', name: 'Mimic 1.0', rating: 1 },
   ];
   /** Valuable data the player downloaded. */
   readonly downloads: { name: string; price?: number }[] = [];
@@ -369,11 +373,11 @@ export class Game {
       return false;
     }
     if (program.type === 'decrypt') return this.startDecrypt(program, 0, true);
-    if (program.type === 'evaluate' || program.type === 'identify') {
+    if ((FILE_PROGRAMS as readonly string[]).includes(program.type)) {
       this.log(`${program.name}: pick a file, e.g. ${program.type} f3`, 'system');
       return false;
     }
-    if (program.type !== 'scout') {
+    if (program.type === 'attack' || program.type === 'hide') {
       this.log(`${program.name} (${program.type} ${program.rating}): ${PROGRAM_STUBS[program.type]}`, 'info');
       return true;
     }
@@ -476,7 +480,16 @@ export class Game {
     }
     // Start at the chosen file and wrap around, skipping files already decrypted.
     const order = all ? files.map((_, i) => (from + i) % files.length) : [from];
-    const queue = order.filter((i) => !files[i].decrypted);
+    const queue = order.filter((i) => {
+      const f = files[i];
+      if (f.decrypted || f.deleted) return false;
+      // Seals and locks stop decrypt before it starts; a kill switch only bites when it finishes.
+      if (f.protection === 'seal' || (f.protection === 'lock' && !this.privileges.has(f.lockPrivilege!))) {
+        this.log(`${f.id}: ${f.protection === 'seal' ? 'sealed, needs brute' : `locked, needs ${f.lockPrivilege} privilege or forge`}`, 'alarm1');
+        return false;
+      }
+      return true;
+    });
     if (!queue.length) {
       this.log(all ? 'every file here is already decrypted' : `${files[from].id} is already decrypted`, 'system');
       return false;
@@ -502,11 +515,12 @@ export class Game {
     this.decryptProgress(s.elapsed >= s.ticksPerFile);
     if (s.elapsed < s.ticksPerFile) return;
     const file = this.files.get(s.nodeId)![s.queue.shift()!];
-    file.decrypted = true;
-    if (file.content === 'honeytoken' && this.d100() <= this.trapChance(s.rating)) {
-      file.detected = true;
-      this.log(`${file.id}: ${CONTENT_LABEL.honeytoken}. good catch: leave it alone`, 'alarm2');
+    if (file.protection === 'killswitch') {
+      file.deleted = true;
+      this.filesChanged++;
+      this.log(`${file.id}: KILL SWITCH. the archive destroyed itself`, 'alarm2');
     } else {
+      file.decrypted = true;
       const seen = apparentContent(file);
       this.log(`${file.id}: ${CONTENT_LABEL[seen]}`, seen === 'worthless' ? 'system' : 'info');
     }
@@ -532,7 +546,8 @@ export class Game {
       this.log(id ? `no file "${id}" here` : `usage: ${action} <file>, e.g. ${action} f3`, 'alarm1');
       return false;
     }
-    if (!file.decrypted) {
+    const guard = file.protection ? PROTECTION_PROGRAM[file.protection] : null;
+    if (!file.decrypted && action !== guard) {
       this.log(`${file.id} is not decrypted yet`, 'alarm1');
       return false;
     }
@@ -546,6 +561,19 @@ export class Game {
     }
     if (this.network.node(this.currentNode).kind === 'honeypot') {
       this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
+      return true;
+    }
+    if (action === guard) {
+      const program = this.findProgram(action);
+      if (!program) {
+        this.log(`${action} needs a ${action} program in your deck`, 'alarm1');
+        return false;
+      }
+      const was = file.protection!;
+      file.protection = undefined;
+      const done = { killswitch: 'kill switch defused', seal: 'seal cracked', tracker: 'tracker scrubbed', lock: 'lock forged open' }[was];
+      this.log(`${program.name}: ${file.id} ${done}`, 'info');
+      this.filesChanged++;
       return true;
     }
     if (action === 'evaluate' || action === 'identify') {
@@ -574,6 +602,7 @@ export class Game {
         return false;
       }
       file.downloaded = true;
+      if (file.protection === 'tracker') this.log(`TRACKER: ${file.id} tagged you on the way out (attribution comes later)`, 'alarm2');
       if (file.content === 'honeytoken') {
         this.log(`HONEYTOKEN: ${file.id} was a trap. it phoned home with your trace (alarms come later)`, 'alarm3');
         file.detected = true;
@@ -617,10 +646,13 @@ export class Game {
   /** The system's encryption keys were extracted: decrypting here is twice as fast. */
   keysFound = false;
 
-  /** d100 chance that a program of this rating sees through a honeytoken. */
+  /**
+   * d100 chance that evaluate sees through a honeytoken: high, so a careful player is
+   * safe; the trap is meant for whoever downloads blind. Evaluate 1 vs encryption 2: 80%.
+   */
   private trapChance(rating: number): number {
     const e = Math.max(1, this.network.def.encryption ?? 1);
-    return (100 * rating) / (rating + 2 * e);
+    return (100 * rating) / (rating + e / 8);
   }
 
   /** Bumped when a file changes in a way the view shows. */

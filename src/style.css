@@ -354,6 +354,9 @@ body {
 .data-block { cursor: pointer; --fc: #5dff8a; }
 .data-block rect { fill: #0d3318; stroke: var(--fc); stroke-width: 1.5; }
 .data-block line { stroke: var(--fc); stroke-width: 1.2; }
+.file-guard circle, .file-guard path { fill: none; stroke: var(--fc); stroke-width: 1.4; }
+.file-guard line { stroke-width: 1.6; }
+.file-guard .guard-fill { fill: var(--fc); stroke: none; }
 .data-block:hover { --fc: #a8ffc0; }
 .data-block:hover rect { fill: #14502a; }
 .data-block.is-worthless:hover, .data-block.is-valuable:hover, .data-block.is-software:hover, .data-block.is-contract:hover, .data-block.is-honeytoken:hover, .data-block.is-keyring:hover { filter: brightness(1.3); }
@@ -398,3 +401,4 @@ body {
 .tip-contract { color: #b98cff; }
 .tip-honeytoken { color: #ff4d4d; }
 .tip-keyring { color: #d2a67a; }
+.tip-protection { color: var(--orange); }
