@@ -45,12 +45,19 @@ function look(nodeId: string): void {
 const HELP = [
   'commands:',
   ...COMMANDS.map((c) => `  ${c.usage.padEnd(16)}${c.help}`),
-  'Tab completes commands and node names; Tab twice lists the options.',
+  "programs: type a program's own name to run it (e.g. Hawkeye V2).",
+  'Tab completes commands, node and program names; Tab twice lists the options.',
   'mouse: click a node to connect, right-click for actions, click the minimap to travel.',
-  'keys: Space pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
+  'keys: Space pause, A auto-pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
 ];
 
 function runCommand(raw: string): void {
+  // A program's own name works as a command: "Hawkeye V2".
+  const program = game.programByName(raw);
+  if (program) {
+    if (!game.runProgram(program.type, program.name)) sfx.play('error');
+    return;
+  }
   const { word, arg } = splitCommand(raw);
   const cmd = findCommand(word);
   if (!cmd) {
@@ -78,12 +85,15 @@ function runCommand(raw: string): void {
       if (!arg) game.log('usage: do <action> (look lists the actions here)', 'system');
       else if (!game.runAction(arg)) sfx.play('error');
       break;
+    case 'scout':
+      if (!game.runProgram('scout', arg)) sfx.play('error');
+      break;
     case 'map':
       for (const n of game.network.def.nodes) {
         if (!game.isKnown(n.id)) continue;
         const known = game.isIdentified(n.id);
         const id = known ? n.id : game.nameOf(n.id);
-        game.log(`${id.padEnd(8)} ${known ? n.name : 'unknown'}${n.id === game.currentNode ? '  <- you' : ''}`);
+        game.log(`${id.padEnd(8)} ${known ? n.name : 'hidden'}${n.id === game.currentNode ? '  <- you' : ''}`);
       }
       break;
     case 'pause':
@@ -93,8 +103,12 @@ function runCommand(raw: string): void {
       game.setPaused(false);
       break;
     case 'stop':
+      if (game.cancelScout()) break;
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
+      break;
+    case 'autopause':
+      game.setAutoPause(!game.autoPause);
       break;
     case 'mute':
       sfx.toggleMute();
@@ -116,7 +130,7 @@ function ui(cmd: string): void {
 
 const nodeName = (id: string) => game.nameOf(id);
 
-renderDeck(document.getElementById('deck')!);
+renderDeck(document.getElementById('deck')!, game, (p) => ui(p.name));
 
 const term = new Console(document.getElementById('console')!, (cmd) => {
   sfx.play('command');
@@ -126,17 +140,22 @@ const term = new Console(document.getElementById('console')!, (cmd) => {
 term.onType = () => sfx.play('key');
 term.completer = (value) =>
   complete(value, {
+    extraCommands: () => game.programs.map((p) => p.name),
     names: (kind) =>
       kind === 'action'
         ? game.currentActions.map((a) => a.id)
-        : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes.filter((n) => game.isKnown(n.id))).map((n) => game.nameOf(n.id)))],
+        : kind === 'scout'
+          ? game.programsOf('scout').map((p) => p.name)
+          : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes.filter((n) => game.isKnown(n.id))).map((n) => game.nameOf(n.id)))],
   });
 const view = new NetworkView(document.getElementById('view')!, game, menu, {
   travel: (id) => ui(`connect ${nodeName(id)}`),
   look: (id) => ui(`look ${nodeName(id)}`),
   act: (id) => ui(`do ${id}`),
+  run: (p) => ui(p.name),
   togglePause: () => ui(game.paused ? 'resume' : 'pause'),
   mute: () => ui('mute'),
+  autoPause: () => ui('autopause'),
   hover: () => sfx.play('hover'),
   sound: sfx,
 });
@@ -155,9 +174,11 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
   } else if (e.key === 'Escape') {
     if (menu.open) menu.dismiss();
-    else if (game.isMoving) ui('stop');
+    else if (game.isMoving || game.isScouting) ui('stop');
   } else if (e.key === 'm' || e.key === 'M') {
     ui('mute');
+  } else if (e.key === 'a' || e.key === 'A') {
+    ui('autopause');
   } else if (/^[1-9]$/.test(e.key)) {
     const id = view.neighbourByNumber(Number(e.key));
     if (id) ui(`connect ${nodeName(id)}`);

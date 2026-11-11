@@ -1,3 +1,4 @@
+import type { Program } from '../sim/programs';
 import type { Game } from '../sim/game';
 import { TICKS_PER_SECOND } from '../sim/game';
 import type { NodeDef, NodeKind } from '../sim/types';
@@ -40,7 +41,7 @@ const KIND_TAG: Record<NodeKind, string> = {
   vehicle: 'VEH',
   security: 'SEC',
   honeypot: 'DB',
-  unknown: '?',
+  hidden: '?',
 };
 
 const KIND_LABEL: Record<NodeKind, string> = {
@@ -60,7 +61,7 @@ const KIND_LABEL: Record<NodeKind, string> = {
   vehicle: 'external vehicle control',
   security: 'security systems',
   honeypot: 'database',
-  unknown: 'unknown',
+  hidden: 'hidden node',
 };
 
 function svg<K extends keyof SVGElementTagNameMap>(
@@ -74,6 +75,22 @@ function svg<K extends keyof SVGElementTagNameMap>(
   return el;
 }
 
+/** The scout's eye: an almond with a pupil, centred on (x, y). */
+function drawEye(x: number, y: number, scale: number, opacity: number, parent: Element): void {
+  const g = svg('g', { class: 'scout-eye', transform: `translate(${x} ${y}) scale(${scale})`, opacity: Math.max(0, opacity) }, parent);
+  svg('path', { d: 'M -9 0 Q 0 -8 9 0 Q 0 8 -9 0 Z', class: 'scout-eye-white' }, g);
+  svg('circle', { cx: 0, cy: 0, r: 3, class: 'scout-eye-pupil' }, g);
+}
+
+const icon = (body: string) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${body}</svg>`;
+const SPEAKER = '<path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>';
+const ICON_SPEAKER_ON = icon(`${SPEAKER}<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`);
+const ICON_SPEAKER_OFF = icon(`${SPEAKER}<path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`);
+/** Stopwatch with pause bars: time that stops by itself. */
+const ICON_AUTO_PAUSE = icon(
+  '<circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 2.5h4M12 2.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="9" y="10" width="2.2" height="7" fill="currentColor"/><rect x="12.8" y="10" width="2.2" height="7" fill="currentColor"/>',
+);
+
 function formatTime(tick: number): string {
   const total = Math.floor(tick / TICKS_PER_SECOND);
   const m = Math.floor(total / 60);
@@ -86,8 +103,10 @@ export interface ViewActions {
   travel(nodeId: string): void;
   look(nodeId: string): void;
   act(actionId: string): void;
+  run(program: Program): void;
   togglePause(): void;
   mute(): void;
+  autoPause(): void;
   hover(): void;
   sound: Sound;
 }
@@ -101,6 +120,7 @@ export class NetworkView {
   private readonly clock: HTMLElement;
   private readonly pauseBtn: HTMLButtonElement;
   private readonly muteBtn: HTMLButtonElement;
+  private readonly autoBtn: HTMLButtonElement;
   private readonly stage: SVGSVGElement;
   /** The minimap is its own small SVG pinned to the bottom-right corner of the view. */
   private readonly miniSvg: SVGSVGElement;
@@ -111,6 +131,10 @@ export class NetworkView {
   /** Outline of the current room, used to find where links leave it. */
   private roomShape: SVGGeometryElement | null = null;
   private roomR = ROOM_R;
+  /** Layers redrawn every frame with the scout's eyes. */
+  private scoutLayer: SVGGElement | null = null;
+  private miniScoutLayer: SVGGElement | null = null;
+  private miniXY: (id: string) => { x: number; y: number } = () => ({ x: 0, y: 0 });
 
   constructor(
     root: HTMLElement,
@@ -144,6 +168,12 @@ export class NetworkView {
     this.muteBtn.className = 'mute-btn';
     this.muteBtn.title = 'Sound on / off (M)';
     this.muteBtn.addEventListener('click', () => actions.mute());
+    this.autoBtn = document.createElement('button');
+    this.autoBtn.type = 'button';
+    this.autoBtn.className = 'icon-btn auto-btn';
+    this.autoBtn.title = 'Auto-pause: time stops after every action (A)';
+    this.autoBtn.innerHTML = ICON_AUTO_PAUSE;
+    this.autoBtn.addEventListener('click', () => actions.autoPause());
     const vol = document.createElement('input');
     vol.type = 'range';
     vol.min = '0';
@@ -155,7 +185,7 @@ export class NetworkView {
     vol.addEventListener('input', () => actions.sound.setVolume(Number(vol.value) / 100));
     vol.addEventListener('change', () => actions.sound.play('hop'));
     soundBox.append(this.muteBtn, vol);
-    this.header.append(title, alarm, soundBox, this.clock, this.pauseBtn);
+    this.header.append(title, alarm, soundBox, this.clock, this.autoBtn, this.pauseBtn);
 
     this.stage = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stage', role: 'img' });
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -174,12 +204,18 @@ export class NetworkView {
   update(): void {
     this.clock.textContent = formatTime(this.game.tick);
     this.pauseBtn.textContent = this.game.paused ? '▶ RESUME' : '❚❚ PAUSE';
-    this.muteBtn.textContent = this.actions.sound.muted ? 'SND OFF' : 'SND ON';
+    const muted = this.actions.sound.muted;
+    if (this.muteBtn.dataset.muted !== String(muted)) {
+      this.muteBtn.dataset.muted = String(muted);
+      this.muteBtn.innerHTML = muted ? ICON_SPEAKER_OFF : ICON_SPEAKER_ON;
+    }
+    this.autoBtn.classList.toggle('is-on', this.game.autoPause);
     this.muteBtn.classList.toggle('is-muted', this.actions.sound.muted);
     this.header.classList.toggle('is-paused', this.game.paused);
     const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}|${this.game.knownCount}`;
     if (key !== this.lastKey) this.render();
     this.updateAvatar();
+    this.updateScout();
   }
 
   private render(): void {
@@ -214,7 +250,46 @@ export class NetworkView {
     this.positions = new Map(positions.map((p) => [p.node.id, { x: p.x, y: p.y }]));
     this.avatar = this.drawAvatar();
     this.updateAvatar(true);
+    this.scoutLayer = svg('g', { class: 'scout-layer' }, this.stage);
     this.drawMinimap();
+    this.updateScout();
+  }
+
+  /** Draws the scout's eyes flying along the links of the hop in progress. */
+  private updateScout(): void {
+    const layer = this.scoutLayer;
+    const miniLayer = this.miniScoutLayer;
+    if (!layer || !miniLayer) return;
+    layer.replaceChildren();
+    miniLayer.replaceChildren();
+    const scout = this.game.scoutState;
+    if (!scout) return;
+    const t = Math.min(1, scout.progress);
+    const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, k: number) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
+    const current = this.game.currentNode;
+    for (const [from, to] of scout.edges) {
+      // Main view: from the room out to each neighbour, or from a neighbour out along its stub.
+      const end = this.positions.get(to);
+      if (from === current && end) {
+        const centre = { x: CX, y: CY };
+        const door = this.doorTowards(end.x, end.y);
+        const split = 0.3;
+        const p = t < split ? lerp(centre, door, t / split) : lerp(door, end, (t - split) / (1 - split));
+        drawEye(p.x, p.y, 1, 1, layer);
+      } else {
+        const start = this.positions.get(from);
+        if (start) {
+          const a = this.game.network.node(from);
+          const b = this.game.network.node(to);
+          const ang = Math.atan2(b.y - a.y, b.x - a.x);
+          const d = NEIGHBOUR_R + t * 70;
+          drawEye(start.x + Math.cos(ang) * d, start.y + Math.sin(ang) * d, 1, 1 - t, layer);
+        }
+      }
+      // Minimap: every eye, wherever it goes.
+      const p = lerp(this.miniXY(from), this.miniXY(to), t);
+      drawEye(p.x, p.y, 0.45, 1, miniLayer);
+    }
   }
 
   /**
@@ -434,7 +509,7 @@ export class NetworkView {
     const body = drawNodeShape(kind, x, y, r, 'node-body', grp);
     // Hover sound only on the node shape itself, not on its labels.
     if (!opts.current) body.addEventListener('mouseenter', () => this.actions.hover());
-    if (kind === 'unknown') {
+    if (kind === 'hidden') {
       // An unrecognised node shows nothing but its ?N name.
       const size = opts.current ? 34 : 26;
       const tag = svg('text', { x, y: opts.current ? y - 12 : y + size * 0.35, class: 'node-tag', 'font-size': size }, grp);
@@ -444,11 +519,11 @@ export class NetworkView {
       tag.textContent = KIND_TAG[kind];
     }
     const bottom = y + r * Math.max(halfHeight(kind), opts.current ? 1 : 0);
-    if (kind !== 'unknown') {
+    if (kind !== 'hidden') {
       const name = svg('text', { x, y: bottom + 18, class: 'node-name' }, grp);
       name.textContent = nodeName;
     }
-    if (opts.current && kind !== 'unknown') {
+    if (opts.current && kind !== 'hidden') {
       const label = svg('text', { x, y: bottom + 36, class: 'node-kind' }, grp);
       label.textContent = KIND_LABEL[kind];
     }
@@ -478,6 +553,9 @@ export class NetworkView {
     }
     items.push({ label: 'Look', action: () => this.actions.look(node.id) });
     if (isCurrent) {
+      for (const prog of this.game.programs) {
+        items.push({ label: `Run ${prog.name}`, hint: `${prog.type} ${prog.rating}`, disabled: this.game.isScouting, action: () => this.actions.run(prog) });
+      }
       for (const act of this.game.currentActions) {
         items.push({ label: act.id, hint: act.requires ? `${act.requires} priv.` : undefined, action: () => this.actions.act(act.id) });
       }
@@ -500,6 +578,10 @@ export class NetworkView {
     const sx = (x: number) => ox + pad + ((x - minX) / Math.max(1, maxX - minX)) * (mw - 2 * pad);
     const sy = (y: number) => oy + pad + ((y - minY) / Math.max(1, maxY - minY)) * (mh - 2 * pad);
 
+    this.miniXY = (id) => {
+      const n = g.network.node(id);
+      return { x: sx(n.x), y: sy(n.y) };
+    };
     this.miniSvg.innerHTML = '';
     const mini = svg('g', { class: 'minimap' }, this.miniSvg);
     svg('rect', { x: ox, y: oy, width: mw, height: mh, class: 'minimap-frame' }, mini);
@@ -532,6 +614,7 @@ export class NetworkView {
         ]);
       });
     }
+    this.miniScoutLayer = svg('g', { class: 'scout-layer' }, mini);
   }
 }
 

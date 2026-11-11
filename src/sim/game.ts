@@ -1,5 +1,6 @@
 import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { Network } from './network';
+import { SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
 import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
 /** Unidentified nodes are called ?1, ?2, ... */
@@ -9,6 +10,22 @@ export const TICKS_PER_SECOND = 10;
 
 /** Placeholder: how long one hop between nodes takes. To be tuned later. */
 export const MOVE_TICKS = 10;
+
+/** A d100 roll: 1..100. Success when roll <= chance. */
+export type Rng = () => number;
+
+interface ScoutTask {
+  /** Hop number: 1 = neighbours, 2 = two links away, ... */
+  depth: number;
+  /** Connections the eyes fly along in this hop. */
+  edges: [string, string][];
+  /** Every node the scout reached so far. */
+  reached: Set<string>;
+  elapsed: number;
+  identify: number;
+  extend: number;
+  progressId: number;
+}
 
 interface MoveTask {
   to: string;
@@ -24,6 +41,8 @@ export class Game {
   readonly network: Network;
   tick = 0;
   paused = false;
+  /** Half-turn mode: time stops by itself whenever a lasting action ends. */
+  autoPause = false;
   currentNode: string;
 
   private move: MoveTask | null = null;
@@ -36,8 +55,20 @@ export class Game {
   private readonly unknownNumber = new Map<string, number>();
   /** Privileges the player holds in this system. */
   readonly privileges = new Set<Privilege>();
+  /** Programs in the player's deck. */
+  readonly programs: Program[] = [
+    { id: 'p1', type: 'scout', name: 'Hawkeye V2', rating: 3 },
+    { id: 'p2', type: 'scout', name: 'Owl 1.0', rating: 1 },
+  ];
+  /** Noise the player made in each node. Nothing reacts to it yet. */
+  readonly noise = new Map<string, number>();
 
-  constructor(system: SystemDef) {
+  private scout: ScoutTask | null = null;
+  private nextProgressId = 1;
+  private readonly d100: () => number;
+
+  constructor(system: SystemDef, rng: Rng = Math.random) {
+    this.d100 = () => Math.floor(rng() * 100) + 1;
     this.network = new Network(system);
     this.currentNode = system.entry;
     for (const n of system.nodes) if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
@@ -51,6 +82,7 @@ export class Game {
     if (this.paused) return;
     this.tick++;
     this.updateMove();
+    this.updateScout();
   }
 
   setPaused(paused: boolean): void {
@@ -62,6 +94,16 @@ export class Game {
 
   togglePause(): void {
     this.setPaused(!this.paused);
+  }
+
+  setAutoPause(on: boolean): void {
+    this.autoPause = on;
+    this.log(on ? 'auto-pause on: time stops after every action' : 'auto-pause off', 'system');
+  }
+
+  /** A lasting action (travel, a program) has ended. */
+  private actionEnded(): void {
+    if (this.autoPause) this.setPaused(true);
   }
 
   /** Whether the player knows this node exists (it is drawn and can be targeted). */
@@ -109,7 +151,7 @@ export class Game {
 
   /** The node's kind as the player knows it. */
   kindOf(id: string): NodeKind {
-    if (!this.isIdentified(id)) return 'unknown';
+    if (!this.isIdentified(id)) return 'hidden';
     const node = this.network.node(id);
     return node.kind === 'honeypot' ? (node.disguise ?? 'database') : node.kind;
   }
@@ -160,7 +202,7 @@ export class Game {
       const before = this.identified.size;
       this.revealMap();
       for (const n of this.network.def.nodes) this.identified.add(n.id);
-      this.log(`map downloaded: ${this.identified.size - before} unknown nodes identified`, 'info');
+      this.log(`map downloaded: ${this.identified.size - before} hidden nodes identified`, 'info');
       return true;
     }
     this.log(`${action.id}: ${action.result}`, 'info');
@@ -193,6 +235,10 @@ export class Game {
    */
   travelTo(target: string): boolean {
     if (!this.network.has(target) || !this.isKnown(target)) return false;
+    if (this.scout) {
+      this.log('scout is running: wait for it or stop it first', 'alarm1');
+      return false;
+    }
     const start = this.move ? this.move.to : this.currentNode;
     if (target === this.currentNode && !this.move) return false;
     // Routes only go through nodes the player knows.
@@ -237,9 +283,139 @@ export class Game {
         this.log(`node identified: ${this.nameOf(this.currentNode)}`, 'info');
       }
       this.startNextHop();
+      if (!this.move) this.actionEnded();
     }
   }
 
+
+  /** The scout hop in progress, for drawing the eyes. */
+  get scoutState(): { edges: [string, string][]; progress: number } | null {
+    return this.scout ? { edges: this.scout.edges, progress: this.scout.elapsed / SCOUT_HOP_TICKS } : null;
+  }
+
+  get isScouting(): boolean {
+    return this.scout !== null;
+  }
+
+  /** Runs a program from the deck. Returns false if it could not start. */
+  /** The player's programs of one type, in deck order. */
+  programsOf(type: ProgramType): Program[] {
+    return this.programs.filter((p) => p.type === type);
+  }
+
+  /**
+   * Picks a program of a type: no query = the highest rating; a number = the Nth
+   * program of that type in the deck; otherwise its name.
+   */
+  findProgram(type: ProgramType, query = ''): Program | undefined {
+    const list = this.programsOf(type);
+    const q = query.trim().toLowerCase();
+    if (!q) return [...list].sort((a, b) => b.rating - a.rating)[0];
+    if (/^\d+$/.test(q)) return list[Number(q) - 1];
+    return list.find((p) => p.name.toLowerCase() === q);
+  }
+
+  /** A program by its own name, whatever its type. */
+  programByName(name: string): Program | undefined {
+    const q = name.trim().toLowerCase();
+    return this.programs.find((p) => p.name.toLowerCase() === q);
+  }
+
+  /** Runs a program of a type (see findProgram). Returns false if it could not start. */
+  runProgram(type: ProgramType, query = ''): boolean {
+    const program = this.findProgram(type, query);
+    if (!program) {
+      this.log(query ? `no ${type} program "${query}" in your deck` : `no ${type} program in your deck`, 'alarm1');
+      return false;
+    }
+    if (this.move) {
+      this.log('cannot run programs while connecting', 'alarm1');
+      return false;
+    }
+    if (this.scout) {
+      this.log('scout is already running', 'alarm1');
+      return false;
+    }
+    const here = this.currentNode;
+    const { identify, extend } = scoutChances(program.rating, this.network.def.encryption ?? 1);
+    this.noise.set(here, (this.noise.get(here) ?? 0) + SCOUT_NOISE);
+    this.log(`${program.name} (scout ${program.rating}) launched. it is loud: noise in ${this.nameOf(here)} +${SCOUT_NOISE}`, 'system');
+    const neighbours = this.network.neighbours(here).map((n) => n.id);
+    this.scout = {
+      depth: 1,
+      edges: neighbours.map((n) => [here, n]),
+      reached: new Set([here, ...neighbours]),
+      elapsed: 0,
+      identify,
+      extend,
+      progressId: this.nextProgressId++,
+    };
+    this.scoutProgress(false);
+    return true;
+  }
+
+  /** Stops a running scout; what it already found stays found. */
+  cancelScout(): boolean {
+    if (!this.scout) return false;
+    this.scoutProgress(true);
+    this.scout = null;
+    this.log('scout stopped', 'system');
+    return true;
+  }
+
+  private scoutProgress(done: boolean): void {
+    const s = this.scout!;
+    this.events.push({
+      type: 'progress',
+      line: { id: s.progressId, label: `scout hop ${s.depth}`, progress: s.elapsed / SCOUT_HOP_TICKS, done },
+    });
+  }
+
+  private updateScout(): void {
+    const s = this.scout;
+    if (!s) return;
+    s.elapsed++;
+    this.scoutProgress(s.elapsed >= SCOUT_HOP_TICKS);
+    if (s.elapsed < SCOUT_HOP_TICKS) return;
+
+    // The eyes arrived: what they reached becomes known; hidden nodes may be identified.
+    for (const [, to] of s.edges) {
+      const isNew = !this.known.has(to);
+      this.learn(to);
+      if (isNew) this.log(`scout: found ${this.nameOf(to)}`, 'info');
+      if (this.identified.has(to)) continue;
+      const name = this.nameOf(to);
+      if (this.d100() <= s.identify) {
+        this.identified.add(to);
+        this.log(`scout: ${name} identified: ${this.nameOf(to)} (${this.kindOf(to)})`, 'info');
+      } else {
+        this.log(`scout: ${name} stays hidden`, 'system');
+      }
+    }
+
+    // A good roll sends the eyes one link further.
+    const frontier = [...new Set(s.edges.map(([, to]) => to))];
+    const next: [string, string][] = [];
+    for (const from of frontier) {
+      for (const n of this.network.neighbours(from)) {
+        if (s.reached.has(n.id)) continue;
+        s.reached.add(n.id);
+        next.push([from, n.id]);
+      }
+    }
+    if (next.length && this.d100() <= s.extend) {
+      this.log(`scout: strong signal, looking ${s.depth + 1} links away`, 'info');
+      s.depth++;
+      s.edges = next;
+      s.elapsed = 0;
+      s.progressId = this.nextProgressId++;
+      this.scoutProgress(false);
+      return;
+    }
+    this.scout = null;
+    this.log('scout finished', 'info');
+    this.actionEnded();
+  }
 
   log(text: string, color: LogColor = 'normal'): void {
     this.events.push({ type: 'log', line: { text, color } });
