@@ -137,12 +137,12 @@ body {
 .kind-relay { --kc: #23a34a; } /* dark green */
 .kind-uplink { --kc: #1fc4a4; } /* sea green */
 .kind-database { --kc: #3fe0e0; } /* turquoise */
-.kind-monitoring { --kc: #a9b83a; } /* olive */
+.kind-monitoring { --kc: #8cbf3a; } /* olive, leaning green */
 .kind-identity { --kc: #c3a2ff; } /* light violet */
 .kind-vault { --kc: #f0c330; } /* gold */
 .kind-overseer { --kc: #8a5cf0; } /* dark violet */
-.kind-orchestrator { --kc: #3d6bff; } /* dark blue */
-.kind-compute { --kc: #93c3ff; } /* light blue */
+.kind-orchestrator { --kc: #93c3ff; } /* light blue */
+.kind-compute { --kc: #3d6bff; } /* dark blue */
 .kind-camera { --kc: #eef3f0; } /* white */
 .kind-ads { --kc: #ff6b6b; } /* light red */
 .kind-security { --kc: #d03a3a; } /* dark red */
