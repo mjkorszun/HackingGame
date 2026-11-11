@@ -45,7 +45,7 @@ export interface SystemDef {
   links: [string, string][];
   /** Links that have a gate in the middle (gates are not nodes: they sit on the connection). */
   gates?: [string, string][];
-  /** How well the system hides itself; programs like Scout roll against it. */
+  /** How well the system hides itself; programs like Mapper roll against it. */
   encryption?: number;
   /** A local business network (not a contract): a skimmer can be planted here. */
   local?: boolean;
@@ -101,4 +101,11 @@ export type SimEvent =
   /** The player's integrity hit zero: thrown out of the net. */
   | { type: 'kicked' }
   | { type: 'alarm'; level: number }
-  | { type: 'hit' };
+  | { type: 'hit' }
+  /** A shot flies from one thing to another (drawn in the map view). */
+  | { type: 'shot'; from: FxTarget; to: FxTarget; hit: boolean; hostile: boolean }
+  /** How an action went, shown over its target in the map view. */
+  | { type: 'outcome'; at: FxTarget; ok: boolean; text: string };
+
+/** Something in the map view an effect is drawn at. */
+export type FxTarget = { kind: 'player' } | { kind: 'agent'; id: string } | { kind: 'file'; id: string } | { kind: 'node'; id: string };

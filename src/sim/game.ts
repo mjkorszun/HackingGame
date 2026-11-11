@@ -4,8 +4,8 @@ import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
 import { programSize, usedMemory } from './programs';
-import { FILE_PROGRAMS, PROGRAM_STUBS, SCOUT_HOP_TICKS, SCOUT_NOISE, scoutChances, type Program, type ProgramType } from './programs';
-import type { LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
+import { FILE_PROGRAMS, PROGRAM_STUBS, MAPPER_COOLDOWN, MAPPER_HOP_TICKS, MAPPER_NOISE, mapperChances, type Program, type ProgramType } from './programs';
+import type { FxTarget, LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
 /** Unidentified nodes are called ?1, ?2, ... */
 export const UNKNOWN_PREFIX = '?';
@@ -58,12 +58,12 @@ const FEAT_LABEL: Record<Feat, string> = {
   honeytoken: 'honeytokens spotted',
 };
 
-interface ScoutTask {
+interface MapperTask {
   /** Hop number: 1 = neighbours, 2 = two links away, ... */
   depth: number;
   /** Connections the eyes fly along in this hop. */
   edges: [string, string][];
-  /** Every node the scout reached so far. */
+  /** Every node the mapper reached so far. */
   reached: Set<string>;
   elapsed: number;
   identify: number;
@@ -161,7 +161,7 @@ export class Game {
   /** Noise the player made in each node. Nothing reacts to it yet. */
   readonly noise = new Map<string, number>();
 
-  private scout: ScoutTask | null = null;
+  private mapper: MapperTask | null = null;
   private scan: ScanTask | null = null;
   /** Data files in each database (a honeypot posing as one has them too). */
   private readonly files = new Map<string, DataFile[]>();
@@ -393,6 +393,7 @@ export class Game {
       }
       this.query = null;
       a.mood = 'trusting';
+      this.outcome({ kind: 'agent', id: a.id }, true, 'ACCEPTED');
       this.log(`you show your ${[...this.privileges].join(' / ')} privilege. ${a.name} lets you be`, 'info');
       return true;
     }
@@ -403,6 +404,11 @@ export class Game {
       return true;
     }
     return this.agentCommand(choice, a.name);
+  }
+
+  /** Shows how an action went over its target in the map view. */
+  private outcome(at: FxTarget, ok: boolean, text: string): void {
+    this.events.push({ type: 'outcome', at, ok, text });
   }
 
   /** A failed or ignored query: first time yellow and it asks again; second time red and hostile. */
@@ -451,8 +457,10 @@ export class Game {
       if (this.d100() <= versus(program.rating, a.stats.deceiveResist)) {
         a.mood = 'trusting';
         this.feats.push('deceive');
+        this.outcome({ kind: 'agent', id: a.id }, true, 'DECEIVED');
         this.log(`${program.name}: ${a.name} is deceived. it leaves you alone while you stay here`, 'info');
       } else {
+        this.outcome({ kind: 'agent', id: a.id }, false, 'NOT FOOLED');
         this.log(`${program.name}: ${a.name} saw through it`, 'alarm1');
         this.strike(a);
       }
@@ -468,9 +476,11 @@ export class Game {
       if (this.d100() <= versus(program.rating, a.stats.silenceResist)) {
         a.silenced = true;
         this.feats.push('silence');
+        this.outcome({ kind: 'agent', id: a.id }, true, 'SILENCED');
         this.log(`${program.name}: ${a.name} silenced. its messages cannot leave this node`, 'info');
         if (a.mood !== 'hostile') this.makeHostile(a, false);
       } else {
+        this.outcome({ kind: 'agent', id: a.id }, false, 'SILENCE FAILED');
         this.log(`${program.name}: silence failed on ${a.name}`, 'alarm2');
         if (a.mood !== 'hostile') this.makeHostile(a, true);
         else if (!a.silenced) this.raiseAlarm(3);
@@ -481,6 +491,8 @@ export class Game {
     const hit = this.d100() <= versus(program.rating, a.stats.armor);
     const damage = hit ? 10 * program.rating : 0;
     a.hp -= damage;
+    this.events.push({ type: 'shot', from: { kind: 'player' }, to: { kind: 'agent', id: a.id }, hit, hostile: false });
+    this.outcome({ kind: 'agent', id: a.id }, hit, a.hp <= 0 ? 'DESTROYED' : hit ? `-${damage}` : 'MISS');
     if (a.hp <= 0) {
       this.agents.splice(this.agents.indexOf(a), 1);
       this.feats.push('kill');
@@ -496,6 +508,8 @@ export class Game {
   private hitPlayer(a: Agent): void {
     this.integrity = Math.max(0, this.integrity - a.stats.damage);
     this.events.push({ type: 'hit' });
+    this.events.push({ type: 'shot', from: { kind: 'agent', id: a.id }, to: { kind: 'player' }, hit: true, hostile: true });
+    this.outcome({ kind: 'player' }, false, `-${a.stats.damage}`);
     this.log(`${a.name} hits you: integrity ${this.integrity}/${this.maxIntegrity}`, 'alarm3');
     if (this.integrity <= 0 && !this.kicked) {
       this.kicked = true;
@@ -510,7 +524,7 @@ export class Game {
     this.ended = true;
     this.move = null;
     this.route = [];
-    this.scout = null;
+    this.mapper = null;
     this.scan = null;
     this.fileJob = null;
     const job = this.network.def.contract;
@@ -540,7 +554,7 @@ export class Game {
     if (this.paused || this.ended) return;
     this.tick++;
     this.updateMove();
-    this.updateScout();
+    this.updateMapper();
     this.updateScan();
     this.updateFileJob();
     this.updateAgents();
@@ -662,6 +676,7 @@ export class Game {
       return false;
     }
     if (this.network.node(this.currentNode).kind === 'honeypot') {
+      this.outcome({ kind: 'player' }, false, 'HONEYPOT!');
       this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
       return true;
     }
@@ -673,9 +688,11 @@ export class Game {
       const before = this.identified.size;
       this.revealMap();
       for (const n of this.network.def.nodes) this.identified.add(n.id);
+      this.outcome({ kind: 'player' }, true, 'MAP DOWNLOADED');
       this.log(`map downloaded: ${this.identified.size - before} hidden nodes identified`, 'info');
       return true;
     }
+    this.outcome({ kind: 'player' }, true, action.id.toUpperCase());
     this.log(`${action.id}: ${action.result}`, 'info');
     return true;
   }
@@ -767,13 +784,13 @@ export class Game {
   }
 
 
-  /** The scout hop in progress, for drawing the eyes. */
-  get scoutState(): { edges: [string, string][]; progress: number } | null {
-    return this.scout ? { edges: this.scout.edges, progress: this.scout.elapsed / SCOUT_HOP_TICKS } : null;
+  /** The mapper hop in progress, for drawing the eyes. */
+  get mapperState(): { edges: [string, string][]; progress: number } | null {
+    return this.mapper ? { edges: this.mapper.edges, progress: this.mapper.elapsed / MAPPER_HOP_TICKS } : null;
   }
 
-  get isScouting(): boolean {
-    return this.scout !== null;
+  get isMapping(): boolean {
+    return this.mapper !== null;
   }
 
   /** Runs a program from the deck. Returns false if it could not start. */
@@ -828,13 +845,19 @@ export class Game {
       this.log(`${this.busyName} is already running`, 'alarm1');
       return false;
     }
+    const wait = this.mapperReadyAt - this.tick;
+    if (wait > 0) {
+      this.log(`${program.name}: mapper is recharging, ready in ${Math.ceil(wait / TICKS_PER_SECOND)} s`, 'alarm1');
+      return false;
+    }
+    this.mapperReadyAt = this.tick + MAPPER_COOLDOWN;
     const here = this.currentNode;
-    const { identify, extend } = scoutChances(program.rating, this.network.def.encryption ?? 1);
+    const { identify, extend } = mapperChances(program.rating, this.network.def.encryption ?? 1);
     this.events.push({ type: 'program', programType: program.type });
-    this.noise.set(here, (this.noise.get(here) ?? 0) + SCOUT_NOISE);
-    this.log(`${program.name} (scout ${program.rating}) launched. it is loud: noise in ${this.nameOf(here)} +${SCOUT_NOISE}`, 'system');
+    this.noise.set(here, (this.noise.get(here) ?? 0) + MAPPER_NOISE);
+    this.log(`${program.name} (mapper ${program.rating}) launched. it is loud: noise in ${this.nameOf(here)} +${MAPPER_NOISE}`, 'system');
     const neighbours = this.network.neighbours(here).map((n) => n.id);
-    this.scout = {
+    this.mapper = {
       depth: 1,
       edges: neighbours.map((n) => [here, n]),
       reached: new Set([here, ...neighbours]),
@@ -843,19 +866,27 @@ export class Game {
       extend,
       progressId: this.nextProgressId++,
     };
-    this.scoutProgress(false);
+    this.mapperProgress(false);
     this.actionStarted();
     return true;
   }
 
+  /** Tick when the mapper can run again. */
+  private mapperReadyAt = 0;
+
+  /** Seconds until the mapper can run again (0 = ready). */
+  get mapperCooldown(): number {
+    return Math.max(0, Math.ceil((this.mapperReadyAt - this.tick) / TICKS_PER_SECOND));
+  }
+
   /** A program is running (the player can't travel meanwhile). */
   get isBusy(): boolean {
-    return this.scout !== null || this.scan !== null || this.fileJob !== null;
+    return this.mapper !== null || this.scan !== null || this.fileJob !== null;
   }
 
   /** What keeps the player busy, for messages. */
   private get busyName(): string {
-    return this.scout ? 'scout' : this.scan ? 'scan' : this.fileJob?.action ?? 'nothing';
+    return this.mapper ? 'mapper' : this.scan ? 'scan' : this.fileJob?.action ?? 'nothing';
   }
 
   private fileJob: FileJob | null = null;
@@ -927,6 +958,7 @@ export class Game {
       return false;
     }
     if (this.network.node(here).kind === 'honeypot') {
+      this.outcome({ kind: 'player' }, false, 'HONEYPOT!');
       this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
       return true;
     }
@@ -970,10 +1002,12 @@ export class Game {
     if (file.protection === 'killswitch') {
       file.deleted = true;
       this.filesChanged++;
+      this.outcome({ kind: 'file', id: file.id }, false, 'KILL SWITCH!');
       this.log(`${file.id}: KILL SWITCH. the archive destroyed itself`, 'alarm2');
     } else {
       file.scanned = true;
       const seen = apparentContent(file);
+      this.outcome({ kind: 'file', id: file.id }, true, 'SCANNED');
       this.log(`${file.id}: ${CONTENT_LABEL[seen]}`, seen === 'worthless' ? 'system' : 'info');
     }
     if (s.queue.length) {
@@ -1013,6 +1047,7 @@ export class Game {
       return false;
     }
     if (this.network.node(this.currentNode).kind === 'honeypot') {
+      this.outcome({ kind: 'player' }, false, 'HONEYPOT!');
       this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
       return true;
     }
@@ -1075,6 +1110,7 @@ export class Game {
       file.protection = undefined;
       const done = { killswitch: 'kill switch defused', seal: 'seal cracked', tracker: 'tracker scrubbed', lock: 'lock forged open' }[was];
       this.feats.push('protection');
+      this.outcome({ kind: 'file', id: file.id }, true, { killswitch: 'DEFUSED', seal: 'DECRYPTED', tracker: 'SCRUBBED', lock: 'FORGED' }[was]);
       this.log(`${program.name}: ${file.id} ${done}`, 'info');
       return;
     }
@@ -1082,12 +1118,15 @@ export class Game {
       if (action === 'evaluate' && file.content === 'honeytoken' && this.d100() <= this.trapChance(program.rating)) {
         file.detected = true;
         this.feats.push('honeytoken');
+        this.outcome({ kind: 'file', id: file.id }, true, 'TRAP FOUND');
         this.log(`${program.name}: ${file.id} is a ${CONTENT_LABEL.honeytoken}. good catch: leave it alone`, 'alarm2');
       } else if (action === 'evaluate') {
         file.evaluated = true;
+        this.outcome({ kind: 'file', id: file.id }, true, sats(file.price!));
         this.log(`${program.name}: ${file.id} is worth ${sats(file.price!)}`, 'info');
       } else {
         file.identified = true;
+        this.outcome({ kind: 'file', id: file.id }, true, 'IDENTIFIED');
         const sw = file.software!;
         this.log(`${program.name}: ${file.id} is ${sw.name} (${sw.type} ${sw.rating})`, 'info');
       }
@@ -1095,6 +1134,8 @@ export class Game {
     }
     if (action === 'download') {
       file.downloaded = true;
+      const trapped = file.content === 'honeytoken';
+      this.outcome({ kind: 'file', id: file.id }, !trapped && file.protection !== 'tracker', trapped ? 'TRAP!' : file.protection === 'tracker' ? 'TRACKED!' : 'DOWNLOADED');
       if (file.protection === 'tracker') {
         this.log(`TRACKER: ${file.id} tagged you on the way out`, 'alarm2');
         this.raiseAlarm(1);
@@ -1116,6 +1157,7 @@ export class Game {
     }
     if (action === 'extract') {
       file.extracted = true;
+      this.outcome({ kind: 'file', id: file.id }, true, 'EXTRACTED');
       const grant = file.grant!;
       if (grant === 'keys') {
         this.keysFound = true;
@@ -1129,9 +1171,11 @@ export class Game {
     }
     if (action === 'alter') {
       file.altered = true;
+      this.outcome({ kind: 'file', id: file.id }, true, 'ALTERED');
       this.log(`${file.id} altered`, 'info');
     } else {
       file.deleted = true;
+      this.outcome({ kind: 'file', id: file.id }, true, 'DELETED');
       this.log(`${file.id} deleted`, 'info');
     }
     if (file.content === 'contract') this.log(this.contractDone ? 'contract task done. leave the net to get paid' : 'that is not what the contract asked for', this.contractDone ? 'info' : 'alarm1');
@@ -1161,42 +1205,42 @@ export class Game {
     return true;
   }
 
-  /** Stops a running scout; what it already found stays found. */
-  cancelScout(): boolean {
-    if (!this.scout) return false;
-    this.scoutProgress(true);
-    this.scout = null;
-    this.log('scout stopped', 'system');
+  /** Stops a running mapper; what it already found stays found. */
+  cancelMapper(): boolean {
+    if (!this.mapper) return false;
+    this.mapperProgress(true);
+    this.mapper = null;
+    this.log('mapper stopped', 'system');
     return true;
   }
 
-  private scoutProgress(done: boolean): void {
-    const s = this.scout!;
+  private mapperProgress(done: boolean): void {
+    const s = this.mapper!;
     this.events.push({
       type: 'progress',
-      line: { id: s.progressId, label: `scout hop ${s.depth}`, progress: s.elapsed / SCOUT_HOP_TICKS, done },
+      line: { id: s.progressId, label: `mapper hop ${s.depth}`, progress: s.elapsed / MAPPER_HOP_TICKS, done },
     });
   }
 
-  private updateScout(): void {
-    const s = this.scout;
+  private updateMapper(): void {
+    const s = this.mapper;
     if (!s) return;
     s.elapsed++;
-    this.scoutProgress(s.elapsed >= SCOUT_HOP_TICKS);
-    if (s.elapsed < SCOUT_HOP_TICKS) return;
+    this.mapperProgress(s.elapsed >= MAPPER_HOP_TICKS);
+    if (s.elapsed < MAPPER_HOP_TICKS) return;
 
     // The eyes arrived: what they reached becomes known; hidden nodes may be identified.
     for (const [, to] of s.edges) {
       const isNew = !this.known.has(to);
       this.learn(to);
-      if (isNew) this.log(`scout: found ${this.nameOf(to)}`, 'info');
+      if (isNew) this.log(`mapper: found ${this.nameOf(to)}`, 'info');
       if (this.identified.has(to)) continue;
       const name = this.nameOf(to);
       if (this.d100() <= s.identify) {
         this.identified.add(to);
-        this.log(`scout: ${name} identified: ${this.nameOf(to)} (${this.kindOf(to)})`, 'info');
+        this.log(`mapper: ${name} identified: ${this.nameOf(to)} (${this.kindOf(to)})`, 'info');
       } else {
-        this.log(`scout: ${name} stays hidden`, 'system');
+        this.log(`mapper: ${name} stays hidden`, 'system');
       }
     }
 
@@ -1211,16 +1255,17 @@ export class Game {
       }
     }
     if (next.length && this.d100() <= s.extend) {
-      this.log(`scout: strong signal, looking ${s.depth + 1} links away`, 'info');
+      this.log(`mapper: strong signal, looking ${s.depth + 1} links away`, 'info');
       s.depth++;
       s.edges = next;
       s.elapsed = 0;
       s.progressId = this.nextProgressId++;
-      this.scoutProgress(false);
+      this.mapperProgress(false);
       return;
     }
-    this.scout = null;
-    this.log('scout finished', 'info');
+    this.mapper = null;
+    this.outcome({ kind: 'player' }, true, 'MAPPED');
+    this.log('mapper finished', 'info');
     this.actionEnded();
   }
 
@@ -1234,8 +1279,8 @@ export const DEFAULT_MEMORY = 500;
 
 /** The deck a new player starts with. */
 export const STARTING_PROGRAMS: Program[] = [
-  { id: 'p1', type: 'scout', name: 'Hawkeye V2', rating: 3 },
-  { id: 'p2', type: 'scout', name: 'Owl 1.0', rating: 1 },
+  { id: 'p1', type: 'mapper', name: 'Hawkeye V2', rating: 3 },
+  { id: 'p2', type: 'mapper', name: 'Owl 1.0', rating: 1 },
   { id: 'p3', type: 'attack', name: 'Shooter V3', rating: 1 },
   { id: 'p4', type: 'hide', name: 'Ghost 1.2', rating: 1 },
   { id: 'p6', type: 'scan', name: 'Probe 1.0', rating: 1 },

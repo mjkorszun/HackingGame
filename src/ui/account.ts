@@ -139,6 +139,7 @@ function migrate(a: Account): Account {
   if (!Array.isArray(a.skills)) a.skills = [];
   if (typeof a.skillPicks !== 'number') a.skillPicks = 0;
   if (typeof a.code !== 'string' || !a.code) a.code = newGameCode();
+  if ((a.project?.type as string) === 'scout') a.project!.type = 'mapper';
   if (!a.avatar || typeof a.avatar.icon !== 'string') a.avatar = { ...DEFAULT_AVATAR };
   if (!a.customIcons || typeof a.customIcons !== 'object') a.customIcons = {};
   if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id);
@@ -155,6 +156,8 @@ function migrate(a: Account): Account {
 }
 
 function renameOld(programs: { type: string; name: string }[]): void {
+  // The old scout became the mapper.
+  for (const p of programs) if (p.type === 'scout') p.type = 'mapper';
   if (!programs.some((p) => p.type === 'brute')) return;
   for (const p of programs) {
     if (p.type === 'decrypt') {
