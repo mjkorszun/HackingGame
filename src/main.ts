@@ -11,7 +11,8 @@ import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, type ProgramType } from './sim/programs';
 import { loadAccount, loadedPrograms, nextProgramId, saveAccount, toggleLoaded } from './ui/account';
 import { showRunSummary } from './ui/runSummary';
-import { HomeScreen, type ContractOffer } from './ui/homeScreen';
+import { HomeScreen, type Choice, type ContractOffer } from './ui/homeScreen';
+import { generate } from './sim/generate';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const account = loadAccount();
@@ -64,6 +65,7 @@ function leaveNet(): void {
   sfx.play('pause');
   const report = game.endRun();
   account.sats += report.total;
+  account.reputation += report.reputation;
   account.programs = [...account.programs, ...report.software];
   // Programs loaded mid-run stay loaded.
   for (const l of game.loot) if (l.loaded && l.software && account.loaded.length < account.memory) account.loaded.push(l.software.id);
@@ -194,9 +196,8 @@ function updateDeck(): void {
 }
 
 const offers: ContractOffer[] = testSystem.contract ? [{ contract: testSystem.contract, system: testSystem }] : [];
-const home = new HomeScreen(document.getElementById('home')!, offers, {
-  choose: () => {},
-  enter: () => enterNetwork(home.contract),
+const home = new HomeScreen(document.getElementById('home')!, { day: account.day, reputation: account.reputation, networks: account.networks, offers }, {
+  enter: (choice) => enterNetwork(choice),
   click: () => sfx.play('menuItem'),
 });
 function renderHomeGear(): void {
@@ -215,8 +216,11 @@ function renderHomeGear(): void {
 renderHomeGear();
 
 /** Leaves the main screen and starts the run: the console, the network view and the clock. */
-function enterNetwork(offer: ContractOffer | undefined): void {
-  const system = { ...(offer?.system ?? testSystem), contract: offer?.contract };
+function enterNetwork(choice: Choice): void {
+  const system = choice.kind === 'contract' ? { ...choice.offer.system, contract: choice.offer.contract } : generate(choice.net);
+  // Every trip into the net is one day.
+  account.day++;
+  saveAccount(account);
   game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account) });
   home.hide();
   document.getElementById('app')!.hidden = false;

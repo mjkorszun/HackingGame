@@ -40,6 +40,7 @@ export interface RunReport {
   pay: number;
   filesTotal: number;
   total: number;
+  reputation: number;
 }
 
 interface ScoutTask {
@@ -142,7 +143,7 @@ export class Game {
     this.currentNode = system.entry;
     for (const n of system.nodes) if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
     for (const n of system.nodes) {
-      if (n.kind === 'database' || (n.kind === 'honeypot' && (n.disguise ?? 'database') === 'database')) this.files.set(n.id, generateFiles(n.id, system.security ?? 1));
+      if (n.kind === 'database' || (n.kind === 'honeypot' && (n.disguise ?? 'database') === 'database')) this.files.set(n.id, generateFiles(system.fileSeed ? `${system.fileSeed}/${n.id}` : n.id, system.security ?? 1));
     }
     const job = system.contract;
     const target = job && this.files.get(job.node);
@@ -445,9 +446,11 @@ export class Game {
     const files = this.loot.filter((l) => !l.software).map((l) => ({ name: l.name, label: l.label, price: l.price }));
     const software = this.loot.filter((l) => l.software).map((l) => l.software!);
     const pay = job && success ? job.pay : 0;
+    // Placeholder reputation: a contract done +5; a local job +1 if you took something and the alarm never went red.
+    const reputation = job ? (success ? 5 : 0) : this.loot.length && this.alarm < 3 && !this.kicked ? 1 : 0;
     const filesTotal = files.reduce((sum, f) => sum + f.price, 0);
     this.log('link down: you left the net', 'system');
-    return { contract: job ? { title: job.title, pay: job.pay } : undefined, success, files, software, pay, filesTotal, total: pay + filesTotal };
+    return { contract: job ? { title: job.title, pay: job.pay } : undefined, success, files, software, pay, filesTotal, total: pay + filesTotal, reputation };
   }
 
 
