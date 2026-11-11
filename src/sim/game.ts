@@ -524,7 +524,7 @@ export class Game {
     // Placeholder experience: a contract done (more for a harder system), plus every feat counted during the run.
     const security = this.network.def.security ?? 1;
     const xpLines: { what: string; xp: number }[] = [];
-    if (job && success) xpLines.push({ what: `contract done (security ${security})`, xp: 30 * security });
+    if (job && success) xpLines.push({ what: `contract done (security ${security})`, xp: 50 * security });
     for (const f of Object.keys(FEAT_XP) as Feat[]) {
       const n = this.feats.filter((x) => x === f).length;
       if (n) xpLines.push({ what: `${FEAT_LABEL[f]} x${n}`, xp: n * FEAT_XP[f] });

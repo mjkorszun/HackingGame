@@ -12,14 +12,23 @@ import { FILE_PROGRAMS, PROGRAM_TYPES, type Program, type ProgramType } from './
 import { loadAccount, loadedPrograms, nextProgramId, passDay, saveAccount, toggleLoaded } from './ui/account';
 import { showRunSummary } from './ui/runSummary';
 import { showSkillPick } from './ui/skillPick';
-import { addXp } from './sim/progression';
+import { addXp, xpToNext } from './sim/progression';
 import { HomeScreen, type Choice, type ContractOffer } from './ui/homeScreen';
 import { finishProgram, newProject, work } from './sim/development';
-import { randomIcon } from './ui/icons';
+import { isBuiltInIcon, randomIcon, registerIcon } from './ui/icons';
 import { generate } from './sim/generate';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const account = loadAccount();
+// Icons the player picked from the full set travel with the save.
+for (const [name, body] of Object.entries(account.customIcons)) registerIcon(name, body);
+
+/** Saves an icon from the full set with the account, so it shows after a reload. */
+function keepIcon(name: string, body: string): void {
+  if (isBuiltInIcon(name) || !body) return;
+  account.customIcons[name] = body;
+  registerIcon(name, body);
+}
 /** The run in progress; set when the player enters the network from the main screen. */
 let game: Game;
 let term: Console;
@@ -233,12 +242,25 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
     account.code = code;
     saveAccount(account);
   },
+  levelUp: () => {
+    const grown = addXp(account.level, account.xp, xpToNext(account.level) - account.xp);
+    account.level = grown.level;
+    account.xp = grown.xp;
+    account.skillPicks += grown.levelsUp;
+    saveAccount(account);
+  },
+  avatar: () => account.avatar,
+  setAvatar: (icon, color, body) => {
+    keepIcon(icon, body);
+    account.avatar = { icon, color };
+    saveAccount(account);
+  },
   pickSkills: (done) => pickSkills(done),
   dev: {
     project: () => account.project,
-    start: (type, rating, name) => {
-      // The icon is drawn when the project starts, so the card shows what the program will look like.
-      account.project = { ...newProject(type, rating, name), icon: randomIcon(type) };
+    start: (type, rating, name, icon, color, body) => {
+      keepIcon(icon, body);
+      account.project = { ...newProject(type, rating, name), icon, color };
       saveAccount(account);
     },
     work: (mode) => {
@@ -254,6 +276,7 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       if (r.done) {
         program = finishProgram(p, `p${nextProgramId(account)}`, 'you');
         program.icon = p.icon ?? randomIcon(program.type);
+        if (p.color) program.color = p.color;
         account.programs.push(program);
         account.project = undefined;
         lines.push(`${p.name} is done`);
@@ -325,6 +348,7 @@ term.completer = (value) =>
           : [...new Set((kind === 'neighbour' ? game.network.neighbours(game.currentNode) : game.network.def.nodes.filter((n) => game.isKnown(n.id))).map((n) => game.nameOf(n.id)))],
   });
 view = new NetworkView(document.getElementById('view')!, game, menu, {
+  avatar: account.avatar,
   travel: (id) => ui(`connect ${nodeName(id)}`),
   look: (id) => ui(`look ${nodeName(id)}`),
   act: (id) => ui(`do ${id}`),
