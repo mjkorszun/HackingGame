@@ -1,3 +1,4 @@
+import { clickAction, type DataFile } from './files';
 import { SCOUT_NOISE, scoutChances } from './programs';
 import { describe, expect, it } from 'vitest';
 import { testSystem } from '../data/testSystem';
@@ -520,5 +521,22 @@ describe('auto-pause', () => {
     g.travelTo('edge');
     run(g, MOVE_TICKS);
     expect(g.paused).toBe(false);
+  });
+});
+
+describe('file left click', () => {
+  const base = { id: 'f1', decrypted: true, price: 100 } as DataFile;
+  it('evaluates a valuable file first, then downloads it', () => {
+    const f = { ...base, content: 'valuable' } as DataFile;
+    expect(clickAction(f)).toBe('evaluate');
+    f.evaluated = true;
+    expect(clickAction(f)).toBe('download');
+    f.downloaded = true;
+    expect(clickAction(f)).toBeUndefined();
+  });
+  it('does what a contract needs', () => {
+    expect(clickAction({ ...base, content: 'contract', need: 'delete' } as DataFile)).toBe('delete');
+    expect(clickAction({ ...base, content: 'contract', need: 'alter' } as DataFile)).toBe('alter');
+    expect(clickAction({ ...base, content: 'contract', need: 'alter', altered: true } as DataFile)).toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
+import { apparentContent, clickAction, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
 import { Tooltip, type TipLine } from './tooltip';
 import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
 import type { Game } from '../sim/game';
@@ -135,6 +135,8 @@ function fileTip(f: DataFile): TipLine[] {
   }
   if (f.content === 'contract') lines.push({ text: f.altered ? 'altered' : `the contract wants it ${f.need === 'alter' ? 'altered' : 'deleted'}` });
   if (f.downloaded) lines.push({ text: 'downloaded', cls: 'c-info' });
+  const act = clickAction(f);
+  if (act) lines.push({ text: `click to ${act}`, cls: 'c-system' });
   return lines;
 }
 
@@ -501,7 +503,9 @@ export class NetworkView {
       this.tip.attach(blk, () => fileTip(file));
       blk.addEventListener('mouseenter', () => this.actions.hover());
       blk.addEventListener('click', () => {
-        if (!file.decrypted) this.actions.decryptFile(file.id, false);
+        if (!file.decrypted) return this.actions.decryptFile(file.id, false);
+        const act = clickAction(file);
+        if (act) this.actions.fileAction(act, file.id);
       });
       blk.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -512,7 +516,7 @@ export class NetworkView {
         for (const act of fileActions(file)) {
           const needs = (FILE_PROGRAMS as readonly string[]).includes(act) && !this.game.findProgram(act as FileProgram);
           const done = act === 'download' && file.downloaded;
-          items.push({ label: act, hint: needs ? `needs ${act}` : done ? 'done' : undefined, disabled: busy || needs || done, action: () => this.actions.fileAction(act, file.id) });
+          items.push({ label: act, hint: needs ? `needs ${act}` : done ? 'done' : act === clickAction(file) ? 'click' : undefined, disabled: busy || needs || done, action: () => this.actions.fileAction(act, file.id) });
         }
         if (this.game.filesIn(nodeId).some((f) => !f.decrypted)) {
           items.push({ label: 'Decrypt all', hint: 'starting from this file', disabled: busy, action: () => this.actions.decryptFile(file.id, true) });
