@@ -353,7 +353,9 @@ body {
 .data-block { cursor: pointer; --fc: #5dff8a; }
 .data-block rect { fill: #0d3318; stroke: var(--fc); stroke-width: 1.5; }
 .data-block line { stroke: var(--fc); stroke-width: 1.2; }
-.data-block:hover rect { stroke-width: 2.5; fill: #14502a; }
+.data-block:hover { --fc: #a8ffc0; }
+.data-block:hover rect { fill: #14502a; }
+.data-block.is-worthless:hover, .data-block.is-valuable:hover, .data-block.is-program:hover, .data-block.is-quest:hover { filter: brightness(1.3); }
 .data-block.is-worthless { --fc: var(--yellow); }
 .data-block.is-worthless rect { fill: #2a2508; }
 .data-block.is-valuable { --fc: var(--blue); }
