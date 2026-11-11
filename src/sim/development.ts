@@ -45,6 +45,8 @@ export interface DevProject {
   /** Days already worked. */
   daysSpent: number;
   bugs: number;
+  /** Icon the finished program will have (picked by the UI). */
+  icon?: string;
 }
 
 /** Days of work a new program needs (placeholder: 3 a rating point). */

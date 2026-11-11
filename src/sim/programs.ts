@@ -32,6 +32,8 @@ export interface Program {
   /** Programs you develop yourself get a rarity and random traits. */
   rarity?: Rarity;
   traits?: string[];
+  /** Icon name from its type's pool (game-icons.net); without one, the name picks it. */
+  icon?: string;
   /** A legendary program carries its author's name. */
   author?: string;
 }

@@ -33,3 +33,5 @@ npm run build     # type check + production build into dist/
 ## Credits
 
 Sound effects: [Kenney](https://kenney.nl), CC0.
+
+Program icons: [game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). The icons used are listed in `src/ui/icons.ts` (`ICON_POOLS`).
