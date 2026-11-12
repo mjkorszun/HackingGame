@@ -70,6 +70,8 @@ export interface ContractDef {
   node: string;
   /** Pay in sats on success. */
   pay: number;
+  /** Days you have to finish it, counted from the day you take it (placeholder). */
+  days?: number;
 }
 
 import type { ProgramType } from './programs';

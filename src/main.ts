@@ -9,8 +9,10 @@ import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
 import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, usedMemory, type Program, type ProgramType } from './sim/programs';
-import { buyChip, installChip, loadAccount, loadedPrograms, nextProgramId, passDay, placeProgram, removeChip, saveAccount, sellChip, toggleLoaded } from './ui/account';
+import { buyChip, installChip, loadAccount, rest, loadedPrograms, nextProgramId, passDay, placeProgram, removeChip, saveAccount, sellChip, toggleLoaded } from './ui/account';
 import { chipById } from './sim/implants';
+import { exitDamage } from './sim/health';
+import { showGameOver } from './ui/gameOver';
 import { showRunSummary } from './ui/runSummary';
 import { showSkillPick } from './ui/skillPick';
 import { addXp, xpToNext } from './sim/progression';
@@ -77,8 +79,14 @@ const HELP = [
 function leaveNet(): void {
   if (game.ended) return;
   sfx.play('pause');
+  const kicked = game.kicked;
+  const integrity = { now: game.integrity, max: game.maxIntegrity };
   const report = game.endRun();
   account.sats += report.total;
+  if (report.success && report.contract) account.contract = undefined;
+  // Leaving badly hurt, or being thrown out, damages your brain.
+  const loss = exitDamage(integrity.now, integrity.max, kicked);
+  account.health = Math.max(0, account.health - loss);
   account.reputation += report.reputation;
   const before = { level: account.level, xp: account.xp };
   const grown = addXp(account.level, account.xp, report.xp);
@@ -96,7 +104,27 @@ function leaveNet(): void {
   for (const l of game.loot) if (l.loaded && l.software) account.loaded.push(l.software.id);
   saveAccount(account);
   flush();
-  showRunSummary(report, account.sats, before, () => pickSkills(() => location.reload()));
+  const health = { loss, now: account.health, kicked };
+  showRunSummary(report, account.sats, before, () => {
+    if (account.health <= 0) return showGameOver(loadBackup, newGame);
+    pickSkills(() => location.reload());
+  }, health);
+}
+
+const BACKUP_KEY = 'cyberhack.account.backup';
+
+/** Loads the game as it was before the fatal run. */
+function loadBackup(): void {
+  const saved = localStorage.getItem(BACKUP_KEY);
+  if (saved) localStorage.setItem('cyberhack.account', saved);
+  location.reload();
+}
+
+/** Starts a new game from scratch. */
+function newGame(): void {
+  localStorage.removeItem('cyberhack.account');
+  localStorage.removeItem(BACKUP_KEY);
+  location.reload();
 }
 
 /** One skill choice for every level gained and not yet picked, then `done`. */
@@ -252,7 +280,16 @@ const homeState = { day: account.day, reputation: account.reputation, networks: 
 const home = new HomeScreen(document.getElementById('home')!, homeState, {
   enter: (choice) => enterNetwork(choice),
   click: () => sfx.play('menuItem'),
-  character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks, code: account.code }),
+  character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks, code: account.code, health: account.health }),
+  rest: (days) => {
+    rest(account, days);
+    saveAccount(account);
+    homeState.day = account.day;
+    homeState.news = account.news;
+    renderHomeGear();
+  },
+  contract: () => account.contract,
+  day: () => account.day,
   setCode: (code) => {
     account.code = code;
     saveAccount(account);
@@ -397,8 +434,19 @@ renderHomeGear();
 /** Leaves the main screen and starts the run: the console, the network view and the clock. */
 function enterNetwork(choice: Choice): void {
   const system = choice.kind === 'contract' ? { ...choice.offer.system, contract: choice.offer.contract } : generate(choice.net);
+  // The state before the run, to load if you die in it.
+  try {
+    localStorage.setItem(BACKUP_KEY, JSON.stringify(account));
+  } catch {
+    // No storage: nothing to load later.
+  }
   // Every trip into the net is one day: skimmers pay out, and may be found.
   passDay(account);
+  // Taking a contract starts its deadline (today counts as the first day).
+  if (choice.kind === 'contract' && account.contract?.title !== choice.offer.contract.title) {
+    const days = choice.offer.contract.days ?? 5;
+    account.contract = { title: choice.offer.contract.title, deadline: account.day + days - 1 };
+  }
   saveAccount(account);
   game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account) });
   // Skimmers planted here earlier are still at work in the payment gateway.

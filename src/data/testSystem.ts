@@ -15,7 +15,7 @@ export const testSystem: SystemDef = {
     { kind: 'warrior', node: 'staff', type: 'watchful' },
     { kind: 'warrior', node: 'cams', type: 'heavy' },
   ],
-  contract: { title: 'Alter File', need: 'alter', node: 'orders', pay: 50 },
+  contract: { title: 'Alter File', need: 'alter', node: 'orders', pay: 50, days: 5 },
   nodes: [
     { id: 'gw', name: 'Public Gateway', kind: 'gateway', x: 0, y: 2 },
     { id: 'edge', name: 'Edge Relay', kind: 'relay', x: 1, y: 2 },

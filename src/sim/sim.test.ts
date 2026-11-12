@@ -866,7 +866,7 @@ describe('skimmer and days', () => {
     expect(g.planted?.name).toBe('Skimmer 1.0');
     expect(g.allies.some((a) => a.resident && a.node === 'payments')).toBe(true);
     expect(g.runProgram('skimmer')).toBe(false); // one skimmer per gateway
-    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } } };
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } }, health: 100 };
     passDay(account, () => 0.99);
     expect(account.sats).toBeCloseTo(0.08);
     passDay(account, () => 0);
@@ -916,7 +916,7 @@ describe('software development', () => {
     const { newPizzeria } = await import('./generate');
     const { passDay } = await import('../ui/account');
     const net = newPizzeria(7);
-    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } } };
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } }, health: 100 };
     passDay(account, () => 0.99, 7);
     expect(account.day).toBe(8);
     expect(account.sats).toBeCloseTo(0.56);
@@ -1066,5 +1066,32 @@ describe('hardware', () => {
     expect(typeof removeChip(a, 'spine1')).toBe('string');
     expect(sellChip(a, 'stock-memory')).toMatch(/sold/);
     expect(a.hardware.spare).toEqual([]);
+  });
+});
+
+describe('health and deadlines', () => {
+  it('costs health to leave hurt, more to be thrown out', async () => {
+    const { exitDamage, daysToHeal } = await import('./health');
+    expect(exitDamage(60, 100, false)).toBe(0);
+    expect(exitDamage(40, 100, false)).toBe(5);
+    expect(exitDamage(20, 100, false)).toBe(10);
+    expect(exitDamage(5, 100, false)).toBe(20);
+    expect(exitDamage(0, 100, true, () => 0)).toBe(20);
+    expect(exitDamage(0, 100, true, () => 0.99)).toBe(30);
+    expect(daysToHeal(75)).toBe(3);
+  });
+
+  it('heals by resting, and loses a contract after its deadline', async () => {
+    const { fresh, rest, passDay } = await import('../ui/account');
+    const a = fresh();
+    a.health = 55;
+    rest(a, 2);
+    expect(a.health).toBe(75);
+    a.contract = { title: 'Alter File', deadline: a.day + 1 };
+    passDay(a);
+    expect(a.contract).toBeDefined();
+    passDay(a);
+    expect(a.contract).toBeUndefined();
+    expect(a.news.join(' ')).toMatch(/deadline/);
   });
 });
