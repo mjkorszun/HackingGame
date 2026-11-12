@@ -851,7 +851,25 @@ describe('agents', () => {
     const seen = g.intel().agents.gw;
     expect(seen).toHaveLength(1);
     expect(seen[0].type).toBe('heavy');
-    expect(seen[0].analyzed).toBe(false);
+    expect(seen[0].known).toBe('none');
+    expect(seen[0].name).toBe(g.agents[0].name);
+  });
+
+  it('a worker walks its route stop to stop, through the nodes between them', () => {
+    const g = new Game({ ...testSystem, gates: [] });
+    g.autoPause = false;
+    g.setPaused(false);
+    const w = g.agents.find((a) => a.stats.role === 'worker')!;
+    const seq = [w.node];
+    for (let i = 0; i < 3000; i++) {
+      (g as unknown as { query: null }).query = null;
+      g.setPaused(false);
+      g.step();
+      if (seq[seq.length - 1] !== w.node) seq.push(w.node);
+    }
+    // core > cams > orch > ai > orch > cams > core ... (cams lies between core and orch)
+    expect(seq).toContain('ai');
+    expect(seq).toContain('orch');
   });
 
   it('your agent can stay, follow you, and unload back into memory', () => {

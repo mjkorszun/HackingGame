@@ -1,6 +1,9 @@
 import type { NodeKind, SystemDef } from '../sim/types';
 import type { NetIntel } from '../sim/intel';
-import { dps, ROLE_LABEL, WARRIORS } from '../sim/agents';
+import { agentInfo, WARRIORS, type Agent, type WarriorType } from '../sim/agents';
+import { agentIcon, iconBody } from './icons';
+
+const WARRIOR_TYPES = Object.keys(WARRIORS) as WarriorType[];
 import { drawNodeShape } from './shapes';
 import { KIND_LABEL } from './networkView';
 
@@ -79,11 +82,13 @@ export function showEntryScreen(system: SystemDef, intel: NetIntel | undefined, 
     else if (entries.includes(id)) lines.push('<p class="entry-tag">your backdoor</p>');
     const seen = intel?.agents[id] ?? [];
     if (seen.length) {
-      lines.push('<p class="rs-dim">agents met here:</p><ul>');
+      lines.push('<p class="rs-dim">agents met here:</p><ul class="entry-agents">');
       for (const s of seen) {
+        // As much as your Analyze read: only who it is, part of its stats, or everything.
         const st = WARRIORS[s.type];
-        const stats = s.analyzed ? `<br><span class="rs-dim">HP ${st.hp}${st.damage ? `, DPS ${dps(st)}` : ''}</span>` : '';
-        lines.push(`<li><b>${esc(s.typeName)}</b>: ${esc(ROLE_LABEL[s.role])}${stats}</li>`);
+        const [head, ...rest] = agentInfo({ name: s.name, typeName: s.typeName, stats: st, hp: st.hp, known: s.known } as Agent);
+        const icon = iconBody(agentIcon(system.id, WARRIOR_TYPES.indexOf(s.type), s.role)) ?? '';
+        lines.push(`<li class="entry-agent is-${s.type}${st.ai === 'stationary' ? ' is-fixed' : ''}"><svg class="entry-agent-icon" viewBox="0 0 512 512">${icon}</svg><div><b>${esc(head)}</b>${rest.map((t) => `<br><span class="${t.startsWith('not analyzed') || t === 'partly analyzed' ? 'rs-dim' : ''}">${esc(t)}</span>`).join('')}</div></li>`);
       }
       lines.push('</ul>');
     } else if (identified.has(id) || known.has(id)) lines.push('<p class="rs-dim">no agents met here</p>');

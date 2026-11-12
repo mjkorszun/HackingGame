@@ -77,10 +77,21 @@ const HELP = [
   'keys: Space pause, A auto-pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
 ];
 
-/** Ends the run: pays out what was taken and shows the report. OK starts the next run. */
+let leaving = false;
+
+/** Leaving: the game stops and your avatar fades out for a second, then the run ends. */
 function leaveNet(): void {
-  if (game.ended) return;
+  if (game.ended || leaving) return;
+  leaving = true;
+  game.setPaused(true);
   sfx.play('pause');
+  view?.avatarOut();
+  setTimeout(endTheRun, 1000);
+}
+
+/** Ends the run: pays out what was taken and shows the report. OK starts the next run. */
+function endTheRun(): void {
+  if (game.ended) return;
   const kicked = game.kicked;
   const integrity = { now: game.integrity, max: game.maxIntegrity };
   const report = game.endRun();

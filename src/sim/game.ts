@@ -432,14 +432,17 @@ export class Game {
       if (a.stats.ai === 'stationary') continue;
       if (--a.stayLeft <= 0) {
         if (a.stats.ai === 'path' && a.route && a.route.length > 1) {
-          // Back and forth along its route.
-          const i = a.route.indexOf(a.node);
-          const back = (a.routeBack ??= false);
-          let j = i < 0 ? 0 : back ? i - 1 : i + 1;
-          if (j >= a.route.length || j < 0) {
-            a.routeBack = !back;
-            j = a.routeBack ? i - 1 : i + 1;
+          // Back and forth along its route. It heads for one stop at a time, through whatever nodes lie between.
+          let j = a.routeStop ?? Math.max(0, a.route.indexOf(a.node));
+          if (a.route[j] === a.node) {
+            const back = (a.routeBack ??= false);
+            j = back ? j - 1 : j + 1;
+            if (j >= a.route.length || j < 0) {
+              a.routeBack = !back;
+              j = a.routeBack ? a.route.length - 2 : 1;
+            }
           }
+          a.routeStop = j;
           const step = this.network.path(a.node, a.route[j])[0];
           if (step) this.startHop(a, step);
           continue;
@@ -1245,9 +1248,7 @@ export class Game {
       for (const id of ids) {
         const a = this.agentById(id) ?? this.seenAgents.get(id);
         if (!a) continue;
-        const had = list.find((x) => x.type === a.stats.type);
-        if (had) had.analyzed ||= a.known !== 'none';
-        else list.push({ type: a.stats.type, typeName: a.typeName, role: a.stats.role, analyzed: a.known !== 'none' });
+        list.push({ name: a.name, type: a.stats.type, typeName: a.typeName, role: a.stats.role, known: a.known });
       }
       if (list.length) agents[node] = list;
     }

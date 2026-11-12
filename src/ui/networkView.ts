@@ -370,6 +370,8 @@ export class NetworkView {
   /** Where each hopping agent was last drawn, and agents walking from the link's end to their spot. */
   private lastHopPos = new Map<string, { pos: { x: number; y: number }; at: number }>();
   private arrivals = new Map<string, { from: { x: number; y: number }; at: number }>();
+  /** The avatar has been drawn once this run (its arrival animation is done). */
+  private spawned = false;
   private avatarPos = { x: CX, y: CY };
   /** Top layer for shots and outcome texts. */
   private fxLayer: SVGGElement | null = null;
@@ -599,6 +601,8 @@ export class NetworkView {
         if (was && pos) {
           if (!this.arrivals.has(a.id)) this.arrivals.set(a.id, { from: was.pos, at: performance.now() });
           this.lastHopPos.delete(a.id);
+          // Coming into your node: a short flash and a ring where it steps in.
+          if (a.node === g.currentNode) this.arriveFx(was.pos, a.stats.type);
         }
         const arr = this.arrivals.get(a.id);
         if (arr && pos) {
@@ -659,7 +663,25 @@ export class NetworkView {
       els.mini.remove();
       this.agentEls.delete(id);
     }
+    const working = g.agents.some((a) => a.stats.role === 'worker' && !a.hop && a.node === g.currentNode && !g.isMoving);
+    this.stage.classList.toggle('has-worker', working);
     this.updateAllies(layer, mini);
+  }
+
+  /** A flash and a widening ring where an agent steps into your node. */
+  private arriveFx(at: { x: number; y: number }, type: WarriorType): void {
+    if (!this.fxLayer) return;
+    const flash = svg('circle', { cx: at.x, cy: at.y, r: 10, class: `fx-arrive-flash is-${type}` }, this.fxLayer);
+    const ring = svg('circle', { cx: at.x, cy: at.y, r: 16, class: `fx-arrive-ring is-${type}` }, this.fxLayer);
+    setTimeout(() => {
+      flash.remove();
+      ring.remove();
+    }, 800);
+  }
+
+  /** The avatar fades out as you leave the net. */
+  avatarOut(): void {
+    this.avatar?.classList.add('is-leaving');
   }
 
   /** Your warriors in this node. */
@@ -996,6 +1018,14 @@ export class NetworkView {
     const span = this.roomR * 1.6;
     for (let x = CX - span + CELL; x < CX + span; x += CELL) svg('line', { x1: x, y1: CY - span, x2: x, y2: CY + span }, grid);
     for (let y = CY - span + CELL; y < CY + span; y += CELL) svg('line', { x1: CX - span, y1: y, x2: CX + span, y2: y }, grid);
+    // A slow scan band drifting down through the room (a look only).
+    const grad = svg('linearGradient', { id: 'scan-grad', x1: 0, y1: 0, x2: 0, y2: 1 }, grp);
+    grad.style.color = 'var(--kc, #33ff66)';
+    svg('stop', { offset: '0', 'stop-color': 'currentColor', 'stop-opacity': 0 }, grad);
+    svg('stop', { offset: '0.85', 'stop-color': 'currentColor', 'stop-opacity': 0.14 }, grad);
+    svg('stop', { offset: '1', 'stop-color': 'currentColor', 'stop-opacity': 0.35 }, grad);
+    const scan = svg('rect', { x: CX - span, y: CY - span - 60, width: 2 * span, height: 60, fill: 'url(#scan-grad)', class: 'room-scan' }, grid);
+    scan.style.setProperty('--scan', `${2 * span + 60}px`);
 
     // Doors where the links leave.
     for (const p of positions) {
@@ -1060,6 +1090,9 @@ export class NetworkView {
       if (scanning?.fileId === file.id) cls.push('is-scanning');
       if (file.downloaded || file.altered || file.extracted) cls.push('is-done');
       const blk = svg('g', { class: cls.join(' '), 'data-file': file.id }, parent);
+      // While a worker is in the node the files flicker now and then, each on its own beat.
+      blk.style.setProperty('--flicker-delay', `-${(rand() * 5).toFixed(2)}s`);
+      blk.style.setProperty('--flicker-time', `${(2.5 + rand() * 3).toFixed(2)}s`);
       const pad = 5;
       svg('rect', { x: x + pad, y: y + pad, width: CELL - 2 * pad, height: CELL - 2 * pad }, blk);
       const mid = y + CELL / 2;
@@ -1118,7 +1151,10 @@ export class NetworkView {
     const root = svg('g', { class: 'avatar' }, this.stage);
     const fig = svg('g', { class: 'avatar-figure' }, root);
     const a = this.actions.avatar ?? { icon: 'hood', color: '#3dff7a' };
-    const bob = svg('g', { class: 'avatar-bob' }, fig);
+    // The first time it is drawn in a run, the avatar materialises (a look only).
+    const spawn = svg('g', { class: this.spawned ? 'avatar-spawn' : 'avatar-spawn is-spawning' }, fig);
+    this.spawned = true;
+    const bob = svg('g', { class: 'avatar-bob' }, spawn);
     // A disc behind the icon, ringed in the player's colour, so the avatar stands out from agents.
     const disc = svg('circle', { cx: 0, cy: -26, r: 27, class: 'avatar-disc' }, bob);
     disc.style.stroke = a.color;

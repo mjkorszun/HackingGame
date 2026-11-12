@@ -1,14 +1,18 @@
-import type { AgentRole, WarriorType } from './agents';
+import type { AgentRole, Knowledge, WarriorType } from './agents';
 
-/** An agent type you met in a node. */
+/** An agent you met in a node. */
 export interface AgentSighting {
+  /** Its code name (KX-271). */
+  name: string;
   type: WarriorType;
   /** Its type's name in that system (e.g. knight). */
   typeName: string;
   role: AgentRole;
-  /** Your Analyze read its stats. */
-  analyzed: boolean;
+  /** How much your Analyze read of it: nothing, part, or all. */
+  known: Knowledge;
 }
+
+const RANK: Record<Knowledge, number> = { none: 0, partial: 1, full: 2 };
 
 /** What you know about a system from earlier runs. Saved with the account, one record per network. */
 export interface NetIntel {
@@ -16,7 +20,7 @@ export interface NetIntel {
   known: string[];
   /** Nodes whose type and name you know. */
   identified: string[];
-  /** Agent types met in each node. */
+  /** Agents met in each node. */
   agents: Record<string, AgentSighting[]>;
   /** Nodes where you left a backdoor: you can enter the system there. */
   backdoors: string[];
@@ -34,9 +38,9 @@ export function mergeIntel(old: NetIntel | undefined, run: NetIntel): NetIntel {
   for (const node of new Set([...Object.keys(base.agents), ...Object.keys(run.agents)])) {
     const list = [...(base.agents[node] ?? [])];
     for (const s of run.agents[node] ?? []) {
-      const had = list.find((x) => x.type === s.type);
-      if (had) had.analyzed ||= s.analyzed;
-      else list.push({ ...s });
+      const had = list.find((x) => x.name === s.name);
+      if (!had) list.push({ ...s });
+      else if (RANK[s.known] > RANK[had.known]) had.known = s.known;
     }
     agents[node] = list;
   }

@@ -144,6 +144,8 @@ export interface Agent {
   route?: string[];
   /** Walking its route backwards. */
   routeBack?: boolean;
+  /** The stop on its route it is heading for (index into route). */
+  routeStop?: number;
   hp: number;
   /** Node it is in, or the node it is leaving while on a link. */
   node: string;
