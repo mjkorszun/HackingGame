@@ -22,7 +22,7 @@ import { isBuiltInIcon, randomIcon, registerIcon } from './ui/icons';
 import { generate } from './sim/generate';
 import { mergeIntel } from './sim/intel';
 import { needsEntryScreen, showEntryScreen } from './ui/entryScreen';
-import { activeSlot, clearSlot, markLast, reloadIntoGame, slotInfo, restoreBackup, writeBackup } from './ui/saves';
+import { activeSlot, clearSlot, markLast, reloadIntoGame, slotInfo, restoreBackup, setInRun, writeBackup } from './ui/saves';
 import { GameMenu, ICON_GEAR } from './ui/gameMenu';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
@@ -100,6 +100,7 @@ function endTheRun(): void {
   const kicked = game.kicked;
   const integrity = { now: game.integrity, max: game.maxIntegrity };
   const report = game.endRun();
+  setInRun(activeSlot(), false);
   account.sats += report.total;
   if (report.success && report.contract) account.contract = undefined;
   // Leaving badly hurt, or being thrown out, damages your brain.
@@ -549,6 +550,7 @@ function enterNetwork(choice: Choice, entry?: string): void {
     account.contract = { title: choice.offer.contract.title, deadline: account.day + days - 1 };
   }
   saveAccount(account);
+  setInRun(activeSlot(), true);
   game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account), entry, intel: account.intel[system.id] });
   // Skimmers planted here earlier are still at work in the payment gateway.
   const gateway = system.nodes.find((n) => n.kind === 'payment');
@@ -613,11 +615,8 @@ view = new NetworkView(document.getElementById('view')!, game, menu, {
     flush();
   },
   command: (cmd) => ui(cmd),
-  // Quitting a run takes the game back to just before you entered, day included.
-  quit: () => {
-    restoreBackup(activeSlot());
-    quitToMenu();
-  },
+  // Quitting a run takes the game back to just before you entered, day included (done on the reload, as for a refresh).
+  quit: quitToMenu,
   sound: sfx,
 });
 

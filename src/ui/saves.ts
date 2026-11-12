@@ -13,6 +13,7 @@ const RESUME_KEY = 'cyberhack.resume';
 
 export const slotKey = (slot: number) => `cyberhack.save.${slot}`;
 export const backupKey = (slot: number) => `cyberhack.save.${slot}.backup`;
+const inRunKey = (slot: number) => `cyberhack.save.${slot}.inRun`;
 
 /** What the load list shows about a save. */
 export interface SlotInfo {
@@ -99,10 +100,29 @@ export function setActiveSlot(slot: number): void {
   set(sessionStorage, ACTIVE_KEY, String(slot));
 }
 
+/** Marks a run as under way in the slot, or over. */
+export function setInRun(slot: number, on: boolean): void {
+  if (on) set(localStorage, inRunKey(slot), '1');
+  else remove(localStorage, inRunKey(slot));
+}
+
+/**
+ * A run left without ending it (Quit, a page refresh, a closed tab) never happened: the slot goes
+ * back to just before you entered, day included.
+ */
+export function recoverAbandonedRuns(): void {
+  for (let slot = 1; slot <= SLOTS; slot++) {
+    if (get(localStorage, inRunKey(slot)) !== '1') continue;
+    restoreBackup(slot);
+    setInRun(slot, false);
+  }
+}
+
 /** Empties a slot, so the next load there starts a new game. */
 export function clearSlot(slot: number): void {
   remove(localStorage, slotKey(slot));
   remove(localStorage, backupKey(slot));
+  setInRun(slot, false);
 }
 
 /** Copies the game as it was before the last run back into the slot. */
