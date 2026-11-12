@@ -791,3 +791,13 @@ body {
 .agent[data-attitude="alert"] .agent-ring { stroke: var(--orange); animation-duration: 2s; }
 .agent[data-attitude="hostile"] .agent-ring { stroke: var(--red); animation-duration: 1s; }
 @keyframes ring-spin { to { transform: rotate(360deg); } }
+
+/* ---------- detection (signature) bar under the node's name ---------- */
+.sig-bar { --sig: var(--green); }
+.sig-bar[data-level="1"] { --sig: var(--yellow); }
+.sig-bar[data-level="2"] { --sig: var(--orange); }
+.sig-bar[data-level="3"] { --sig: var(--red); }
+.sig-icon { fill: var(--sig); transition: fill 0.4s; }
+.sig-label { fill: var(--sig); font-family: var(--font); font-size: 12px; font-weight: bold; transition: fill 0.4s; }
+.sig-seg { fill: none; stroke: var(--sig); stroke-width: 1.2; stroke-opacity: 0.5; transition: fill 0.4s, stroke 0.4s; }
+.sig-seg.is-on { fill: var(--sig); stroke-opacity: 1; }

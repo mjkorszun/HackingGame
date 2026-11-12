@@ -147,6 +147,10 @@ interface MoveTask {
   total: number;
 }
 
+/** Ticks out of every agent's sight for your signature to drop one level (placeholder: 20 s). */
+export const SIGNATURE_COOL = 200;
+export const SIGNATURE_NAMES = ['anonymous', 'noticed', 'suspected', 'burned'] as const;
+
 /**
  * The pure game simulation. No DOM here: the UI calls step() once per tick
  * and reads the events it produced.
@@ -194,6 +198,13 @@ export class Game {
   alarm = 0;
   /** Ticks since the last thing that raised the alarm (yellow fades after a quiet minute). */
   private calm = 0;
+  /**
+   * How well agents know your signature (like wanted stars): 0 anonymous, 1 noticed, 2 suspected, 3 burned.
+   * Burned: every agent that sees you is hostile at once. It drops by itself only while no agent sees you,
+   * and not below 1; a mask program clears it.
+   */
+  signature = 0;
+  private unseen = 0;
   readonly maxIntegrity = 20;
   /** The player's integrity: at 0 you are thrown out of the net. */
   integrity = 20;
@@ -375,6 +386,13 @@ export class Game {
         }
         continue;
       }
+      if (together && this.signature >= 3) {
+        if (this.query?.agentId === a.id) this.query = null;
+        a.mood = 'hostile';
+        a.attackLeft = a.stats.attackEvery;
+        this.log(`${a.name} recognises your burned signature: ENEMY`, 'alarm3');
+        continue;
+      }
       if (together && a.mood === 'patrol' && !this.query) {
         if (--a.queryLeft <= 0) {
           a.queryLeft = a.stats.queryEvery;
@@ -397,6 +415,35 @@ export class Game {
       this.events.push({ type: 'alarm', level: 0 });
       this.log('alarm back to GREEN: the system calmed down', 'info');
     }
+  }
+
+  /** Your signature cools down while no agent sees you: one level every SIGNATURE_COOL ticks, not below 1. */
+  private updateSignature(): void {
+    if (!this.signature) return;
+    const seen = !this.move && this.agents.some((a) => a.node === this.currentNode && !a.hop);
+    if (seen) {
+      this.unseen = 0;
+      return;
+    }
+    if (this.signature > 1 && ++this.unseen >= SIGNATURE_COOL) {
+      this.unseen = 0;
+      this.setSignature(this.signature - 1, 'out of sight: agents are losing your trail');
+    }
+  }
+
+  private setSignature(level: number, why: string): void {
+    level = Math.max(0, Math.min(3, level));
+    if (level === this.signature) return;
+    const up = level > this.signature;
+    this.signature = level;
+    this.unseen = 0;
+    const name = SIGNATURE_NAMES[level];
+    this.log(`SIGNATURE ${name.toUpperCase()}: ${why}`, !up ? 'info' : level >= 3 ? 'alarm3' : level === 2 ? 'alarm2' : 'alarm1');
+  }
+
+  /** Raises your signature to at least this level. */
+  exposeSignature(level: number, why: string): void {
+    if (level > this.signature) this.setSignature(level, why);
   }
 
   /** Raises the system alarm to at least this level. */
@@ -473,6 +520,7 @@ export class Game {
     a.strikes++;
     if (a.strikes === 1) {
       this.raiseAlarm(1);
+      if (!a.silenced) this.exposeSignature(this.signature + 1, `${a.name} got a look at you`);
       a.queryLeft = 20;
       this.log(`${a.name} grows suspicious: it will ask again`, 'alarm1');
     } else {
@@ -485,6 +533,8 @@ export class Game {
     a.attackLeft = a.stats.attackEvery;
     this.log(`${a.name} marks you as an ENEMY`, 'alarm3');
     if (alarm && !a.silenced) this.raiseAlarm(3);
+    // A fight burns your signature: every agent will know you (unless this one is silenced and cannot tell).
+    if (!a.silenced) this.exposeSignature(3, `${a.name} passed it on to every agent`);
   }
 
   /** attack / silence / deceive an agent in your node (by name, or the one querying you, or the first one here). */
@@ -893,6 +943,7 @@ export class Game {
     this.updateAgents();
     this.updateAllies();
     this.updateAlarm();
+    this.updateSignature();
   }
 
   setPaused(paused: boolean, auto = false): void {
@@ -1161,6 +1212,21 @@ export class Game {
     return this.programs.find((p) => p.name.toLowerCase() === q);
   }
 
+  /** Mask: a new signature, so agents no longer know you. Only while no agent sees you. */
+  maskSignature(program: Program): boolean {
+    if (this.agentsIn(this.currentNode).length) {
+      this.log(`${program.name}: an agent is watching you. get out of sight first`, 'alarm1');
+      return false;
+    }
+    if (!this.signature) {
+      this.log(`${program.name}: your signature is not known. nothing to change`, 'system');
+      return false;
+    }
+    this.setSignature(0, `${program.name} gave you a new one`);
+    this.outcome({ kind: 'player' }, true, 'NEW SIGNATURE');
+    return true;
+  }
+
   /** Runs a program of a type (see findProgram). Returns false if it could not start. */
   runProgram(type: ProgramType, query = ''): boolean {
     const program = this.findProgram(type, query);
@@ -1182,6 +1248,7 @@ export class Game {
       return true;
     }
     if (program.type === 'skimmer') return this.plantSkimmer(program);
+    if (program.type === 'mask') return this.maskSignature(program);
     if (program.type === 'warrior') return this.releaseWarrior(program, null);
     if (program.type === 'scout') return this.scoutCommand(program.name);
     if (program.type === 'shield') {
@@ -1651,4 +1718,5 @@ export const STARTING_PROGRAMS: Program[] = [
   { id: 'p16', type: 'skimmer', name: 'Skimmer 1.0', rating: 1, efficiency: 1, detection: 2 },
   { id: 'p17', type: 'shield', name: 'Aegis 1.0', rating: 1 },
   { id: 'p18', type: 'scout', name: 'Sparrow 1.0', rating: 1 },
+  { id: 'p19', type: 'mask', name: 'Chameleon 1.0', rating: 1 },
 ];

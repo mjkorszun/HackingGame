@@ -4,7 +4,7 @@ import { apparentContent, clickAction, isEmpty, CONTENT_LABEL, fileActions, PROT
 import { Tooltip, type TipLine } from './tooltip';
 import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
 import type { Game } from '../sim/game';
-import { TICKS_PER_SECOND } from '../sim/game';
+import { SIGNATURE_NAMES, TICKS_PER_SECOND } from '../sim/game';
 import type { FxTarget, NodeDef, NodeKind, SimEvent } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
 import type { Sound } from './sound';
@@ -236,6 +236,9 @@ export class NetworkView {
   private readonly allyEls = new Map<string, { main: SVGGElement; mini: SVGGElement; hp: SVGRectElement }>();
   private allyPos = new Map<string, { x: number; y: number }>();
   private alarmEl!: HTMLDivElement;
+  /** The detection bar under the node's name: rebuilt with the room, filled every frame. */
+  private sigBar: { root: SVGGElement; segs: SVGRectElement[]; label: SVGTextElement; tip: SVGTitleElement } | null = null;
+  private sigShown = -1;
   private integrityEl!: HTMLDivElement;
   private queryBox!: HTMLDivElement;
   private queryKey = '';
@@ -317,6 +320,25 @@ export class NetworkView {
     this.queryBox.hidden = true;
     root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox);
     this.render();
+  }
+
+  /** Detection: a crossed-out eye icon over a vertical bar of three segments, under the node's name. */
+  private drawSignatureBar(parent: SVGGElement): void {
+    const root = svg('g', { class: 'sig-bar' }, parent);
+    const tip = svg('title', {}, root);
+    const icon = svg('svg', { x: 12, y: 54, width: 20, height: 20, viewBox: '0 0 512 512', class: 'sig-icon' }, root);
+    icon.innerHTML = iconBody('sight-disabled') ?? '';
+    const label = svg('text', { x: 40, y: 69, class: 'sig-label' }, root);
+    const segs: SVGRectElement[] = [];
+    const SEG_H = 22;
+    const GAP = 3;
+    // One segment per level above anonymous, so burned fills the whole bar. Segment 0 is the bottom one.
+    for (let i = 0; i < 3; i++) {
+      const y = 80 + (2 - i) * (SEG_H + GAP);
+      segs.push(svg('rect', { x: 15, y, width: 14, height: SEG_H, class: `sig-seg sig-seg-${i + 1}` }, root));
+    }
+    this.sigBar = { root, segs, label, tip };
+    this.sigShown = -1;
   }
 
   /** The loading bar over the file being worked on, updated every frame. */
@@ -421,6 +443,21 @@ export class NetworkView {
       // Other parts of the view (network name, exit button, frames) take the alarm colour too.
       this.root.dataset.alarm = String(lvl);
       this.alarmEl.textContent = `ALARM: ${['GREEN', 'YELLOW', 'ORANGE', 'RED'][lvl]}`;
+    }
+    const sig = this.game.signature;
+    if (this.sigBar && this.sigShown !== sig) {
+      this.sigShown = sig;
+      const b = this.sigBar;
+      b.root.dataset.level = String(sig);
+      // Filled from the bottom: anonymous = empty, burned = full.
+      b.segs.forEach((r, i) => r.classList.toggle('is-on', i < sig));
+      b.label.textContent = SIGNATURE_NAMES[sig].toUpperCase();
+      b.tip.textContent = `Detection: ${SIGNATURE_NAMES[sig]}. ` + [
+        'nobody knows your signature',
+        'agents are a bit wary of you',
+        'agents are on guard',
+        'every agent that sees you attacks at once',
+      ][sig] + '. it drops while no agent sees you; Mask resets it';
     }
     const integ = `Integrity ${this.game.integrity}/${this.game.maxIntegrity}: at 0 you are thrown out of the net`;
     if (this.integrityEl.title !== integ) {
@@ -531,7 +568,10 @@ export class NetworkView {
       els.main.classList.toggle('is-querying', g.query?.agentId === a.id);
       els.main.classList.toggle('is-hostile', a.mood === 'hostile');
       // Calm (patrol), unsure (asking you, or you failed it once), alert (system alarm orange or red), hostile.
-      const attitude = a.mood === 'hostile' ? 'hostile' : g.query?.agentId === a.id || a.strikes > 0 ? 'unsure' : g.alarm >= 2 && a.mood !== 'trusting' ? 'alert' : 'calm';
+      // The ring shows the warier of: what the agent itself is doing, and how known your signature is.
+      const own = a.mood === 'hostile' ? 3 : g.query?.agentId === a.id || a.strikes > 0 ? 1 : 0;
+      const sigLevel = a.mood === 'trusting' ? 0 : g.signature;
+      const attitude = (['calm', 'unsure', 'alert', 'hostile'] as const)[Math.max(own, sigLevel)];
       if (els.main.dataset.attitude !== attitude) els.main.dataset.attitude = attitude;
       els.main.classList.toggle('is-trusting', a.mood === 'trusting');
       els.main.classList.toggle('is-silenced', a.silenced);
@@ -875,6 +915,7 @@ export class NetworkView {
     title.textContent = name;
     const sub = svg('text', { x: 44, y: 40, class: 'room-kind' }, hud);
     sub.textContent = KIND_LABEL[kind];
+    this.drawSignatureBar(hud);
 
     const tip = svg('title', {}, grp);
     tip.textContent = `${name} (you are here). Right-click for actions.`;

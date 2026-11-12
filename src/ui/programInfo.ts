@@ -19,6 +19,7 @@ const TYPE_INFO: Record<ProgramType, string> = {
   decrypt: 'cracks a sealed archive',
   scrub: 'removes a tracker, so the file does not tag you when you download it',
   forge: 'opens a privilege lock without the privilege',
+  mask: 'changes your signature, so agents no longer recognise you. works only when no agent can see you',
 };
 
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
