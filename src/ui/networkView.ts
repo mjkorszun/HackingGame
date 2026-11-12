@@ -240,6 +240,8 @@ export class NetworkView {
   private queryBox!: HTMLDivElement;
   private queryKey = '';
   private miniMapperLayer: SVGGElement | null = null;
+  /** How far the time is into the next tick: moving things are drawn that much further along. */
+  private alpha = 0;
   private miniXY: (id: string) => { x: number; y: number } = () => ({ x: 0, y: 0 });
 
   constructor(
@@ -394,7 +396,8 @@ export class NetworkView {
   }
 
   /** Called every frame. Redraws the stage only when something visible changed. */
-  update(): void {
+  update(alpha = 0): void {
+    this.alpha = alpha;
     this.clock.textContent = formatTime(this.game.tick);
     this.pauseBtn.setAttribute('aria-label', this.game.paused ? 'Resume' : 'Pause');
     const muted = this.actions.sound.muted;
@@ -507,7 +510,7 @@ export class NetworkView {
       if (a.hop) {
         const from = a.node === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.node);
         const to = a.hop.to === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.hop.to);
-        const k = a.hop.elapsed / a.stats.hopTicks;
+        const k = Math.min(1, (a.hop.elapsed + this.alpha) / a.stats.hopTicks);
         pos = from && to ? { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k } : null;
         const m1 = this.miniXY(a.node);
         const m2 = this.miniXY(a.hop.to);
@@ -520,7 +523,8 @@ export class NetworkView {
       }
       els.main.style.display = pos ? '' : 'none';
       if (pos) {
-        // Moved by CSS with a short transition, so the 10 steps a second look like smooth motion.
+        // Drawn every frame along its link; a short transition only smooths jumps between spots in a node.
+        els.main.classList.toggle('is-hopping', !!a.hop);
         els.main.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
         this.agentPos.set(a.id, pos);
       }
@@ -578,7 +582,7 @@ export class NetworkView {
       if (a.hop) {
         const from = a.node === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.node);
         const to = a.hop.to === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.hop.to);
-        const k = a.hop.elapsed / ALLY_HOP_TICKS;
+        const k = Math.min(1, (a.hop.elapsed + this.alpha) / ALLY_HOP_TICKS);
         pos = from && to ? { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k } : null;
         const m1 = this.miniXY(a.node);
         const m2 = this.miniXY(a.hop.to);
@@ -598,6 +602,7 @@ export class NetworkView {
       els.main.classList.toggle('is-resident', !!a.resident);
       els.main.style.display = pos ? '' : 'none';
       if (pos) {
+        els.main.classList.toggle('is-hopping', !!a.hop || (a.program.type === 'shield' && !a.hop));
         els.main.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
         this.allyPos.set(a.id, pos);
       }
@@ -988,7 +993,7 @@ export class NetworkView {
     const end = hop ? this.positions.get(hop) : undefined;
     if (end) {
       // Walk across the room to its door, then along the link.
-      const t = this.game.hopProgress;
+      const t = this.game.hopProgressAt(this.alpha);
       const door = this.doorTowards(end.x, end.y);
       const to = { x: end.x, y: end.y + NEIGHBOUR_R * 0.6 };
       const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, k: number) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });

@@ -281,6 +281,13 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       return true;
     },
     refused: () => sfx.play('error'),
+    remove: (id) => {
+      if (account.loaded.includes(id)) return;
+      account.programs = account.programs.filter((p) => p.id !== id);
+      saveAccount(account);
+      sfx.play('menuItem');
+      renderHomeGear();
+    },
     fix: (id, index) => {
       const p = account.programs.find((x) => x.id === id);
       if (!p?.bugs?.[index]) return undefined;
@@ -461,7 +468,8 @@ function frame(now: number): void {
   last = now;
   for (let i = 0; i < ticks; i++) game.step();
   flush();
-  view.update();
+  // Between ticks, moving things are drawn part way along, so motion is smooth at any frame rate.
+  view.update(game.paused ? 0 : clock.alpha);
   updateDeck();
   requestAnimationFrame(frame);
 }

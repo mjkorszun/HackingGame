@@ -258,7 +258,7 @@ body {
   pointer-events: none;
   transition: transform 0.1s linear;
 }
-.avatar.no-transition { transition: none; }
+.avatar.no-transition, .avatar.is-walking { transition: none; }
 .avatar-icon { fill: currentColor; filter: drop-shadow(0 0 3px #000) drop-shadow(0 0 2px #000); }
 .is-walking .avatar-bob { animation: bob 0.3s ease-in-out infinite alternate; }
 @keyframes bob {
@@ -776,3 +776,11 @@ body {
 /* Main screen buttons: an icon before the label. */
 .home-menu .home-btn { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .menu-icon { width: 22px; height: 22px; fill: currentColor; flex: none; }
+
+/* Moving things are drawn every frame, so no transition while they travel. */
+.agent.is-hopping, .ally.is-hopping { transition: none; }
+
+.sw-del { position: absolute; right: 4px; bottom: 4px; background: #000; color: var(--grey); border: 1px solid #333; font: inherit; font-size: 11px; padding: 0 5px; cursor: pointer; }
+.sw-del:hover { color: var(--red); border-color: var(--red); }
+.sw-del.is-sure { color: var(--red); border-color: var(--red); background: #2a0808; }
+.sw-card { padding-bottom: 22px; }

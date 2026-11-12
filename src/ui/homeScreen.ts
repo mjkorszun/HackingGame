@@ -52,6 +52,8 @@ export interface HomeActions {
     place(id: string, index: number | null): boolean;
     /** A drop that did not work. */
     refused(): void;
+    /** Deletes a stored program for good. */
+    remove(id: string): void;
     /** Spends the days to fix one bug of a program; returns what happened. */
     fix(id: string, index: number): string | undefined;
   };
@@ -250,7 +252,7 @@ export class HomeScreen {
    */
   private renderSoftware(): void {
     const sw = this.actions.software.list();
-    const card = (p: Program) => {
+    const card = (p: Program, stored = false) => {
       const rarity = p.rarity ?? 'common';
       const traits = (p.traits ?? []).map((t) => `<div class="sw-trait">+ ${esc(t)}</div>`).join('');
       const bugs = (p.bugs ?? []).map((b, i) => `<div class="sw-bug">- ${esc(b)} <button type="button" class="sw-fix" data-fix="${i}" title="Spend ${bugFixDays(p)} days fixing this bug">fix ${bugFixDays(p)} d</button></div>`).join('');
@@ -263,13 +265,14 @@ export class HomeScreen {
           ${traits}
           ${bugs}
         </div>
+        ${stored ? `<button type="button" class="sw-del" title="Delete this program for good">delete</button>` : ''}
       </div>`;
     };
     this.soft.innerHTML = `
       <h2 class="sw-head">memory <span class="sw-used${sw.used > sw.memory * 0.9 ? ' is-full' : ''}">${sw.used} / ${sw.memory} GB</span><span class="mem-bar sw-mem-bar${sw.used > sw.memory * 0.9 ? ' is-full' : ''}" title="${sw.used} GB used, ${sw.memory - sw.used} GB free"><span class="mem-fill" style="width:${Math.min(100, (100 * sw.used) / sw.memory)}%"></span></span><span class="home-dim">${sw.memory - sw.used} GB free</span></h2>
-      <div class="sw-zone" data-zone="loaded">${sw.loaded.map(card).join('') || '<div class="sw-empty">drag programs here to take them into the net</div>'}</div>
+      <div class="sw-zone" data-zone="loaded">${sw.loaded.map((p) => card(p)).join('') || '<div class="sw-empty">drag programs here to take them into the net</div>'}</div>
       <h2 class="sw-head">storage <span class="home-dim">known, not loaded</span></h2>
-      <div class="sw-zone" data-zone="stored">${sw.stored.map(card).join('') || '<div class="sw-empty">nothing in storage</div>'}</div>
+      <div class="sw-zone" data-zone="stored">${sw.stored.map((p) => card(p, true)).join('') || '<div class="sw-empty">nothing in storage</div>'}</div>
       ${this.fixLine ? `<div class="sw-fixed">${esc(this.fixLine)}</div>` : ''}
       <h2 class="sw-head">software development</h2>
       <div class="sw-dev"></div>`;
@@ -305,6 +308,24 @@ export class HomeScreen {
         this.fixLine = this.actions.software.fix(p.id, Number(b.dataset.fix)) ?? '';
         this.render();
       }));
+      const del = el.querySelector<HTMLButtonElement>('.sw-del');
+      // Two clicks: the first asks, the second deletes for good.
+      del?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!del.classList.contains('is-sure')) {
+          this.actions.click();
+          del.classList.add('is-sure');
+          del.textContent = 'delete for good?';
+          setTimeout(() => {
+            del.classList.remove('is-sure');
+            del.textContent = 'delete';
+          }, 3000);
+          return;
+        }
+        this.actions.software.remove(p.id);
+        this.fixLine = `${p.name} deleted`;
+        this.render();
+      });
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const loaded = sw.loaded.includes(p);
