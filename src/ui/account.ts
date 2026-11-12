@@ -1,3 +1,4 @@
+import { activeSlot, markLast, slotKey } from './saves';
 import { DEFAULT_MEMORY, STARTING_PROGRAMS } from '../sim/game';
 import { programSize, usedMemory, type Program } from '../sim/programs';
 import { newPizzeria, type NetworkSeed } from '../sim/generate';
@@ -47,6 +48,8 @@ export interface Account {
   hardware: { installed: Partial<Record<SocketId, string>>; spare: string[]; bought: { day: number; ids: string[] } };
   /** What you know about each network from earlier runs (map, agents met, backdoors), by network id. */
   intel: Record<string, NetIntel>;
+  /** When it was last saved (ms since 1970), shown in the load list. */
+  savedAt?: number;
   /** Save format: 2 = the scout is the agent, the old scout is the mapper. */
   version?: number;
 }
@@ -217,13 +220,12 @@ export function toggleLoaded(a: Account, id: string): boolean {
   return true;
 }
 
-const KEY = 'cyberhack.account';
 
 export const DEFAULT_AVATAR = { icon: 'hood', color: '#3dff7a' };
 
 export function loadAccount(): Account {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(slotKey(activeSlot()));
     if (raw) {
       const a = JSON.parse(raw) as Account;
       if (typeof a.sats === 'number' && Array.isArray(a.programs)) return migrate(a);
@@ -235,8 +237,10 @@ export function loadAccount(): Account {
 }
 
 export function saveAccount(a: Account): void {
+  a.savedAt = Date.now();
   try {
-    localStorage.setItem(KEY, JSON.stringify(a));
+    localStorage.setItem(slotKey(activeSlot()), JSON.stringify(a));
+    markLast(activeSlot());
   } catch {
     // Nowhere to save: the account lasts only this page.
   }

@@ -22,9 +22,13 @@ import { isBuiltInIcon, randomIcon, registerIcon } from './ui/icons';
 import { generate } from './sim/generate';
 import { mergeIntel } from './sim/intel';
 import { needsEntryScreen, showEntryScreen } from './ui/entryScreen';
+import { activeSlot, clearSlot, markLast, reloadIntoGame, slotInfo, restoreBackup, writeBackup } from './ui/saves';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const account = loadAccount();
+// A new game is saved at once, so its slot is taken; Continue then picks the slot played last.
+if (!slotInfo(activeSlot())) saveAccount(account);
+else markLast(activeSlot());
 // Icons the player picked from the full set travel with the save.
 for (const [name, body] of Object.entries(account.customIcons)) registerIcon(name, body);
 
@@ -122,24 +126,20 @@ function endTheRun(): void {
   const health = { loss, now: account.health, kicked };
   showRunSummary(report, account.sats, before, () => {
     if (account.health <= 0) return showGameOver(loadBackup, newGame);
-    pickSkills(() => location.reload());
+    pickSkills(() => reloadIntoGame());
   }, health);
 }
 
-const BACKUP_KEY = 'cyberhack.account.backup';
-
 /** Loads the game as it was before the fatal run. */
 function loadBackup(): void {
-  const saved = localStorage.getItem(BACKUP_KEY);
-  if (saved) localStorage.setItem('cyberhack.account', saved);
-  location.reload();
+  restoreBackup(activeSlot());
+  reloadIntoGame();
 }
 
-/** Starts a new game from scratch. */
+/** Starts a new game from scratch in the same slot. */
 function newGame(): void {
-  localStorage.removeItem('cyberhack.account');
-  localStorage.removeItem(BACKUP_KEY);
-  location.reload();
+  clearSlot(activeSlot());
+  reloadIntoGame();
 }
 
 /** One skill choice for every level gained and not yet picked, then `done`. */
@@ -539,11 +539,7 @@ function systemFor(choice: Choice) {
 function enterNetwork(choice: Choice, entry?: string): void {
   const system = systemFor(choice);
   // The state before the run, to load if you die in it.
-  try {
-    localStorage.setItem(BACKUP_KEY, JSON.stringify(account));
-  } catch {
-    // No storage: nothing to load later.
-  }
+  writeBackup(activeSlot(), JSON.stringify(account));
   // Every trip into the net is one day: skimmers pay out, and may be found.
   passDay(account);
   // Taking a contract starts its deadline (today counts as the first day).
