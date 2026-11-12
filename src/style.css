@@ -802,31 +802,35 @@ body {
 .sig-seg { fill: none; stroke: var(--sig); stroke-width: 1.2; stroke-opacity: 0.5; transition: fill 0.4s, stroke 0.4s; }
 .sig-seg.is-on { fill: var(--sig); stroke-opacity: 1; }
 
-/* ---------- Hardware tab: implants in a brain cross-section ---------- */
-.hw-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(220px, 1fr); gap: 16px; align-items: start; }
-.hw-brain { width: 100%; height: auto; max-height: calc(100vh - 90px); }
-.hw-brain path, .hw-brain rect { fill: none; stroke: var(--green-dim); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.hw-brain .br-cortex { stroke: var(--green); fill: #031207; }
-.hw-brain .br-fold { stroke-width: 1.4; }
-.hw-brain .br-cerebellum { stroke: var(--green); fill: #031207; }
-.hw-brain .br-stem { stroke: var(--green); }
-.hw-brain .br-cord { stroke: var(--green); }
-.hw-brain .br-callosum, .hw-brain .br-thalamus { fill: #062010; }
-.hw-brain .br-jack { stroke: var(--blue); fill: #071a24; }
-.hw-brain .br-cable { stroke: var(--blue); stroke-width: 3; }
-.hw-slot { cursor: pointer; }
-.hw-slot .hw-ring { fill: #000; stroke: var(--grey); stroke-width: 1.6; stroke-dasharray: 4 3; }
-.hw-slot .hw-core { fill: none; }
-.hw-slot.is-installed .hw-ring { stroke: var(--blue); stroke-dasharray: none; }
-.hw-slot.is-installed .hw-core { fill: var(--blue); }
-.hw-slot:hover .hw-ring, .hw-slot.is-selected .hw-ring { stroke: var(--yellow); stroke-width: 2.4; }
+/* ---------- Hardware tab: chip sockets in a brain cross-section ---------- */
+.hw-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(230px, 1fr); gap: 16px; align-items: start; }
+.hw-brain { width: 100%; height: auto; max-height: calc(100vh - 80px); }
+.brain path { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.brain .br-cortex { stroke: var(--green); stroke-width: 2.2; fill: #06200f; }
+.brain .br-sulcus { stroke: #2fbf5c; stroke-width: 1.5; }
+.brain .br-cerebellum { stroke: var(--green); stroke-width: 2; fill: #06200f; }
+.brain .br-folia { stroke: #1f8a45; stroke-width: 1.1; }
+.brain .br-arbor { stroke: #9fffbf; stroke-width: 1.5; }
+.brain .br-stem { stroke: var(--green); stroke-width: 2; fill: #06200f; }
+.brain .br-fine { stroke: #2fbf5c; stroke-width: 1.3; }
+.brain .br-callosum { stroke: var(--green); stroke-width: 1.6; fill: #0d3a1c; }
+.brain .br-thalamus, .brain .br-pituitary { stroke: var(--green); stroke-width: 1.5; fill: #0a2e16; }
+.hw-socket { cursor: pointer; }
+.hw-socket .hw-box { fill: rgba(0, 0, 0, 0.75); stroke: #b8c4bc; stroke-width: 1.8; stroke-dasharray: 5 3; }
+.hw-socket.is-installed .hw-box { stroke: var(--blue); stroke-dasharray: none; fill: #071a24; }
+.hw-die { fill: var(--blue); }
+.hw-pins { stroke: var(--blue); stroke-width: 1.5; }
+.hw-socket:hover .hw-box, .hw-socket.is-selected .hw-box { stroke: var(--yellow); stroke-width: 2.6; }
 .hw-list { display: flex; flex-direction: column; gap: 3px; }
 .hw-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 8px; border: 1px solid transparent; background: none; color: var(--green); font: inherit; text-align: left; cursor: pointer; }
 .hw-row .hw-state { color: var(--grey); }
 .hw-row.is-installed .hw-state { color: var(--blue); }
 .hw-row:hover, .hw-row.is-selected { border-color: var(--yellow); }
 .hw-detail { margin-top: 12px; padding: 10px; border: 1px solid var(--green-faint); }
-.hw-detail-name { color: var(--yellow); font-weight: bold; }
-.hw-detail-region { color: var(--grey); margin-bottom: 6px; }
-.hw-detail-state { color: var(--grey); margin-bottom: 6px; }
+.hw-detail-name { color: var(--yellow); font-weight: bold; margin-bottom: 4px; }
+.hw-detail-state { color: var(--grey); margin-bottom: 8px; }
 .hw-detail-state.is-installed { color: var(--blue); }
+.hw-detail-fits { color: var(--grey); }
+.hw-fit { margin: 4px 0 0 10px; }
+.hw-fit-name { color: var(--green); }
+.hw-fit-about { color: var(--grey); }

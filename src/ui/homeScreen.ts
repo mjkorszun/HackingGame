@@ -4,7 +4,7 @@ import { sats } from '../sim/money';
 import { bugFixDays, devDays, MAX_BUGS, MAX_DEV_RATING, RARITY_TRAITS, type DevProject } from '../sim/development';
 import { cleanGameCode, SKILLS, xpToNext } from '../sim/progression';
 import { renderHardware } from './hardwareView';
-import type { ImplantId } from '../sim/implants';
+import type { SocketId } from '../sim/implants';
 import { AVATAR_ICONS, ICON_POOLS, MENU_ICONS, iconSvg, programIcon, randomIcon } from './icons';
 import { showIconPicker } from './iconPicker';
 import { showProgramInfo } from './programInfo';
@@ -78,8 +78,8 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 export class HomeScreen {
   private chosen: Choice | undefined;
   private open: 'networks' | 'contracts' | 'software' | 'hardware' | 'character' | null = null;
-  /** The implant slot shown in the Hardware tab. */
-  private hwSel: { id: ImplantId } = { id: 'memory' };
+  /** The socket shown in the Hardware tab. */
+  private hwSel: { id: SocketId } = { id: 'hippocampus' };
   /** What the last stretch of development did, shown under the project. */
   private devLines: string[] = [];
   private devDone: Program | undefined;

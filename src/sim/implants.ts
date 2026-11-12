@@ -1,48 +1,63 @@
 /**
- * Hardware is wired into your head: you jack into the net through a plug in your spine, and every
- * piece of hardware is an implant in a part of the brain. For now only memory is installed;
- * the other slots are empty and have no effects yet.
+ * Hardware is wired into your head: you jack into the net through your spinal cord, and every
+ * piece of hardware is a chip in a socket somewhere in the brain. A socket takes any chip that
+ * fits there. For now only memory is installed; the other sockets are empty and nothing has effects yet.
  */
 
-export type ImplantId =
-  | 'jack'
-  | 'surge'
-  | 'memory'
-  | 'processor'
-  | 'attack'
-  | 'defense'
-  | 'stealth'
-  | 'analysis'
-  | 'trace'
-  | 'bio'
-  | 'damper';
+export type SocketId =
+  | 'spine1'
+  | 'spine2'
+  | 'brainstem'
+  | 'thalamus'
+  | 'hippocampus'
+  | 'frontal'
+  | 'motor'
+  | 'parietal'
+  | 'visual1'
+  | 'visual2'
+  | 'cerebellum';
 
-export interface ImplantSlot {
-  id: ImplantId;
-  /** Name of the implant that goes there. */
+export interface Chip {
   name: string;
-  /** Part of the brain (or spine) it sits in. */
-  region: string;
-  /** What it does (planned: no effects yet except memory). */
   about: string;
 }
 
-export const IMPLANT_SLOTS: readonly ImplantSlot[] = [
-  { id: 'jack', name: 'Neural Jack', region: 'spinal cord', about: 'the plug you jack into the net with. a better jack means more bandwidth: faster downloads, decrypts and program loading' },
-  { id: 'surge', name: 'Surge Suppressor', region: 'spinal cord, at the jack', about: 'blocks surges coming down the cable, so agents\' attacks damage your implants less' },
-  { id: 'damper', name: 'Neural Damper', region: 'thalamus', about: 'filters pain and neural shocks before they reach the cortex: less damage to your brain from attacks' },
-  { id: 'bio', name: 'Bio Monitor', region: 'brainstem', about: 'watches your body and brain; a better one pulls you out of the net before your integrity hits zero' },
-  { id: 'memory', name: 'Memory', region: 'hippocampus', about: 'holds the programs you take into the net' },
-  { id: 'processor', name: 'Neural Processor', region: 'frontal cortex', about: 'raw thinking power: how many program instances (agents) you can run at once without slowing down' },
-  { id: 'attack', name: 'Attack Module', region: 'motor cortex', about: 'boosts all attack programs' },
-  { id: 'stealth', name: 'Stealth Module', region: 'parietal cortex', about: 'boosts all stealth programs' },
-  { id: 'analysis', name: 'Analysis Module', region: 'visual cortex', about: 'boosts all analysis programs' },
-  { id: 'trace', name: 'Trace Monitor', region: 'visual cortex', about: 'an overlay in your sight: shows how well agents know you, and slows your detection' },
-  { id: 'defense', name: 'Defense Module', region: 'cerebellum', about: 'boosts all defensive programs' },
+export interface Socket {
+  id: SocketId;
+  /** The socket's name: the part of the brain or spine it is in. */
+  name: string;
+  /** Chips that fit this socket (planned: none can be bought yet). */
+  fits: Chip[];
+}
+
+const JACK: Chip = { name: 'Neural Jack', about: 'the plug you jack into the net with. more bandwidth: faster downloads, decrypts and program loading' };
+const SURGE: Chip = { name: 'Surge Suppressor', about: 'blocks surges coming down the cable, so attacks damage your implants less' };
+const DAMPER: Chip = { name: 'Neural Damper', about: 'filters pain and neural shocks before they reach the cortex: less damage to your brain' };
+const BIO: Chip = { name: 'Bio Monitor', about: 'watches your body and brain, and pulls you out of the net before your integrity hits zero' };
+const MEMORY: Chip = { name: 'Memory', about: 'holds the programs you take into the net' };
+const PROCESSOR: Chip = { name: 'Neural Processor', about: 'thinking power: how many program instances (agents) you run at once without slowing down' };
+const ATTACK: Chip = { name: 'Attack Module', about: 'boosts all attack programs' };
+const STEALTH: Chip = { name: 'Stealth Module', about: 'boosts all stealth programs' };
+const ANALYSIS: Chip = { name: 'Analysis Module', about: 'boosts all analysis programs' };
+const TRACE: Chip = { name: 'Trace Monitor', about: 'an overlay in your sight: shows how well agents know you, and slows your detection' };
+const DEFENSE: Chip = { name: 'Defense Module', about: 'boosts all defensive programs' };
+
+export const SOCKETS: readonly Socket[] = [
+  { id: 'spine1', name: 'Spinal cord I', fits: [JACK, SURGE] },
+  { id: 'spine2', name: 'Spinal cord II', fits: [JACK, SURGE] },
+  { id: 'brainstem', name: 'Brainstem', fits: [BIO] },
+  { id: 'thalamus', name: 'Thalamus', fits: [DAMPER] },
+  { id: 'hippocampus', name: 'Hippocampus', fits: [MEMORY] },
+  { id: 'frontal', name: 'Frontal cortex', fits: [PROCESSOR] },
+  { id: 'motor', name: 'Motor cortex', fits: [ATTACK] },
+  { id: 'parietal', name: 'Parietal cortex', fits: [STEALTH] },
+  { id: 'visual1', name: 'Visual cortex I', fits: [ANALYSIS, TRACE] },
+  { id: 'visual2', name: 'Visual cortex II', fits: [ANALYSIS, TRACE] },
+  { id: 'cerebellum', name: 'Cerebellum', fits: [DEFENSE] },
 ];
 
-/** What is installed in a slot, or undefined when the slot is empty. */
-export function installedImplant(id: ImplantId, memoryGB: number): string | undefined {
-  if (id === 'memory') return `${memoryGB} GB`;
+/** The chip in a socket (with its size or level), or undefined when the socket is empty. */
+export function installedChip(id: SocketId, memoryGB: number): { chip: Chip; label: string } | undefined {
+  if (id === 'hippocampus') return { chip: MEMORY, label: `Memory ${memoryGB} GB` };
   return undefined;
 }
