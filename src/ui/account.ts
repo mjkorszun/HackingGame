@@ -2,6 +2,7 @@ import { DEFAULT_MEMORY, STARTING_PROGRAMS } from '../sim/game';
 import { programSize, usedMemory, type Program } from '../sim/programs';
 import { newPizzeria, type NetworkSeed } from '../sim/generate';
 import type { DevProject } from '../sim/development';
+import type { NetIntel } from '../sim/intel';
 import { newGameCode } from '../sim/progression';
 import { MAX_HEALTH, REST_PER_DAY } from '../sim/health';
 import { chipById, KINDS, REMOVE_DAYS, sellPrice, SOCKETS, STARTER_CHIPS, RENAMED_CHIPS, type SocketId } from '../sim/implants';
@@ -44,6 +45,8 @@ export interface Account {
   contract?: { title: string; deadline: number };
   /** Chips wired into your brain (socket to chip model id), spare chips you own, and market offers bought today. */
   hardware: { installed: Partial<Record<SocketId, string>>; spare: string[]; bought: { day: number; ids: string[] } };
+  /** What you know about each network from earlier runs (map, agents met, backdoors), by network id. */
+  intel: Record<string, NetIntel>;
   /** Save format: 2 = the scout is the agent, the old scout is the mapper. */
   version?: number;
 }
@@ -160,7 +163,7 @@ const START_STORED = ['Sparrow 1.0', 'Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mim
 /** A new game's account. */
 export function fresh(): Account {
   const programs = STARTING_PROGRAMS.map((p) => ({ ...p }));
-  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {}, hardware: newHardware(), health: MAX_HEALTH, version: SAVE_VERSION };
+  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {}, hardware: newHardware(), health: MAX_HEALTH, intel: {}, version: SAVE_VERSION };
 }
 
 const SAVE_VERSION = 2;
@@ -261,6 +264,7 @@ function migrate(a: Account): Account {
   if (typeof a.reputation !== 'number') a.reputation = 0;
   if (!Array.isArray(a.networks) || !a.networks.length) a.networks = [newPizzeria(randomSeed())];
   if (!Array.isArray(a.skimmers)) a.skimmers = [];
+  if (!a.intel || typeof a.intel !== 'object') a.intel = {};
   if (!Array.isArray(a.news)) a.news = [];
   if (typeof a.level !== 'number') a.level = 1;
   if (typeof a.xp !== 'number') a.xp = 0;

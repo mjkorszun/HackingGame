@@ -935,3 +935,35 @@ body {
 
 .sp-later { margin-top: 14px; background: none; border: 1px solid var(--green-faint); color: var(--grey); font: inherit; font-size: 13px; padding: 4px 12px; cursor: pointer; }
 .sp-later:hover { color: var(--green); border-color: var(--green-dim); }
+
+/* ---------- idle: agents and the avatar never stand quite still (a look only) ---------- */
+.agent-idle { animation: idle-drift 3s ease-in-out infinite; }
+@keyframes idle-drift {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(1.2px, -1.4px) rotate(2deg); }
+  50% { transform: translate(0, -2.2px) rotate(0deg); }
+  75% { transform: translate(-1.2px, -1px) rotate(-2deg); }
+}
+.avatar:not(.is-walking) .avatar-bob { animation: avatar-idle 2.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+@keyframes avatar-idle {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1, 1); }
+  30% { transform: translateY(-1.5px) rotate(1.5deg) scale(1.01, 0.99); }
+  60% { transform: translateY(-2.5px) rotate(-1deg) scale(0.99, 1.01); }
+}
+/* An agent that never leaves its node: a square with cut corners; its ring segments run round it. */
+.agent.is-fixed .agent-ring { stroke-dasharray: 19 6; animation-name: ring-flow; transform: none; }
+@keyframes ring-flow { to { stroke-dashoffset: -100; } }
+
+/* ---------- entry screen: choose where to come into a system ---------- */
+.entry-panel { width: min(980px, 94vw); }
+.entry-body { display: flex; gap: 18px; flex-wrap: wrap; }
+.entry-map { flex: 2 1 420px; min-width: 0; border: 1px solid var(--green-dim); background: #000; }
+.entry-info { flex: 1 1 220px; min-height: 160px; }
+.entry-info h3 { margin-top: 0; }
+.entry-info li { margin-bottom: 6px; }
+.entry-tag { color: var(--yellow); }
+.entry-label { fill: var(--grey); font-size: 11px; text-anchor: middle; pointer-events: none; }
+.entry-map .mini-node { stroke-width: 2; }
+.entry-choice { animation: entry-blink 0.9s ease-in-out infinite alternate; }
+@keyframes entry-blink { from { fill: #000; } to { fill: var(--kc, var(--green)); } }
+.rs-panel .entry-cancel { margin-top: 16px; }

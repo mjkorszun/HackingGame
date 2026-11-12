@@ -20,6 +20,8 @@ import { HomeScreen, type Choice, type ContractOffer } from './ui/homeScreen';
 import { bugFixDays, finishProgram, fixBug, newProject, work } from './sim/development';
 import { isBuiltInIcon, randomIcon, registerIcon } from './ui/icons';
 import { generate } from './sim/generate';
+import { mergeIntel } from './sim/intel';
+import { needsEntryScreen, showEntryScreen } from './ui/entryScreen';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const account = loadAccount();
@@ -99,6 +101,8 @@ function leaveNet(): void {
     account.loaded = account.loaded.filter((id) => id !== sk.id);
     account.skimmers.push({ netId: game.network.def.id, program: sk });
   }
+  // Remember the map, the agents met and any backdoor for the next visit.
+  account.intel[game.network.def.id] = mergeIntel(account.intel[game.network.def.id], game.intel());
   account.programs = [...account.programs, ...report.software];
   // Programs loaded mid-run stay loaded.
   for (const l of game.loot) if (l.loaded && l.software) account.loaded.push(l.software.id);
@@ -285,13 +289,19 @@ function updateDeck(): void {
 }
 
 const offers: ContractOffer[] = testSystem.contract ? [{ contract: testSystem.contract, system: testSystem }] : [];
-const homeState = { day: account.day, reputation: account.reputation, networks: account.networks, offers, skimmers: account.skimmers, news: account.news };
+const homeState = { day: account.day, reputation: account.reputation, networks: account.networks, offers, skimmers: account.skimmers, news: account.news, backdoors: Object.fromEntries(Object.entries(account.intel).map(([id, i]) => [id, i.backdoors])) };
 // The browser's own right-click menu never shows: right-click belongs to the game's menus.
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 const home = new HomeScreen(document.getElementById('home')!, homeState, {
   enter: (choice) => {
-    if (!dayJob) enterNetwork(choice);
+    if (dayJob) return;
+    // With a choice of entry, or part of the map already known, you first pick where to come in.
+    const system = systemFor(choice);
+    const intel = account.intel[system.id];
+    if (!needsEntryScreen(system, intel)) return enterNetwork(choice);
+    sfx.play('menuOpen');
+    showEntryScreen(system, intel, (node) => enterNetwork(choice, node), () => sfx.play('menuClose'), () => sfx.play('hover'));
   },
   click: () => sfx.play('menuItem'),
   character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks, code: account.code, health: account.health }),
@@ -502,9 +512,13 @@ function renderHomeGear(): void {
 }
 renderHomeGear();
 
-/** Leaves the main screen and starts the run: the console, the network view and the clock. */
-function enterNetwork(choice: Choice): void {
-  const system = choice.kind === 'contract' ? { ...choice.offer.system, contract: choice.offer.contract } : generate(choice.net);
+function systemFor(choice: Choice) {
+  return choice.kind === 'contract' ? { ...choice.offer.system, contract: choice.offer.contract } : generate(choice.net);
+}
+
+/** Leaves the main screen and starts the run, coming in at `entry` (the gateway when not given). */
+function enterNetwork(choice: Choice, entry?: string): void {
+  const system = systemFor(choice);
   // The state before the run, to load if you die in it.
   try {
     localStorage.setItem(BACKUP_KEY, JSON.stringify(account));
@@ -519,7 +533,7 @@ function enterNetwork(choice: Choice): void {
     account.contract = { title: choice.offer.contract.title, deadline: account.day + days - 1 };
   }
   saveAccount(account);
-  game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account) });
+  game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account), entry, intel: account.intel[system.id] });
   // Skimmers planted here earlier are still at work in the payment gateway.
   const gateway = system.nodes.find((n) => n.kind === 'payment');
   if (gateway) for (const sk of account.skimmers.filter((k) => k.netId === system.id)) game.addResident(sk.program, gateway.id);

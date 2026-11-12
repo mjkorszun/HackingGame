@@ -31,6 +31,8 @@ export interface HomeState {
   skimmers: { netId: string; program: { name: string; efficiency?: number } }[];
   /** What happened on the last day. */
   news: string[];
+  /** Backdoors you left, by network id. */
+  backdoors?: Record<string, string[]>;
 }
 
 export interface HomeActions {
@@ -267,14 +269,13 @@ export class HomeScreen {
     }
   }
 
-  /**
-   * What you left behind in a network that is still there: planted skimmers and other agents of yours.
-   * Backdoors will show here too once they last between runs.
-   */
+  /** What you left behind in a network that is still there: planted skimmers, other agents of yours, backdoors. */
   private lasting(netId: string, income = 0.08): string {
     const lines = this.state.skimmers
       .filter((k) => k.netId === netId)
       .map((k) => `${k.program.name} (skimmer) planted: +${sats(Math.round(income * (k.program.efficiency ?? 1) * 100) / 100)} a day`);
+    const doors = this.state.backdoors?.[netId]?.length ?? 0;
+    if (doors) lines.push(`${doors > 1 ? `${doors} backdoors` : 'a backdoor'}: you can enter the system there`);
     if (!lines.length) return '';
     return `<div class="cc-lasting"><div class="cc-lasting-head">left in this network:</div>${lines.map((l) => `<div class="cc-line cc-skim">${l}</div>`).join('')}</div>`;
   }

@@ -147,8 +147,11 @@ export interface Agent {
   hp: number;
   /** Node it is in, or the node it is leaving while on a link. */
   node: string;
-  /** Hop in progress. */
-  hop: { to: string; elapsed: number } | null;
+  /**
+   * Hop in progress: the first LEAVE_TICKS it walks to the link's end in its node, then it crosses the link.
+   * total = LEAVE_TICKS + the crossing.
+   */
+  hop: { to: string; elapsed: number; total: number } | null;
   stayLeft: number;
   queryLeft: number;
   attackLeft: number;
@@ -160,6 +163,12 @@ export interface Agent {
   silenced: boolean;
   known: Knowledge;
 }
+
+/** Placeholder: an agent takes 0.75 s to walk to the link before it crosses it. */
+export const LEAVE_TICKS = 7.5;
+
+/** Placeholder: an agent chasing you crosses a link in 0.5 s, so with the walk to the link it takes 1.25 s a node (you take 1 s). */
+export const CHASE_HOP_TICKS = 5;
 
 /** Ticks per second, for showing intervals. */
 const TPS = 10;

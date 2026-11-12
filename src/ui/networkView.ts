@@ -1,5 +1,5 @@
 import { sats } from '../sim/money';
-import { agentInfo, oddsWord, versus, WARRIORS, type Agent, type WarriorType } from '../sim/agents';
+import { agentInfo, LEAVE_TICKS, oddsWord, versus, WARRIORS, type Agent, type WarriorType } from '../sim/agents';
 import { apparentContent, clickAction, isEmpty, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
 import { Tooltip, type TipLine } from './tooltip';
 import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
@@ -73,6 +73,22 @@ const KIND_LABEL: Record<NodeKind, string> = {
   honeypot: 'database',
   hidden: 'hidden node',
 };
+
+/** How long an agent takes to walk from the link's end to its spot after arriving (a look only). */
+const ARRIVE_MS = 450;
+
+function lerpXY(a: { x: number; y: number }, b: { x: number; y: number }, k: number): { x: number; y: number } {
+  return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+}
+
+function easeInOut(k: number): number {
+  return k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+}
+
+/** A square with cut corners around (0, 0): half its side, and how much each corner is cut. */
+function cutSquare(h: number, c: number): string {
+  return `M${-h + c},${-h} H${h - c} L${h},${-h + c} V${h - c} L${h - c},${h} H${-h + c} L${-h},${h - c} V${-h + c} Z`;
+}
 
 function svg<K extends keyof SVGElementTagNameMap>(
   tag: K,
@@ -351,6 +367,9 @@ export class NetworkView {
   /** Where things are drawn, for effects: file centres, agents' last spots, the avatar's middle. */
   private filePos = new Map<string, { x: number; y: number }>();
   private agentPos = new Map<string, { x: number; y: number }>();
+  /** Where each hopping agent was last drawn, and agents walking from the link's end to their spot. */
+  private lastHopPos = new Map<string, { pos: { x: number; y: number }; at: number }>();
+  private arrivals = new Map<string, { from: { x: number; y: number }; at: number }>();
   private avatarPos = { x: CX, y: CY };
   /** Top layer for shots and outcome texts. */
   private fxLayer: SVGGElement | null = null;
@@ -543,24 +562,50 @@ export class NetworkView {
       seen.add(a.id);
       let els = this.agentEls.get(a.id);
       if (!els) {
-        els = { main: this.drawAgent(a, layer), mini: svg('circle', { r: 3.2, class: `mini-agent is-${a.stats.type}` }, mini) as unknown as SVGGElement };
+        const miniDot = a.stats.ai === 'stationary'
+          ? svg('rect', { width: 6, height: 6, rx: 1, class: `mini-agent is-${a.stats.type}` }, mini)
+          : svg('circle', { r: 3.2, class: `mini-agent is-${a.stats.type}` }, mini);
+        els = { main: this.drawAgent(a, layer), mini: miniDot as unknown as SVGGElement };
         this.agentEls.set(a.id, els);
       }
       let pos: { x: number; y: number } | null;
       let miniPos: { x: number; y: number } | null;
+      // While it walks to the link it keeps its spot in the node, so the others don't jump.
+      const i = count.get(a.node) ?? 0;
+      count.set(a.node, i + 1);
+      const spot = this.agentSpot(a.node, i);
+      let cross = 0;
       if (a.hop) {
-        const from = a.node === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.node);
-        const to = a.hop.to === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.hop.to);
-        const k = Math.min(1, (a.hop.elapsed + this.alpha) / a.stats.hopTicks);
-        pos = from && to ? { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k } : null;
+        // First it walks from its spot to where the link leaves the node, then it crosses the link.
+        const t = a.hop.elapsed + this.alpha;
+        const leave = Math.min(1, t / LEAVE_TICKS);
+        cross = Math.max(0, Math.min(1, (t - LEAVE_TICKS) / (a.hop.total - LEAVE_TICKS)));
+        const cur = g.currentNode;
+        const fromNode = a.node === cur ? null : this.positions.get(a.node);
+        const toNode = a.hop.to === cur ? null : this.positions.get(a.hop.to);
+        // The link's end in the node it leaves, and where it ends up.
+        const exit = a.node === cur ? (toNode ? this.doorTowards(toNode.x, toNode.y) : null) : fromNode;
+        const end = a.hop.to === cur ? (fromNode ? this.doorTowards(fromNode.x, fromNode.y) : null) : toNode;
+        pos = spot && exit && end ? (cross > 0 ? lerpXY(exit, end, cross) : lerpXY(spot, exit, easeInOut(leave))) : null;
         const m1 = this.miniXY(a.node);
         const m2 = this.miniXY(a.hop.to);
-        miniPos = pos ? { x: m1.x + (m2.x - m1.x) * k, y: m1.y + (m2.y - m1.y) * k } : null;
+        miniPos = pos ? lerpXY(m1, m2, cross) : null;
+        if (pos) this.lastHopPos.set(a.id, { pos, at: performance.now() });
       } else {
-        const i = count.get(a.node) ?? 0;
-        count.set(a.node, i + 1);
-        pos = this.agentSpot(a.node, i);
+        pos = spot;
         miniPos = pos ? this.miniXY(a.node) : null;
+        // Just arrived: it walks from the link's end to its spot.
+        const was = this.lastHopPos.get(a.id);
+        if (was && pos) {
+          if (!this.arrivals.has(a.id)) this.arrivals.set(a.id, { from: was.pos, at: performance.now() });
+          this.lastHopPos.delete(a.id);
+        }
+        const arr = this.arrivals.get(a.id);
+        if (arr && pos) {
+          const k = (performance.now() - arr.at) / ARRIVE_MS;
+          if (k >= 1) this.arrivals.delete(a.id);
+          else pos = lerpXY(arr.from, pos, easeInOut(k));
+        }
       }
       // You only see inside your own node. An agent you have not met yet stays hidden elsewhere; one coming
       // your way fades in over the second half of its hop, and one leaving fades out the same way.
@@ -568,10 +613,7 @@ export class NetworkView {
       if (!a.hop && a.node === here) this.metAgents.add(a.id);
       const met = this.metAgents.has(a.id);
       let opacity = met ? 1 : 0;
-      if (!met && a.hop?.to === here) {
-        const k = Math.min(1, (a.hop.elapsed + this.alpha) / a.stats.hopTicks);
-        opacity = Math.max(0, (k - 0.5) * 2);
-      }
+      if (!met && a.hop?.to === here) opacity = Math.max(0, (cross - 0.5) * 2);
       if (opacity <= 0) pos = null;
       els.main.style.opacity = opacity < 1 ? opacity.toFixed(2) : '';
       els.mini.style.opacity = opacity < 1 ? opacity.toFixed(2) : '';
@@ -579,7 +621,7 @@ export class NetworkView {
       els.main.style.display = pos ? '' : 'none';
       if (pos) {
         // Drawn every frame along its link; a short transition only smooths jumps between spots in a node.
-        els.main.classList.toggle('is-hopping', !!a.hop);
+        els.main.classList.toggle('is-hopping', !!a.hop || this.arrivals.has(a.id));
         els.main.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
         this.agentPos.set(a.id, pos);
       }
@@ -602,8 +644,13 @@ export class NetworkView {
       }
       els.mini.style.display = miniPos ? '' : 'none';
       if (miniPos) {
-        els.mini.setAttribute('cx', miniPos.x.toFixed(1));
-        els.mini.setAttribute('cy', miniPos.y.toFixed(1));
+        if (a.stats.ai === 'stationary') {
+          els.mini.setAttribute('x', (miniPos.x - 3).toFixed(1));
+          els.mini.setAttribute('y', (miniPos.y - 3).toFixed(1));
+        } else {
+          els.mini.setAttribute('cx', miniPos.x.toFixed(1));
+          els.mini.setAttribute('cy', miniPos.y.toFixed(1));
+        }
       }
     }
     for (const [id, els] of this.agentEls) {
@@ -683,13 +730,16 @@ export class NetworkView {
   /** One of your agents: a green ring with its program's icon, its name and an HP bar. */
   private drawAlly(a: Ally, parent: Element, mini: Element): { main: SVGGElement; mini: SVGGElement; hp: SVGRectElement } {
     const grp = svg('g', { class: 'ally', 'data-ally': a.id }, parent) as SVGGElement;
-    svg('circle', { r: 13, class: 'ally-body' }, grp);
-    const icon = svg('svg', { x: -9, y: -9, width: 18, height: 18, viewBox: '0 0 512 512', class: 'ally-icon' }, grp);
+    const idle = svg('g', { class: 'agent-idle' }, grp);
+    idle.style.animationDuration = `${(2.6 + Math.random() * 1.4).toFixed(2)}s`;
+    idle.style.animationDelay = `-${(Math.random() * 4).toFixed(2)}s`;
+    svg('circle', { r: 13, class: 'ally-body' }, idle);
+    const icon = svg('svg', { x: -9, y: -9, width: 18, height: 18, viewBox: '0 0 512 512', class: 'ally-icon' }, idle);
     if (a.program.color) icon.style.color = a.program.color;
     icon.innerHTML = iconBody(iconName(a.program)) ?? '';
-    svg('rect', { x: -12, y: -21, width: 24, height: 3, class: 'ally-hp-bg' }, grp);
-    const hp = svg('rect', { x: -12, y: -21, width: 24, height: 3, class: 'ally-hp' }, grp);
-    const label = svg('text', { x: 0, y: 25, class: 'ally-name' }, grp);
+    svg('rect', { x: -12, y: -21, width: 24, height: 3, class: 'ally-hp-bg' }, idle);
+    const hp = svg('rect', { x: -12, y: -21, width: 24, height: 3, class: 'ally-hp' }, idle);
+    const label = svg('text', { x: 0, y: 25, class: 'ally-name' }, idle);
     label.textContent = a.program.name;
     const dot = svg('circle', { r: 3.2, class: 'mini-ally' }, mini) as unknown as SVGGElement;
     this.tip.attach(grp, () => {
@@ -718,10 +768,21 @@ export class NetworkView {
 
   /** A warrior: a dot with a small sword inside, coloured by its type. */
   private drawAgent(a: Agent, parent: Element): SVGGElement {
-    const grp = svg('g', { class: `agent is-${a.stats.type}`, 'data-agent': a.id }, parent) as SVGGElement;
+    const outer = svg('g', { class: `agent is-${a.stats.type}`, 'data-agent': a.id }, parent) as SVGGElement;
+    // Idle: it never stands quite still (only a look, it does not move in the game).
+    const grp = svg('g', { class: 'agent-idle' }, outer);
+    grp.style.animationDuration = `${(2.6 + Math.random() * 1.4).toFixed(2)}s`;
+    grp.style.animationDelay = `-${(Math.random() * 4).toFixed(2)}s`;
     // Its attitude: a ring of four segments that spins, faster the warier it is.
-    svg('circle', { r: 15, class: 'agent-ring' }, grp);
-    svg('circle', { r: 11, class: 'agent-body' }, grp);
+    // An agent that never leaves its node is a square with cut corners; the others are round.
+    if (a.stats.ai === 'stationary') {
+      outer.classList.add('is-fixed');
+      svg('path', { d: cutSquare(15, 5), pathLength: 100, class: 'agent-ring' }, grp);
+      svg('path', { d: cutSquare(11, 4), class: 'agent-body' }, grp);
+    } else {
+      svg('circle', { r: 15, class: 'agent-ring' }, grp);
+      svg('circle', { r: 11, class: 'agent-body' }, grp);
+    }
     const icon = svg('svg', { x: -7, y: -7, width: 14, height: 14, viewBox: '0 0 512 512', class: 'agent-icon' }, grp);
     icon.innerHTML = iconBody(agentIcon(this.game.network.def.id, WARRIOR_TYPES.indexOf(a.stats.type), a.stats.role)) ?? '';
     // Integrity bar over its head, shown once it has taken damage.
@@ -731,15 +792,15 @@ export class NetworkView {
     label.textContent = a.name;
     const alert = svg('text', { x: 0, y: -26, class: 'agent-alert' }, grp);
     alert.textContent = '!';
-    this.tip.attach(grp, () => {
+    this.tip.attach(outer, () => {
       const live = this.game.agentById(a.id);
       if (!live) return [{ text: a.name, cls: 'tip-title' }];
       const [head, ...rest] = agentInfo(live);
       const mood = live.mood === 'hostile' ? 'HOSTILE' : live.mood === 'trusting' ? 'fooled: leaves you alone here' : 'on patrol';
       return [{ text: head, cls: 'tip-title' }, { text: mood + (live.silenced ? ', silenced' : ''), cls: live.mood === 'hostile' ? 'tip-honeytoken' : 'c-system' }, ...rest.map((t) => ({ text: t }))];
     });
-    grp.addEventListener('mouseenter', () => this.actions.hover());
-    grp.addEventListener('contextmenu', (e) => {
+    outer.addEventListener('mouseenter', () => this.actions.hover());
+    outer.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
       const live = this.game.agentById(a.id);
@@ -756,7 +817,7 @@ export class NetworkView {
         { label: 'Analyze', hint: live.known === 'full' ? 'already fully analyzed' : here ? `${this.game.findProgram('analyze')?.name ?? 'needs an analyze program'}: its type and stats` : 'not in your node', disabled: !here || live.known === 'full' || !this.game.findProgram('analyze'), action: () => this.actions.command(`analyze ${live.name}`) },
       ]);
     });
-    return grp;
+    return outer;
   }
 
   /** The query window: who asks, what you know about it, and how you can answer. */

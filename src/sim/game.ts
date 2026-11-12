@@ -1,5 +1,6 @@
 import { sats } from './money';
-import { codeName, typeNames, versus, WARRIORS, type Agent } from './agents';
+import type { AgentSighting, NetIntel } from './intel';
+import { CHASE_HOP_TICKS, codeName, LEAVE_TICKS, typeNames, versus, WARRIORS, type Agent } from './agents';
 import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
@@ -181,6 +182,10 @@ export class Game {
   private readonly identified = new Set<string>();
   /** Nodes the player knows exist: visited ones and their neighbours. The rest of the map is unseen. */
   private readonly known = new Set<string>();
+  /** Agents you have stood in a node with, by node: remembered for later runs. */
+  private readonly sightings = new Map<string, Set<string>>();
+  /** Backdoors you left in this run. */
+  readonly backdoorsPlaced = new Set<string>();
   /** Stable number of each hidden node in this system, used for its ?N name. */
   private readonly unknownNumber = new Map<string, number>();
   /** Privileges the player holds in this system. */
@@ -238,15 +243,21 @@ export class Game {
   /**
    * programs: the ones loaded in your memory (usable in this run).
    * opts.memory: memory slots; opts.nextId: first free program id number (ids stay unique across the account).
+   * opts.entry: where you come in (the gateway, or one of your backdoors). opts.intel: the map you know from earlier runs.
    */
-  constructor(system: SystemDef, rng: Rng = Math.random, programs: Program[] = STARTING_PROGRAMS, opts: { memory?: number; nextId?: number } = {}) {
+  constructor(system: SystemDef, rng: Rng = Math.random, programs: Program[] = STARTING_PROGRAMS, opts: { memory?: number; nextId?: number; entry?: string; intel?: NetIntel } = {}) {
     this.d100 = () => Math.floor(rng() * 100) + 1;
     this.programs = programs.map((p) => ({ ...p }));
     this.memorySlots = opts.memory ?? Math.max(DEFAULT_MEMORY, usedMemory(this.programs));
     this.nextProgramId = Math.max(100, opts.nextId ?? 0, ...this.programs.map((p) => Number(p.id.slice(1)) + 1 || 0));
     this.network = new Network(system);
-    this.currentNode = system.entry;
-    for (const n of system.nodes) if (!n.hidden || n.id === system.entry) this.identified.add(n.id);
+    const entry = opts.entry && this.network.has(opts.entry) ? opts.entry : system.entry;
+    this.currentNode = entry;
+    for (const n of system.nodes) if (!n.hidden || n.id === entry) this.identified.add(n.id);
+    if (opts.intel) {
+      for (const id of opts.intel.identified) if (this.network.has(id)) this.identified.add(id);
+      for (const id of opts.intel.known) if (this.network.has(id)) this.learn(id);
+    }
     for (const n of system.nodes) {
       if (n.kind === 'database' || (n.kind === 'honeypot' && (n.disguise ?? 'database') === 'database')) this.files.set(n.id, generateFiles(system.fileSeed ? `${system.fileSeed}/${n.id}` : n.id, system.security ?? 1));
     }
@@ -264,8 +275,9 @@ export class Game {
       });
     });
     this.discoverAround(this.currentNode);
+    this.noteSightings();
     this.log(`link up: ${system.name} (${system.location})`, 'system');
-    this.log(`you are at ${this.nameOf(this.currentNode)}`);
+    this.log(`you are at ${this.nameOf(this.currentNode)}${entry !== system.entry ? ' (through your backdoor)' : ''}`);
     if (job) this.log(`contract: ${job.title}. find the contract file in one of the databases and ${job.need} it. pays ${job.pay} sats`, 'system');
   }
 
@@ -365,7 +377,7 @@ export class Game {
       if (this.ended) return;
       if (a.hop) {
         a.hop.elapsed++;
-        if (a.hop.elapsed >= a.stats.hopTicks) {
+        if (a.hop.elapsed >= a.hop.total) {
           a.node = a.hop.to;
           a.hop = null;
           a.stayLeft = a.stats.stay[0] + Math.floor(((this.d100() - 1) / 100) * (a.stats.stay[1] - a.stats.stay[0]));
@@ -394,7 +406,7 @@ export class Game {
           // Chase the player.
           const target = this.move ? this.move.to : this.currentNode;
           const path = this.network.path(a.node, target);
-          if (path.length) a.hop = { to: path[0], elapsed: 0 };
+          if (path.length) this.startHop(a, path[0], true);
         }
         continue;
       }
@@ -429,13 +441,18 @@ export class Game {
             j = a.routeBack ? i - 1 : i + 1;
           }
           const step = this.network.path(a.node, a.route[j])[0];
-          if (step) a.hop = { to: step, elapsed: 0 };
+          if (step) this.startHop(a, step);
           continue;
         }
         const next = this.network.neighbours(a.node).filter((n) => n.kind !== 'honeypot');
-        if (next.length) a.hop = { to: this.pick(next).id, elapsed: 0 };
+        if (next.length) this.startHop(a, this.pick(next).id);
       }
     }
+  }
+
+  /** An agent sets off: it walks to the link first, then crosses it (faster when it is chasing you). */
+  private startHop(a: Agent, to: string, chasing = false): void {
+    a.hop = { to, elapsed: 0, total: LEAVE_TICKS + (chasing ? CHASE_HOP_TICKS : a.stats.hopTicks) };
   }
 
   private updateAlarm(): void {
@@ -1071,6 +1088,7 @@ export class Game {
     this.updateAgents();
     this.updateAllies();
     this.updateAlarm();
+    this.noteSightings();
   }
 
   setPaused(paused: boolean, auto = false): void {
@@ -1208,9 +1226,47 @@ export class Game {
       this.log(`map downloaded: ${this.identified.size - before} hidden nodes identified`, 'info');
       return true;
     }
+    if (action.id === 'backdoor') {
+      this.backdoorsPlaced.add(this.currentNode);
+      this.outcome({ kind: 'player' }, true, 'BACKDOOR');
+      this.log(`backdoor left in ${this.nameOf(this.currentNode)}: next time you can enter the system here`, 'info');
+      return true;
+    }
     this.outcome({ kind: 'player' }, true, action.id.toUpperCase());
     this.log(`${action.id}: ${action.result}`, 'info');
     return true;
+  }
+
+  /** What this run found out about the system, to remember for later runs. */
+  intel(): NetIntel {
+    const agents: NetIntel['agents'] = {};
+    for (const [node, ids] of this.sightings) {
+      const list: AgentSighting[] = [];
+      for (const id of ids) {
+        const a = this.agentById(id) ?? this.seenAgents.get(id);
+        if (!a) continue;
+        const had = list.find((x) => x.type === a.stats.type);
+        if (had) had.analyzed ||= a.known !== 'none';
+        else list.push({ type: a.stats.type, typeName: a.typeName, role: a.stats.role, analyzed: a.known !== 'none' });
+      }
+      if (list.length) agents[node] = list;
+    }
+    return { known: [...this.known], identified: [...this.identified].filter((id) => this.known.has(id)), agents, backdoors: [...this.backdoorsPlaced] };
+  }
+
+  /** Agents you met, kept even after they are destroyed, so the record of them survives. */
+  private readonly seenAgents = new Map<string, Agent>();
+
+  /** Notes which agents stand with you in your node. */
+  private noteSightings(): void {
+    if (this.move) return;
+    for (const a of this.agents) {
+      if (a.hop || a.node !== this.currentNode) continue;
+      let set = this.sightings.get(a.node);
+      if (!set) this.sightings.set(a.node, (set = new Set()));
+      set.add(a.id);
+      this.seenAgents.set(a.id, a);
+    }
   }
 
   get isMoving(): boolean {
