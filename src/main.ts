@@ -190,11 +190,14 @@ function runCommand(raw: string): void {
       if (!game.fileAction(cmd.name, arg)) sfx.play('error');
       break;
     case 'attack':
-      if (!game.attackCommand(arg)) sfx.play('error');
+      if (!(game.gateQuery ? game.answerGate('attack') : game.attackCommand(arg))) sfx.play('error');
       break;
     case 'silence':
     case 'deceive':
-      if (!game.agentCommand(cmd.name, arg)) sfx.play('error');
+      if (!(game.gateQuery && cmd.name === 'deceive' ? game.answerGate('deceive') : game.agentCommand(cmd.name, arg))) sfx.play('error');
+      break;
+    case 'back':
+      if (!game.answerGate('back')) sfx.play('error');
       break;
     case 'analyze':
       if (!game.analyzeCommand(arg)) sfx.play('error');
@@ -210,7 +213,7 @@ function runCommand(raw: string): void {
       break;
     case 'present':
     case 'ignore':
-      if (!game.answerQuery(cmd.name)) sfx.play('error');
+      if (!(game.gateQuery && cmd.name === 'present' ? game.answerGate('present') : game.answerQuery(cmd.name))) sfx.play('error');
       break;
     case 'warrior':
     case 'shield':

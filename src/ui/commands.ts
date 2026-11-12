@@ -47,6 +47,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: 'load', arg: 'loot', usage: 'load <program>', help: 'load a program you downloaded in this run into a free memory slot' },
   { name: 'present', arg: 'none', usage: 'present', help: 'answer a query by showing a privilege you hold' },
   { name: 'ignore', arg: 'none', usage: 'ignore', help: 'ignore a query (the agent grows suspicious)' },
+  { name: 'back', arg: 'none', usage: 'back', help: 'back off from a gate that stops you (yellow alarm)' },
   { name: 'download', arg: 'file', usage: 'download <file>', help: 'copy a scanned file (valuable data or software) into your gear' },
   { name: 'alter', arg: 'file', usage: 'alter <file>', help: 'change contract data' },
   { name: 'delete', arg: 'file', usage: 'delete <file>', help: 'destroy contract data' },

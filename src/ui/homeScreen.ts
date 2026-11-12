@@ -84,7 +84,6 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
  * contracts (once you have the reputation) and entering the network.
  */
 export class HomeScreen {
-  private chosen: Choice | undefined;
   private open: 'networks' | 'contracts' | 'software' | 'hardware' | 'character' | null = null;
   /** The Hardware tab's socket, market toggle and last message. */
   private hwView: HardwareView = { sel: 'hippocampus', market: false, line: '' };
@@ -123,13 +122,6 @@ export class HomeScreen {
     this.root.hidden = true;
   }
 
-  private label(): string {
-    const c = this.chosen;
-    if (!c) return '<span class="home-dim">none. pick a known network or a contract</span>';
-    if (c.kind === 'network') return `<span class="home-job">${c.net.name}</span> <span class="home-dim">(${c.net.location})</span>`;
-    return `<span class="home-job">${c.offer.system.name}</span> <span class="home-dim">(contract: ${c.offer.contract.title}, pays ${sats(c.offer.contract.pay)})</span>`;
-  }
-
   /** Draws the screen again (after days passed elsewhere). */
   refresh(): void {
     this.render();
@@ -148,9 +140,7 @@ export class HomeScreen {
         <button type="button" class="home-btn${this.open === 'software' ? ' is-open' : ''}" data-act="software">Software${iconSvg(MENU_ICONS.software, 'menu-icon')}</button>
         <button type="button" class="home-btn${this.open === 'hardware' ? ' is-open' : ''}" data-act="hardware">Hardware${iconSvg(MENU_ICONS.hardware, 'menu-icon is-flipped')}</button>
         <button type="button" class="home-btn${this.open === 'character' ? ' is-open' : ''}${this.actions.character().picks ? ' is-pending' : ''}" data-act="character">Character${iconSvg(this.actions.avatar().icon, 'menu-icon')}${this.actions.character().picks ? ' <span class="home-lock">(skill to pick)</span>' : ''}</button>
-        <button type="button" class="home-btn" data-act="enter"${this.chosen ? '' : ' disabled title="Pick a network or a contract first"'}>Enter the network${iconSvg(MENU_ICONS.enter, 'menu-icon')}</button>
       </nav>
-      <div class="home-active">chosen network: ${this.label()}</div>
       <div class="home-list"></div>
       <button type="button" class="credits-btn" data-credits>credits</button>`;
     for (const which of ['networks', 'contracts', 'software', 'hardware', 'character'] as const) {
@@ -169,11 +159,6 @@ export class HomeScreen {
       this.actions.click();
       showCredits();
     });
-    this.main.querySelector('[data-act="enter"]')!.addEventListener('click', () => {
-      if (!this.chosen) return;
-      this.actions.click();
-      this.actions.enter(this.chosen);
-    });
     const list = this.main.querySelector('.home-list')!;
     const software = this.open === 'software';
     const hardware = this.open === 'hardware';
@@ -183,23 +168,21 @@ export class HomeScreen {
     this.hard.hidden = !hardware;
     if (software) this.renderSoftware();
     if (hardware) renderHardware(this.hard, { ...this.actions.hardware, click: () => this.actions.click(), changed: () => this.render() }, this.hwView);
+    // Each card enters its network straight away: there is nothing to select first.
     const card = (taken: boolean, html: string, pick: () => Choice) => {
       const el = document.createElement('div');
       el.className = `contract-card${taken ? ' is-taken' : ''}`;
-      el.innerHTML = `${html}<button type="button" class="home-btn cc-btn" title="${taken ? 'Selected for your next run. Click to unselect' : 'Select it for your next run, then Enter the network'}">${taken ? 'Selected for the run ✓' : 'Select for the run'}</button>`;
+      el.innerHTML = `${html}<button type="button" class="home-btn cc-btn">Enter the network${iconSvg(MENU_ICONS.enter, 'menu-icon')}</button>`;
       el.querySelector('button')!.addEventListener('click', () => {
         this.actions.click();
-        this.chosen = taken ? undefined : pick();
-        if (this.chosen) this.open = null;
-        this.render();
+        this.actions.enter(pick());
       });
       list.appendChild(el);
     };
     if (this.open === 'networks') {
       if (!s.networks.length) list.innerHTML = '<div class="home-dim">no known networks</div>';
       for (const net of s.networks) {
-        const taken = this.chosen?.kind === 'network' && this.chosen.net.id === net.id;
-        card(taken, `
+        card(false, `
           <div class="cc-head"><span class="cc-title">${net.name}</span><span class="home-dim">local network</span></div>
           <div class="cc-line home-dim">${net.location}. security level ${net.security}</div>
           ${s.skimmers.filter((k) => k.netId === net.id).map((k) => `<div class="cc-line cc-skim">${k.program.name} planted: +${sats(Math.round((net.income ?? 0.08) * (k.program.efficiency ?? 1) * 100) / 100)} a day</div>`).join('')}`, () => ({ kind: 'network', net }));
@@ -209,8 +192,7 @@ export class HomeScreen {
     } else if (this.open === 'contracts') {
       for (const offer of s.offers) {
         const { contract: c, system: sys } = offer;
-        const taken = this.chosen?.kind === 'contract' && this.chosen.offer === offer;
-        card(taken, `
+        card(this.actions.contract()?.title === c.title, `
           <div class="cc-head"><span class="cc-title">${c.title}</span><span class="cc-pay">${sats(c.pay)}</span></div>
           <div class="cc-line">${sys.name} <span class="home-dim">(${sys.location})</span></div>
           <div class="cc-line home-dim">${c.need} one file in the company's databases. security level ${sys.security ?? 1}</div>

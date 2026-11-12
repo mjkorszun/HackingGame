@@ -145,12 +145,10 @@ interface MoveTask {
   to: string;
   elapsed: number;
   total: number;
-  /** A gate on the link: still ahead, passed, or it turned you back. */
-  gate?: 'ahead' | 'passed' | 'blocked';
+  /** A gate on the link: still ahead, asking who you are, passed, or you are backing off from it. */
+  gate?: 'ahead' | 'asking' | 'passed' | 'back';
 }
 
-/** Ticks a gate that stopped you holds before you may try it again (placeholder: 3 s). */
-export const GATE_RETRY_TICKS = 30;
 /** Ticks an active Analyze of one agent takes (placeholder: 3 s). */
 export const ANALYZE_TICKS = 30;
 /** Where along a hop the gate stands (the avatar walks up to it before it may stop you). */
@@ -404,7 +402,7 @@ export class Game {
         this.log(`${a.name} recognises your burned signature: ENEMY`, 'alarm3');
         continue;
       }
-      if (together && a.mood === 'patrol' && !this.query) {
+      if (together && a.mood === 'patrol' && !this.query && !this.gateQuery) {
         if (--a.queryLeft <= 0) {
           a.queryLeft = a.stats.queryEvery;
           // After a first unanswered query it asks again for sure.
@@ -988,6 +986,7 @@ export class Game {
     this.mapper = null;
     this.scan = null;
     this.analysis = null;
+    this.gateQuery = null;
     this.fileJob = null;
     this.allies.length = 0;
     const job = this.network.def.contract;
@@ -1031,6 +1030,10 @@ export class Game {
     if (this.paused === paused) return;
     if (!paused && this.query) {
       this.log(`${this.agentById(this.query.agentId)?.name ?? 'an agent'} is querying you: answer first`, 'alarm1');
+      return;
+    }
+    if (!paused && this.gateQuery) {
+      this.log('the gate is asking who you are: answer first', 'alarm1');
       return;
     }
     this.paused = paused;
@@ -1180,7 +1183,7 @@ export class Game {
   /** Hop progress part way into the next tick (for smooth drawing). */
   hopProgressAt(alpha: number): number {
     if (!this.move) return 0;
-    const step = this.move.gate === 'blocked' ? -alpha : alpha;
+    const step = this.move.gate === 'back' ? -alpha : this.move.gate === 'asking' ? 0 : alpha;
     return Math.max(0, Math.min(1, (this.move.elapsed + step) / this.move.total));
   }
 
@@ -1222,34 +1225,115 @@ export class Game {
     return out;
   }
 
-  /** When each gate (by link) lets you try again after it stopped you. */
-  private gateWait = new Map<string, number>();
+  /** How many times each gate (by link) caught you lying this run. */
+  private gateStrikes = new Map<string, number>();
+  /** The gate stopping you and asking who you are, if any. */
+  gateQuery: { to: string; strikes: number } | null = null;
+
+  /** The gate's vigilance: higher with the system's security and the alarm. Placeholder numbers. */
+  private get gateVigilance(): number {
+    const security = this.network.def.security ?? 1;
+    return (0.25 + 0.25 * security) * (1 + 0.5 * this.alarm);
+  }
 
   /**
-   * Chance in % that the gate on a link stops you: its vigilance (higher with the system's security),
-   * raised by the alarm and by how well agents know your signature, against your hide program.
-   * Placeholder numbers.
+   * Chance in % that the gate on a link stops you and asks who you are: its vigilance, raised by how well
+   * agents know your signature, against your hide program. Placeholder numbers.
    */
   gateBlockChance(): number {
-    const security = this.network.def.security ?? 1;
-    const vigilance = (0.25 + 0.25 * security) * (1 + 0.5 * this.alarm) * (1 + this.signature);
-    return versus(vigilance, this.hideRating + 1);
+    return versus(this.gateVigilance * (1 + this.signature), this.hideRating + 1);
+  }
+
+  /** Chance in % that a deceive program fools the gate (placeholder: rating against vigilance x 2). */
+  gateDeceiveChance(rating: number): number {
+    return versus(rating, this.gateVigilance * 2);
+  }
+
+  /** Chance in % that a warrior program breaks the gate (placeholder: rating against 1 + security). */
+  gateBreakChance(rating: number): number {
+    return versus(rating, 1 + (this.network.def.security ?? 1));
+  }
+
+  /** Answers the gate's query: show a privilege, deceive it, break it, or back off. */
+  answerGate(choice: 'present' | 'deceive' | 'attack' | 'back'): boolean {
+    const q = this.gateQuery;
+    const move = this.move;
+    if (!q || !move) {
+      this.log('no gate is asking you anything', 'system');
+      return false;
+    }
+    const key = gateKey(this.currentNode, q.to);
+    const pass = (text: string) => {
+      this.gateQuery = null;
+      move.gate = 'passed';
+      this.outcome({ kind: 'player' }, true, text);
+      this.actionStarted();
+    };
+    if (choice === 'present') {
+      if (!this.privileges.size) {
+        this.log('you hold no privilege to show', 'alarm1');
+        return false;
+      }
+      this.log(`you show your ${[...this.privileges].join(' / ')} privilege. the gate lets you through`, 'info');
+      pass('ACCEPTED');
+      return true;
+    }
+    if (choice === 'back') {
+      this.gateQuery = null;
+      move.gate = 'back';
+      this.route = [];
+      this.log(`you back off from the gate to ${this.nameOf(q.to)}`, 'system');
+      this.raiseAlarm(1);
+      this.actionStarted();
+      return true;
+    }
+    if (choice === 'deceive') {
+      const program = this.findProgram('deceive');
+      if (!program) {
+        this.log('no deceive program in your gear', 'alarm1');
+        return false;
+      }
+      if (this.d100() <= this.gateDeceiveChance(program.rating)) {
+        this.feats.push('deceive');
+        this.log(`${program.name}: the gate is deceived and lets you through`, 'info');
+        pass('DECEIVED');
+        return true;
+      }
+      q.strikes++;
+      this.gateStrikes.set(key, q.strikes);
+      this.outcome({ kind: 'player' }, false, 'NOT FOOLED');
+      if (q.strikes === 1) {
+        this.log(`${program.name}: the gate saw through it. it asks again`, 'alarm1');
+        this.raiseAlarm(1);
+      } else {
+        this.log(`${program.name}: the gate saw through it again and sounds the alarm`, 'alarm3');
+        this.raiseAlarm(3);
+      }
+      return true;
+    }
+    // Attacking the gate: the whole system knows at once.
+    const program = this.findProgram('warrior');
+    if (!program) {
+      this.log('no warrior program in your gear', 'alarm1');
+      return false;
+    }
+    this.log(`${program.name} goes for the gate`, 'alarm2');
+    this.raiseAlarm(3);
+    if (this.d100() <= this.gateBreakChance(program.rating)) {
+      this.network.breakGate(this.currentNode, q.to);
+      this.log(`${program.name}: the gate to ${this.nameOf(q.to)} is destroyed`, 'info');
+      pass('GATE DOWN');
+    } else {
+      this.outcome({ kind: 'player' }, false, 'GATE HOLDS');
+      this.log(`${program.name}: the gate holds`, 'alarm2');
+    }
+    return true;
   }
 
   private startNextHop(): void {
     const to = this.route.shift();
     if (!to) return;
-    const from = this.currentNode;
-    const gated = this.network.hasGate(from, to);
-    if (gated) {
-      const wait = (this.gateWait.get(gateKey(from, to)) ?? 0) - this.tick;
-      if (wait > 0) {
-        this.route = [];
-        this.log(`the gate to ${this.nameOf(to)} is still holding you: try again in ${Math.ceil(wait / TICKS_PER_SECOND)} s`, 'alarm1');
-        this.outcome({ kind: 'player' }, false, 'GATE CLOSED');
-        return;
-      }
-    }
+    const gated = this.network.hasGate(this.currentNode, to);
     this.move = { to, elapsed: 0, total: MOVE_TICKS, gate: gated ? 'ahead' : undefined };
     this.events.push({ type: 'hop', nodeId: to });
     this.log(`connecting to ${this.nameOf(to)}...`);
@@ -1258,8 +1342,9 @@ export class Game {
   private updateMove(): void {
     const move = this.move;
     if (!move) return;
-    if (move.gate === 'blocked') {
-      // Turned back by the gate: walk back into the node.
+    if (move.gate === 'asking') return; // waiting at the gate for your answer
+    if (move.gate === 'back') {
+      // Backing off from the gate: walk back into the node.
       move.elapsed -= 1;
       if (move.elapsed <= 0) {
         this.move = null;
@@ -1271,13 +1356,15 @@ export class Game {
     // At the gate, halfway along the link: it may stop you.
     if (move.gate === 'ahead' && move.elapsed >= Math.round(move.total * GATE_POINT)) {
       move.gate = 'passed';
-      if (this.d100() <= this.gateBlockChance()) {
-        move.gate = 'blocked';
-        this.route = [];
-        this.gateWait.set(gateKey(this.currentNode, move.to), this.tick + GATE_RETRY_TICKS);
-        this.log(`GATE BLOCKS YOU: the gate to ${this.nameOf(move.to)} does not let you through. try again in ${GATE_RETRY_TICKS / TICKS_PER_SECOND} s`, 'alarm2');
-        this.outcome({ kind: 'player' }, false, 'BLOCKED');
+      const strikes = this.gateStrikes.get(gateKey(this.currentNode, move.to)) ?? 0;
+      // A gate that caught you lying before asks for sure.
+      if (strikes > 0 || this.d100() <= this.gateBlockChance()) {
+        move.gate = 'asking';
+        this.gateQuery = { to: move.to, strikes };
+        this.log(`the GATE to ${this.nameOf(move.to)} STOPS YOU${strikes ? ' again' : ''}: who are you?`, 'alarm2');
+        this.outcome({ kind: 'player' }, false, 'GATE');
         this.events.push({ type: 'blocked' });
+        this.setPaused(true);
         return;
       }
     }

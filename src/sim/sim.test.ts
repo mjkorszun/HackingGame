@@ -1111,15 +1111,49 @@ describe('gates', () => {
     g.raiseAlarm(3);
     g.exposeSignature(3, 'test');
     expect(g.gateBlockChance()).toBeGreaterThan(calm);
+    g.alarm = 0;
     g.travelTo(gated[1]);
-    // You walk up to the gate, it stops you, and you walk back.
+    // You walk up to the gate and it stops you and asks; the game pauses.
+    for (let i = 0; i < MOVE_TICKS * 3; i++) g.step();
+    expect(g.gateQuery).not.toBeNull();
+    expect(g.isMoving).toBe(true);
+    expect(g.paused).toBe(true);
+    // Back off: you return, the alarm goes yellow.
+    expect(g.answerGate('back')).toBe(true);
+    g.setPaused(false);
     for (let i = 0; i < MOVE_TICKS * 3; i++) g.step();
     expect(g.isMoving).toBe(false);
     expect(g.currentNode).toBe(gated[0]);
-    // It holds for a while: trying again right away does not work either, even with a lucky roll.
-    r = 0.999;
-    g.travelTo(gated[1]);
-    expect(g.isMoving).toBe(false);
+    expect(g.alarm).toBe(1);
+  });
+
+  it('deceive: success passes quietly; a second failure is red; breaking the gate is red', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const [from, to] = (testSystem.gates ?? [])[0];
+    let r = 0;
+    const g = new Game({ ...testSystem, entry: from, agents: [] }, () => r);
+    g.revealMap();
+    const atGate = () => { g.travelTo(to); for (let i = 0; i < MOVE_TICKS * 3 && !g.gateQuery; i++) g.step(); };
+    atGate();
+    expect(g.answerGate('deceive')).toBe(true);
+    g.setPaused(false);
+    for (let i = 0; i < MOVE_TICKS * 3; i++) g.step();
+    expect(g.currentNode).toBe(to);
+    expect(g.alarm).toBe(0);
+    g.travelTo(from);
+    for (let i = 0; i < MOVE_TICKS * 3 && !g.gateQuery; i++) g.step();
+    r = 0.999; // every roll fails
+    g.answerGate('deceive');
+    expect(g.alarm).toBe(1);
+    expect(g.gateQuery?.strikes).toBe(1);
+    g.answerGate('deceive');
+    expect(g.alarm).toBe(3);
+    r = 0;
+    g.answerGate('attack');
+    expect(g.gateQuery).toBeNull();
+    expect(g.alarm).toBe(3);
+    expect(g.network.hasGate(from, to)).toBe(false);
   });
 });
 

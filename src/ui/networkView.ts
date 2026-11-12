@@ -745,12 +745,24 @@ export class NetworkView {
   private updateQuery(): void {
     const g = this.game;
     const a = g.query ? g.agentById(g.query.agentId) : undefined;
-    const key = a ? `${a.id}|${a.known}|${a.strikes}|${g.privileges.size}|${g.programs.length}|${g.deckVersion}` : '';
+    const gq = g.gateQuery;
+    const key = a ? `${a.id}|${a.known}|${a.strikes}|${g.privileges.size}|${g.programs.length}|${g.deckVersion}` : gq ? `gate|${gq.to}|${gq.strikes}|${g.alarm}|${g.privileges.size}|${g.deckVersion}` : '';
     if (key === this.queryKey) return;
     this.queryKey = key;
-    this.queryBox.hidden = !a;
-    if (!a) return;
+    this.queryBox.hidden = !a && !gq;
     const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+    if (!a && gq) {
+      const deceive = g.findProgram('deceive');
+      const warrior = g.findProgram('warrior');
+      this.fillQuery(`THE GATE TO ${esc(g.nameOf(gq.to)).toUpperCase()} STOPS YOU${gq.strikes ? ' AGAIN' : ''}`, 'who are you?', [
+        { cmd: 'present', label: 'Show privilege', hint: g.privileges.size ? `you hold: ${[...g.privileges].join(', ')}` : 'you hold no privilege', disabled: !g.privileges.size },
+        { cmd: 'deceive', label: 'Deceive', hint: deceive ? `${deceive.name}: odds ${oddsWord(g.gateDeceiveChance(deceive.rating))}. if it fails: ${gq.strikes ? 'RED alarm' : 'yellow alarm, it asks again'}` : 'needs a deceive program', disabled: !deceive },
+        { cmd: 'attack', label: 'Break the gate', hint: warrior ? `${warrior.name}: odds ${oddsWord(g.gateBreakChance(warrior.rating))}. RED alarm at once` : 'needs a warrior program', disabled: !warrior },
+        { cmd: 'back', label: 'Back off', hint: 'you go back. yellow alarm' },
+      ]);
+      return;
+    }
+    if (!a) return;
     const odds = (type: 'deceive' | 'silence' | 'warrior', resist: number): string => {
       const p = g.findProgram(type);
       if (!p) return `needs a ${type} program`;
@@ -765,9 +777,14 @@ export class NetworkView {
       { cmd: 'attack', label: 'Warrior', hint: mine ? 'your warriors here attack it. a kill in one blow is quiet' : warrior ? `release ${odds('warrior', a.stats.armor)}. it fights for you; a kill in one blow is quiet` : 'no warrior free', disabled: !mine && !warrior },
       { cmd: 'ignore', label: 'Ignore', hint: a.strikes ? 'RED alarm, it turns hostile' : 'yellow alarm, it asks again' },
     ];
+    this.fillQuery(`${esc(a.name)} (${esc(a.typeName)}) QUERIES YOU${a.strikes ? ' AGAIN' : ''}`, agentInfo(a).slice(1).map(esc).join('<br>'), options);
+  }
+
+  private fillQuery(title: string, info: string, options: { cmd: string; label: string; hint: string; disabled?: boolean }[]): void {
+    const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
     this.queryBox.innerHTML = `
-      <div class="qb-title">${esc(a.name)} (${esc(a.typeName)}) QUERIES YOU${a.strikes ? ' AGAIN' : ''}</div>
-      <div class="qb-info">${agentInfo(a).slice(1).map(esc).join('<br>')}</div>
+      <div class="qb-title">${title}</div>
+      <div class="qb-info">${info}</div>
       <div class="qb-options"></div>`;
     const box = this.queryBox.querySelector('.qb-options')!;
     for (const o of options) {
@@ -1134,7 +1151,7 @@ export class NetworkView {
     if (!isCurrent) {
       items.push({
         label: 'Connect',
-        hint: `${number !== undefined && number <= 9 ? `click / ${number}` : 'click'}${this.game.network.hasGate(this.game.currentNode, node.id) ? `. gate: ${oddsWord(this.game.gateBlockChance())} chance it stops you` : ''}`,
+        hint: `${number !== undefined && number <= 9 ? `click / ${number}` : 'click'}${this.game.network.hasGate(this.game.currentNode, node.id) ? `. gate: ${oddsWord(this.game.gateBlockChance())} chance it stops and questions you` : ''}`,
         action: () => this.actions.travel(node.id),
       });
     }
