@@ -14,7 +14,7 @@ import { showRunSummary } from './ui/runSummary';
 import { showSkillPick } from './ui/skillPick';
 import { addXp, xpToNext } from './sim/progression';
 import { HomeScreen, type Choice, type ContractOffer } from './ui/homeScreen';
-import { finishProgram, newProject, work } from './sim/development';
+import { bugFixDays, finishProgram, fixBug, newProject, work } from './sim/development';
 import { isBuiltInIcon, randomIcon, registerIcon } from './ui/icons';
 import { generate } from './sim/generate';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
@@ -281,6 +281,20 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       return true;
     },
     refused: () => sfx.play('error'),
+    fix: (id, index) => {
+      const p = account.programs.find((x) => x.id === id);
+      if (!p?.bugs?.[index]) return undefined;
+      const days = bugFixDays(p);
+      const bug = p.bugs[index].split(':')[0];
+      fixBug(p, index);
+      // Fixing takes days like any other work: skimmers pay out, and may be found.
+      passDay(account, Math.random, days);
+      saveAccount(account);
+      homeState.day = account.day;
+      homeState.news = account.news;
+      renderHomeGear();
+      return `${days} days fixing ${p.name}: the ${bug} bug is gone`;
+    },
   },
   dev: {
     project: () => account.project,
@@ -297,7 +311,6 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       // Days spent writing code pass like any other: skimmers pay out, and may be found.
       passDay(account, Math.random, r.days);
       const lines = [`${r.days} day${r.days === 1 ? '' : 's'} of work on ${p.name}`];
-      for (const extra of r.bugs) lines.push(`bug found: +${extra} day${extra === 1 ? '' : 's'} of work`);
       let program: Program | undefined;
       if (r.done) {
         program = finishProgram(p, `p${nextProgramId(account)}`, 'you');
@@ -306,8 +319,9 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
         account.programs.push(program);
         account.project = undefined;
         lines.push(`${p.name} is done`);
+        if (program.bugs?.length) lines.push(`it has ${program.bugs.length} bug${program.bugs.length === 1 ? '' : 's'}: use it as it is, or fix ${program.bugs.length === 1 ? 'it' : 'them'} in Software (${bugFixDays(program)} days a bug)`);
         sfx.play('linkUp');
-      } else if (mode === 'finish') lines.push('not finished: the bugs need more work');
+      }
       saveAccount(account);
       homeState.day = account.day;
       homeState.news = account.news;

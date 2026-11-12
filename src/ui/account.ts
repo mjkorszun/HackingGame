@@ -36,6 +36,8 @@ export interface Account {
   avatar: { icon: string; color: string };
   /** Icons picked from the full set (name to SVG body), so they show without loading the whole set. */
   customIcons: Record<string, string>;
+  /** Save format: 2 = the scout is the agent, the old scout is the mapper. */
+  version?: number;
 }
 
 /**
@@ -70,8 +72,10 @@ const START_STORED = ['Sparrow 1.0', 'Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mim
 
 function fresh(): Account {
   const programs = STARTING_PROGRAMS.map((p) => ({ ...p }));
-  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {} };
+  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {}, version: SAVE_VERSION };
 }
+
+const SAVE_VERSION = 2;
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -150,7 +154,19 @@ export function saveAccount(a: Account): void {
 /** Saves from before the rename: old "decrypt" read archives (now scan), old "brute" cracked seals (now decrypt). */
 function migrate(a: Account): Account {
   const programs = a.programs as { type: string; name: string }[];
-  renameOld(programs);
+  if ((a.version ?? 0) < 2) {
+    // Before version 2 every load turned scouts into mappers, the new Sparrow too: put it back.
+    for (const p of programs) if (p.type === 'scout' && p.name !== 'Sparrow 1.0') p.type = 'mapper';
+    for (const p of programs) if (p.type === 'mapper' && p.name === 'Sparrow 1.0') p.type = 'scout';
+    const sparrows = a.programs.filter((p) => p.type === 'scout' && p.name === 'Sparrow 1.0');
+    for (const extra of sparrows.slice(1)) {
+      a.programs = a.programs.filter((p) => p !== extra);
+      if (Array.isArray(a.loaded)) a.loaded = a.loaded.filter((id) => id !== extra.id);
+    }
+    if ((a.project?.type as string) === 'scout') a.project!.type = 'mapper';
+  }
+  a.version = SAVE_VERSION;
+  renameOld(a.programs as { type: string; name: string }[]);
   // Memory used to count programs; now it is GB.
   if (typeof a.memory !== 'number' || a.memory < 100) a.memory = DEFAULT_MEMORY;
   if (typeof a.day !== 'number') a.day = 1;
@@ -163,7 +179,6 @@ function migrate(a: Account): Account {
   if (!Array.isArray(a.skills)) a.skills = [];
   if (typeof a.skillPicks !== 'number') a.skillPicks = 0;
   if (typeof a.code !== 'string' || !a.code) a.code = newGameCode();
-  if ((a.project?.type as string) === 'scout') a.project!.type = 'mapper';
   if (!a.avatar || typeof a.avatar.icon !== 'string') a.avatar = { ...DEFAULT_AVATAR };
   if (!a.customIcons || typeof a.customIcons !== 'object') a.customIcons = {};
   if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id);
@@ -180,8 +195,6 @@ function migrate(a: Account): Account {
 }
 
 function renameOld(programs: { type: string; name: string }[]): void {
-  // The old scout became the mapper.
-  for (const p of programs) if (p.type === 'scout') p.type = 'mapper';
   // Attack programs became warriors you release.
   for (const p of programs) if (p.type === 'attack') p.type = 'warrior';
   if (!programs.some((p) => p.type === 'brute')) return;

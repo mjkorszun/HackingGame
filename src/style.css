@@ -750,7 +750,7 @@ body {
 .sw-head:first-child { margin-top: 2px; }
 .sw-used { color: var(--yellow); letter-spacing: 0; }
 .sw-used.is-full { color: var(--orange); }
-.sw-zone { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; min-height: 96px; padding: 8px; border: 1px dashed var(--green-faint); transition: border-color 0.15s, background 0.15s; }
+.sw-zone { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); align-items: start; gap: 8px; min-height: 96px; padding: 8px; border: 1px dashed var(--green-faint); transition: border-color 0.15s, background 0.15s; }
 .sw-zone[data-zone="loaded"] { border-color: var(--green-dim); }
 .sw-zone.drop-end { border-color: var(--green); background: #04140a; }
 .sw-zone.is-refused { border-color: var(--red); background: #2a0808; }
@@ -766,3 +766,13 @@ body {
 .sw-rarity { font-size: 12px; }
 .sw-trait { color: var(--green); font-size: 12px; }
 .sw-dev .contract-card { max-width: 560px; }
+
+/* Bugs: drawbacks of a program you wrote, until you fix them. */
+.sw-bug, .pi-bugs li { color: #ff7a6a; font-size: 12px; }
+.sw-fix { margin-left: 4px; background: #000; color: var(--yellow); border: 1px solid #6b5a10; font: inherit; font-size: 11px; padding: 0 5px; cursor: pointer; }
+.sw-fix:hover { border-color: var(--yellow); }
+.sw-fixed { margin-top: 8px; color: var(--yellow); }
+
+/* Main screen buttons: an icon before the label. */
+.home-menu .home-btn { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.menu-icon { width: 22px; height: 22px; fill: currentColor; flex: none; }
