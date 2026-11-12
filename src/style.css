@@ -935,3 +935,93 @@ body {
 
 .sp-later { margin-top: 14px; background: none; border: 1px solid var(--green-faint); color: var(--grey); font: inherit; font-size: 13px; padding: 4px 12px; cursor: pointer; }
 .sp-later:hover { color: var(--green); border-color: var(--green-dim); }
+
+/* ---------- idle: agents and the avatar never stand quite still (a look only) ---------- */
+.agent-idle { animation: idle-drift 3s ease-in-out infinite; }
+@keyframes idle-drift {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(1.2px, -1.4px) rotate(2deg); }
+  50% { transform: translate(0, -2.2px) rotate(0deg); }
+  75% { transform: translate(-1.2px, -1px) rotate(-2deg); }
+}
+.avatar:not(.is-walking) .avatar-bob { animation: avatar-idle 2.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+@keyframes avatar-idle {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1, 1); }
+  30% { transform: translateY(-1.5px) rotate(1.5deg) scale(1.01, 0.99); }
+  60% { transform: translateY(-2.5px) rotate(-1deg) scale(0.99, 1.01); }
+}
+/* An agent that never leaves its node: a square with cut corners; its ring segments run round it. */
+.agent.is-fixed .agent-ring { stroke-dasharray: 19 6; animation-name: ring-flow; transform: none; }
+@keyframes ring-flow { to { stroke-dashoffset: -100; } }
+
+/* ---------- entry screen: choose where to come into a system ---------- */
+.entry-panel { width: min(980px, 94vw); }
+.entry-body { display: flex; gap: 18px; flex-wrap: wrap; }
+.entry-map { flex: 2 1 420px; min-width: 0; border: 1px solid var(--green-dim); background: #000; }
+.entry-info { flex: 1 1 220px; min-height: 160px; }
+.entry-info h3 { margin-top: 0; }
+.entry-info li { margin-bottom: 6px; }
+.entry-tag { color: var(--yellow); }
+.entry-label { fill: var(--grey); font-size: 11px; text-anchor: middle; pointer-events: none; }
+.entry-map .mini-node { stroke-width: 2; }
+.entry-choice { animation: entry-blink 0.9s ease-in-out infinite alternate; }
+@keyframes entry-blink { from { fill: #000; } to { fill: var(--kc, var(--green)); } }
+.rs-panel .entry-cancel { margin-top: 16px; }
+.entry-agents { margin-top: 6px; }
+.entry-agent { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+.entry-agent-icon { flex: 0 0 26px; width: 26px; height: 26px; padding: 4px; border-radius: 50%; background: #ff8a8a; color: #4a0a0a; fill: currentColor; }
+.entry-agent.is-fixed .entry-agent-icon { border-radius: 4px; }
+.entry-agent.is-watchful .entry-agent-icon { background: #ffcf6a; color: #6b4200; }
+.entry-agent.is-heavy .entry-agent-icon { background: #8fb8ff; color: #13306e; }
+.entry-agent.is-inspector .entry-agent-icon { background: #eef4ff; color: #24365c; }
+.entry-agent.is-sentry .entry-agent-icon { background: #ffa060; color: #5c2800; }
+.entry-agent.is-worker .entry-agent-icon { background: #a9e8a0; color: #1f4d1a; }
+
+/* ---------- life on screen (looks only) ---------- */
+/* The node you are in: its outline breathes gently. */
+.room .room-body { animation: room-pulse 3.2s ease-in-out infinite; }
+@keyframes room-pulse {
+  0%, 100% { stroke-opacity: 1; stroke-width: 3; }
+  50% { stroke-opacity: 0.6; stroke-width: 3.8; }
+}
+/* A slow scan band drifting down through the room. */
+.room-scan { color: var(--kc, var(--green)); animation: room-scan 9s linear infinite; }
+@keyframes room-scan { from { transform: translateY(0); } to { transform: translateY(var(--scan, 600px)); } }
+/* Files flicker now and then while a worker is in the node. */
+.has-worker .data-block rect { animation: file-flicker var(--flicker-time, 3s) steps(1, end) infinite; animation-delay: var(--flicker-delay, 0s); }
+@keyframes file-flicker {
+  0%, 82%, 88%, 94%, 100% { opacity: 1; }
+  85%, 91% { opacity: 0.45; }
+}
+/* An agent stepping into your node: a quick flash and a widening ring in its colour. */
+.fx-arrive-flash, .fx-arrive-ring { --ac: #ff8a8a; pointer-events: none; transform-box: fill-box; transform-origin: center; }
+.fx-arrive-flash { fill: var(--ac); animation: arrive-flash 0.35s ease-out forwards; }
+.fx-arrive-ring { fill: none; stroke: var(--ac); stroke-width: 2; animation: arrive-ring 0.8s ease-out forwards; }
+.is-watchful.fx-arrive-flash, .is-watchful.fx-arrive-ring { --ac: #ffcf6a; }
+.is-heavy.fx-arrive-flash, .is-heavy.fx-arrive-ring { --ac: #8fb8ff; }
+.is-inspector.fx-arrive-flash, .is-inspector.fx-arrive-ring { --ac: #eef4ff; }
+.is-sentry.fx-arrive-flash, .is-sentry.fx-arrive-ring { --ac: #ffa060; }
+.is-worker.fx-arrive-flash, .is-worker.fx-arrive-ring { --ac: #a9e8a0; }
+@keyframes arrive-flash { from { opacity: 0.9; transform: scale(0.6); } to { opacity: 0; transform: scale(1.8); } }
+@keyframes arrive-ring { from { opacity: 1; transform: scale(0.5); } to { opacity: 0; transform: scale(2.4); } }
+/* Links between nodes take the alarm colour (your route stays blue). */
+#view[data-alarm="1"] .link:not(.link-active) { stroke: #8a7a1a; }
+#view[data-alarm="2"] .link:not(.link-active) { stroke: #9a5a14; }
+#view[data-alarm="3"] .link:not(.link-active) { stroke: #9a2020; }
+/* The avatar materialises when you come in, and fades out when you leave. */
+.avatar-spawn { transform-box: fill-box; transform-origin: center bottom; }
+.avatar-spawn.is-spawning { animation: avatar-spawn 1.3s ease-out both; }
+@keyframes avatar-spawn {
+  0% { opacity: 0; transform: scale(0.2); filter: brightness(3); }
+  50% { opacity: 1; transform: scale(1.15); filter: brightness(1.8); }
+  75% { transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); filter: none; }
+}
+.avatar.is-leaving .avatar-spawn { animation: avatar-out 1s ease-in forwards; }
+@keyframes avatar-out {
+  from { opacity: 1; transform: scale(1); filter: none; }
+  to { opacity: 0; transform: scale(0.3) translateY(-10px); filter: brightness(3); }
+}
+.entry-agent { align-items: center; margin-bottom: 6px; cursor: default; }
+.entry-agent-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.entry-agent-icon { width: 22px; height: 22px; flex-basis: 22px; padding: 3px; }

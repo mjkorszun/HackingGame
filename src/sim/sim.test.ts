@@ -3,8 +3,10 @@ import { MAPPER_COOLDOWN, MAPPER_NOISE, mapperChances } from './programs';
 import { describe, expect, it } from 'vitest';
 import { testSystem } from '../data/testSystem';
 import { FixedClock } from './clock';
+import { CHASE_HOP_TICKS, KINDS, LEAVE_TICKS, typeKinds, WARRIORS } from './agents';
 import { Game, MOVE_TICKS, shieldHp, warriorDamage } from './game';
 import { Network } from './network';
+import { mergeIntel } from './intel';
 
 /** The test system without its agents, so a query never pauses a test that is about something else. */
 // No agents, and gates that never stop you (their own tests use testSystem).
@@ -802,6 +804,87 @@ describe('agents', () => {
     expect(g.alarm).toBe(1);
   });
 
+  it('an agent walks to the link for 0.75 s before crossing; a hostile one chases you a bit slower than you move', () => {
+    const g = new Game({ ...testSystem, gates: [], agents: [{ kind: 'warrior', node: 'edge' }] });
+    g.autoPause = false;
+    g.setPaused(false);
+    const a = g.agents[0];
+    a.stayLeft = 1_000_000;
+    g.travelTo('edge');
+    run(g, MOVE_TICKS);
+    (g as unknown as { makeHostile: (x: typeof a, loud: boolean) => void }).makeHostile(a, true);
+    g.setPaused(false);
+    g.travelTo('gw');
+    run(g, 1);
+    expect(a.hop?.to).toBe('gw');
+    expect(a.hop!.total).toBe(LEAVE_TICKS + CHASE_HOP_TICKS);
+    expect(LEAVE_TICKS + CHASE_HOP_TICKS).toBeGreaterThan(MOVE_TICKS);
+    run(g, MOVE_TICKS);
+    expect(g.currentNode).toBe('gw');
+    expect(a.node).toBe('edge');
+    run(g, Math.ceil(LEAVE_TICKS + CHASE_HOP_TICKS));
+    expect(a.node).toBe('gw');
+  });
+
+  it('a run remembers the map, the agents met and a backdoor; the next run can start at the backdoor', () => {
+    const g = new Game({ ...testSystem, gates: [] });
+    g.autoPause = false;
+    g.setPaused(false);
+    for (const a of g.agents) a.stayLeft = 1_000_000;
+    g.currentNode = 'ai';
+    expect(g.runAction('backdoor')).toBe(true);
+    g.currentNode = 'gw';
+    run(g, 1);
+    const first = g.intel();
+    expect(first.backdoors).toEqual(['ai']);
+    expect(first.known).toContain('edge');
+    const intel = mergeIntel(undefined, first);
+    expect(mergeIntel(intel, { known: ['auth'], identified: [], agents: {}, backdoors: [] }).known).toContain('auth');
+    const next = new Game(testSystem, Math.random, undefined, { entry: 'ai', intel });
+    expect(next.currentNode).toBe('ai');
+    expect(next.isKnown('edge')).toBe(true);
+    expect(next.isKnown('ads')).toBe(true);
+  });
+
+  it('remembers the kinds of agents met in a node, each kind once', () => {
+    const g = new Game({ ...testSystem, gates: [], agents: [{ kind: 'warrior', node: 'gw', type: 'heavy' }, { kind: 'warrior', node: 'gw', type: 'heavy' }] });
+    const seen = g.intel().agents.gw;
+    expect(seen).toHaveLength(1);
+    expect(seen[0].type).toBe('heavy');
+    expect(seen[0].known).toBe('none');
+  });
+
+  it('a worker walks its route stop to stop, through the nodes between them', () => {
+    const g = new Game({ ...testSystem, gates: [] });
+    g.autoPause = false;
+    g.setPaused(false);
+    const w = g.agents.find((a) => a.stats.role === 'worker')!;
+    const seq = [w.node];
+    for (let i = 0; i < 3000; i++) {
+      (g as unknown as { query: null }).query = null;
+      g.setPaused(false);
+      g.step();
+      if (seq[seq.length - 1] !== w.node) seq.push(w.node);
+    }
+    // core > cams > orch > ai > orch > cams > core ... (cams lies between core and orch)
+    expect(seq).toContain('ai');
+    expect(seq).toContain('orch');
+  });
+
+  it("an agent kind's name fits its icon, and kinds in one system differ", () => {
+    const kinds = typeKinds('some-system', ['balanced', 'watchful', 'heavy', 'sentry']);
+    const all = Object.values(KINDS).flat();
+    for (const k of all) expect(k.names.length, k.icon).toBeGreaterThanOrEqual(10);
+    const names = all.flatMap((k) => k.names);
+    expect(new Set(names).size).toBe(names.length);
+    const icons = [...kinds.values()].map((k) => k.icon);
+    expect(new Set(icons).size).toBe(icons.length);
+    for (const [type, k] of kinds) {
+      const pick = KINDS[WARRIORS[type].role].find((p) => p.icon === k.icon)!;
+      expect(pick.names).toContain(k.name);
+    }
+  });
+
   it('your agent can stay, follow you, and unload back into memory', () => {
     const { g } = setup(100);
     g.runProgram('warrior');
@@ -876,7 +959,7 @@ describe('skimmer and days', () => {
     expect(g.planted?.name).toBe('Skimmer 1.0');
     expect(g.allies.some((a) => a.resident && a.node === 'payments')).toBe(true);
     expect(g.runProgram('skimmer')).toBe(false); // one skimmer per gateway
-    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } }, health: 100 };
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } }, health: 100, intel: {} };
     passDay(account, () => 0.99);
     expect(account.sats).toBeCloseTo(0.08);
     passDay(account, () => 0);
@@ -926,7 +1009,7 @@ describe('software development', () => {
     const { newPizzeria } = await import('./generate');
     const { passDay } = await import('../ui/account');
     const net = newPizzeria(7);
-    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } }, health: 100 };
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } }, health: 100, intel: {} };
     passDay(account, () => 0.99, 7);
     expect(account.day).toBe(8);
     expect(account.sats).toBeCloseTo(0.56);
@@ -1087,7 +1170,7 @@ describe('health and deadlines', () => {
     expect(exitDamage(5, 100, false)).toBe(20);
     expect(exitDamage(0, 100, true, () => 0)).toBe(20);
     expect(exitDamage(0, 100, true, () => 0.99)).toBe(30);
-    expect(daysToHeal(75)).toBe(3);
+    expect(daysToHeal(75)).toBe(5);
   });
 
   it('heals by resting, and loses a contract after its deadline', async () => {
@@ -1095,7 +1178,7 @@ describe('health and deadlines', () => {
     const a = fresh();
     a.health = 55;
     rest(a, 2);
-    expect(a.health).toBe(75);
+    expect(a.health).toBe(65);
     a.contract = { title: 'Alter File', deadline: a.day + 1 };
     passDay(a);
     expect(a.contract).toBeDefined();

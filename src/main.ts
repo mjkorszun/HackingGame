@@ -11,7 +11,7 @@ import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, usedMemory, type Program, type ProgramType } from './sim/programs';
 import { buyChip, installChip, loadAccount, rest, loadedPrograms, nextProgramId, passDay, placeProgram, removeChip, saveAccount, sellChip, toggleLoaded } from './ui/account';
 import { chipById } from './sim/implants';
-import { exitDamage } from './sim/health';
+import { exitDamage, REST_PER_DAY } from './sim/health';
 import { showGameOver } from './ui/gameOver';
 import { showRunSummary } from './ui/runSummary';
 import { showSkillPick } from './ui/skillPick';
@@ -20,6 +20,8 @@ import { HomeScreen, type Choice, type ContractOffer } from './ui/homeScreen';
 import { bugFixDays, finishProgram, fixBug, newProject, work } from './sim/development';
 import { isBuiltInIcon, randomIcon, registerIcon } from './ui/icons';
 import { generate } from './sim/generate';
+import { mergeIntel } from './sim/intel';
+import { needsEntryScreen, showEntryScreen } from './ui/entryScreen';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const account = loadAccount();
@@ -75,10 +77,21 @@ const HELP = [
   'keys: Space pause, A auto-pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
 ];
 
-/** Ends the run: pays out what was taken and shows the report. OK starts the next run. */
+let leaving = false;
+
+/** Leaving: the game stops and your avatar fades out for a second, then the run ends. */
 function leaveNet(): void {
-  if (game.ended) return;
+  if (game.ended || leaving) return;
+  leaving = true;
+  game.setPaused(true);
   sfx.play('pause');
+  view?.avatarOut();
+  setTimeout(endTheRun, 1000);
+}
+
+/** Ends the run: pays out what was taken and shows the report. OK starts the next run. */
+function endTheRun(): void {
+  if (game.ended) return;
   const kicked = game.kicked;
   const integrity = { now: game.integrity, max: game.maxIntegrity };
   const report = game.endRun();
@@ -99,6 +112,8 @@ function leaveNet(): void {
     account.loaded = account.loaded.filter((id) => id !== sk.id);
     account.skimmers.push({ netId: game.network.def.id, program: sk });
   }
+  // Remember the map, the agents met and any backdoor for the next visit.
+  account.intel[game.network.def.id] = mergeIntel(account.intel[game.network.def.id], game.intel());
   account.programs = [...account.programs, ...report.software];
   // Programs loaded mid-run stay loaded.
   for (const l of game.loot) if (l.loaded && l.software) account.loaded.push(l.software.id);
@@ -285,22 +300,30 @@ function updateDeck(): void {
 }
 
 const offers: ContractOffer[] = testSystem.contract ? [{ contract: testSystem.contract, system: testSystem }] : [];
-const homeState = { day: account.day, reputation: account.reputation, networks: account.networks, offers, skimmers: account.skimmers, news: account.news };
+const homeState = { day: account.day, reputation: account.reputation, networks: account.networks, offers, skimmers: account.skimmers, news: account.news, backdoors: Object.fromEntries(Object.entries(account.intel).map(([id, i]) => [id, i.backdoors])) };
 // The browser's own right-click menu never shows: right-click belongs to the game's menus.
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 const home = new HomeScreen(document.getElementById('home')!, homeState, {
   enter: (choice) => {
-    if (!dayJob) enterNetwork(choice);
+    if (dayJob) return;
+    // With a choice of entry, or part of the map already known, you first pick where to come in.
+    const system = systemFor(choice);
+    const intel = account.intel[system.id];
+    if (!needsEntryScreen(system, intel)) return enterNetwork(choice);
+    sfx.play('menuOpen');
+    showEntryScreen(system, intel, (node) => enterNetwork(choice, node), () => sfx.play('menuClose'), () => sfx.play('hover'));
   },
   click: () => sfx.play('menuItem'),
-  character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks, code: account.code, health: account.health }),
+  character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks, code: account.code, health: shownHealth() }),
   rest: (days) => {
     if (dayJob) return;
     const before = account.day;
+    const hp = account.health;
     rest(account, days);
     saveAccount(account);
-    showDaysPassing(before, `resting ${days} day${days === 1 ? '' : 's'}`);
+    // Health comes back day by day with the ticker, not all at once.
+    showDaysPassing(before, `resting ${days} day${days === 1 ? '' : 's'}`, undefined, { from: hp, to: account.health });
     homeState.news = account.news;
     renderHomeGear();
   },
@@ -442,14 +465,20 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
   },
 });
 /** Days passing at the base right now, shown as a progress bar: what is going on and how far it is. */
-let dayJob: { label: string; total: number; done: number } | null = null;
+let dayJob: { label: string; total: number; done: number; health?: { from: number; to: number } } | null = null;
 
 /**
  * Days spent at the base tick by one at a time, a second apart: a short tick for each day and a longer
  * tone on the last one. The account has already moved on; only the day shown catches up. Meanwhile the
  * screen still scrolls and works, but nothing else that costs days can start.
  */
-function showDaysPassing(from: number, label: string, onDone?: () => void): void {
+/** Health as shown: while resting it climbs with the days ticking by. */
+function shownHealth(): number {
+  const h = dayJob?.health;
+  return h ? Math.min(h.to, h.from + dayJob!.done * REST_PER_DAY) : account.health;
+}
+
+function showDaysPassing(from: number, label: string, onDone?: () => void, health?: { from: number; to: number }): void {
   const to = account.day;
   homeState.day = from;
   if (to <= from) {
@@ -457,7 +486,7 @@ function showDaysPassing(from: number, label: string, onDone?: () => void): void
     onDone?.();
     return;
   }
-  dayJob = { label, total: to - from, done: 0 };
+  dayJob = { label, total: to - from, done: 0, health };
   const step = () => {
     if (!dayJob) return;
     dayJob.done++;
@@ -502,9 +531,13 @@ function renderHomeGear(): void {
 }
 renderHomeGear();
 
-/** Leaves the main screen and starts the run: the console, the network view and the clock. */
-function enterNetwork(choice: Choice): void {
-  const system = choice.kind === 'contract' ? { ...choice.offer.system, contract: choice.offer.contract } : generate(choice.net);
+function systemFor(choice: Choice) {
+  return choice.kind === 'contract' ? { ...choice.offer.system, contract: choice.offer.contract } : generate(choice.net);
+}
+
+/** Leaves the main screen and starts the run, coming in at `entry` (the gateway when not given). */
+function enterNetwork(choice: Choice, entry?: string): void {
+  const system = systemFor(choice);
   // The state before the run, to load if you die in it.
   try {
     localStorage.setItem(BACKUP_KEY, JSON.stringify(account));
@@ -519,7 +552,7 @@ function enterNetwork(choice: Choice): void {
     account.contract = { title: choice.offer.contract.title, deadline: account.day + days - 1 };
   }
   saveAccount(account);
-  game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account) });
+  game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account), entry, intel: account.intel[system.id] });
   // Skimmers planted here earlier are still at work in the payment gateway.
   const gateway = system.nodes.find((n) => n.kind === 'payment');
   if (gateway) for (const sk of account.skimmers.filter((k) => k.netId === system.id)) game.addResident(sk.program, gateway.id);

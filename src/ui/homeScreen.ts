@@ -31,6 +31,8 @@ export interface HomeState {
   skimmers: { netId: string; program: { name: string; efficiency?: number } }[];
   /** What happened on the last day. */
   news: string[];
+  /** Backdoors you left, by network id. */
+  backdoors?: Record<string, string[]>;
 }
 
 export interface HomeActions {
@@ -157,6 +159,11 @@ export class HomeScreen {
     if (!j) return;
     this.root.querySelectorAll<HTMLElement>('.day-job-fill').forEach((n) => { n.style.width = `${(100 * j.done) / j.total}%`; });
     this.root.querySelectorAll('.day-job-count').forEach((n) => { n.textContent = `day ${j.done}/${j.total}`; });
+    // Resting: health climbs day by day.
+    const hp = this.actions.character().health;
+    this.root.querySelectorAll('[data-health]').forEach((n) => { n.textContent = String(hp); });
+    this.root.querySelectorAll('.home-health').forEach((n) => n.classList.toggle('is-low', hp < 50));
+    this.root.querySelectorAll<HTMLElement>('.health-bar .xp-fill').forEach((n) => { n.style.width = `${hp}%`; });
   }
 
   /** Draws the screen again (after days passed elsewhere). */
@@ -176,7 +183,7 @@ export class HomeScreen {
     const locked = s.reputation < CONTRACT_REPUTATION;
     this.main.innerHTML = `
       <h1 class="home-title">CYBERHACK</h1>
-      <div class="home-stats"><button type="button" class="home-avatar" title="Change avatar">${iconSvg(this.actions.avatar().icon, 'home-avatar-icon', this.actions.avatar().color)}</button> day <span class="home-day">${s.day}</span> · <span class="home-money">${sats(this.actions.money())}</span> · reputation ${s.reputation} · <span class="home-health${this.actions.character().health < 50 ? ' is-low' : ''}">health ${this.actions.character().health}%</span></div>
+      <div class="home-stats"><button type="button" class="home-avatar" title="Change avatar">${iconSvg(this.actions.avatar().icon, 'home-avatar-icon', this.actions.avatar().color)}</button> day <span class="home-day">${s.day}</span> · <span class="home-money">${sats(this.actions.money())}</span> · reputation ${s.reputation} · <span class="home-health${this.actions.character().health < 50 ? ' is-low' : ''}">health <span data-health>${this.actions.character().health}</span>%</span></div>
       ${this.dayJobHtml()}
       ${s.news.length ? `<div class="home-news">${s.news.map((n) => `<div>${n}</div>`).join('')}</div>` : ''}
       <nav class="home-menu">
@@ -267,14 +274,13 @@ export class HomeScreen {
     }
   }
 
-  /**
-   * What you left behind in a network that is still there: planted skimmers and other agents of yours.
-   * Backdoors will show here too once they last between runs.
-   */
+  /** What you left behind in a network that is still there: planted skimmers, other agents of yours, backdoors. */
   private lasting(netId: string, income = 0.08): string {
     const lines = this.state.skimmers
       .filter((k) => k.netId === netId)
       .map((k) => `${k.program.name} (skimmer) planted: +${sats(Math.round(income * (k.program.efficiency ?? 1) * 100) / 100)} a day`);
+    const doors = this.state.backdoors?.[netId]?.length ?? 0;
+    if (doors) lines.push(`${doors > 1 ? `${doors} backdoors` : 'a backdoor'}: you can enter the system there`);
     if (!lines.length) return '';
     return `<div class="cc-lasting"><div class="cc-lasting-head">left in this network:</div>${lines.map((l) => `<div class="cc-line cc-skim">${l}</div>`).join('')}</div>`;
   }
@@ -314,7 +320,7 @@ export class HomeScreen {
       <button type="button" class="home-btn cc-btn" data-levelup title="For testing: gain the XP the next level needs">Level up (test)</button>
       ${c.picks ? `<button type="button" class="home-btn cc-btn" data-pick>Choose a skill${c.picks > 1 ? ` (${c.picks})` : ''}</button>` : ''}
       <div class="cc-line ch-head">health</div>
-      <div class="cc-head"><span class="home-health${c.health < 50 ? ' is-low' : ''}">${c.health}%</span><span class="home-dim">${c.health < 100 ? `${daysToHeal(c.health)} days of rest to heal fully` : 'fully healthy'}</span></div>
+      <div class="cc-head"><span class="home-health${c.health < 50 ? ' is-low' : ''}"><span data-health>${c.health}</span>%</span><span class="home-dim">${c.health < 100 ? `${daysToHeal(c.health)} days of rest to heal fully` : 'fully healthy'}</span></div>
       <div class="xp-bar health-bar"><div class="xp-fill" style="width:${c.health}%"></div></div>
       <div class="cc-line home-dim">leaving the net badly hurt, or being thrown out, damages your brain. at 0 you die</div>
       <div class="dev-row"><button type="button" class="home-btn cc-btn" data-rest="1"${c.health >= 100 ? ' disabled title="You are not hurt"' : ''}>Rest 1 day (+${REST_PER_DAY}%)</button><button type="button" class="home-btn cc-btn" data-rest="${Math.max(1, daysToHeal(c.health))}"${c.health >= 100 ? ' disabled title="You are not hurt"' : ''}>Rest until healed${c.health < 100 ? ` (${daysToHeal(c.health)} days)` : ''}</button></div>
