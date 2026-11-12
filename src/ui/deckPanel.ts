@@ -39,7 +39,7 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
     <div class="deck-cols">
       <div>
         <h3>hardware</h3>
-        <ul class="deck-hw"><li>memory</li><li class="deck-mem${used >= game.memorySlots * 0.9 ? ' is-full' : ''}">${used}/${game.memorySlots} GB</li></ul>
+        <ul class="deck-hw"><li>memory</li><li class="deck-mem${used >= game.memorySlots * 0.9 ? ' is-full' : ''}">${used}/${game.memorySlots} GB</li><li><span class="mem-bar" title="${used} GB used, ${game.memorySlots - used} GB free"><span class="mem-fill" style="width:${Math.min(100, (100 * used) / game.memorySlots)}%"></span></span></li></ul>
       </div>
       <div>
         <h3>software</h3>

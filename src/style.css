@@ -616,6 +616,11 @@ body {
 /* ---------- memory ---------- */
 .deck-hw { margin: 0; padding: 0; list-style: none; }
 .deck-mem.is-full { color: var(--yellow); }
+/* Memory as a bar: filled = used, dark = free. */
+.mem-bar { display: inline-block; width: 70px; height: 9px; border: 1px solid var(--green-dim); padding: 1px; vertical-align: middle; }
+.mem-fill { display: block; height: 100%; background: var(--green); }
+.deck-mem.is-full + li .mem-fill, .mem-bar.is-full .mem-fill { background: var(--yellow); }
+.sw-mem-bar { width: 220px; height: 12px; align-self: center; }
 .deck-program.is-stored { color: var(--grey); }
 .deck-program.is-blocked { cursor: not-allowed; }
 .deck-program.is-blocked:hover { text-decoration: none; color: var(--grey); }

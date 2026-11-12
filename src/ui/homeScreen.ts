@@ -259,7 +259,7 @@ export class HomeScreen {
       </div>`;
     };
     this.soft.innerHTML = `
-      <h2 class="sw-head">memory <span class="sw-used${sw.used > sw.memory * 0.9 ? ' is-full' : ''}">${sw.used} / ${sw.memory} GB</span></h2>
+      <h2 class="sw-head">memory <span class="sw-used${sw.used > sw.memory * 0.9 ? ' is-full' : ''}">${sw.used} / ${sw.memory} GB</span><span class="mem-bar sw-mem-bar${sw.used > sw.memory * 0.9 ? ' is-full' : ''}" title="${sw.used} GB used, ${sw.memory - sw.used} GB free"><span class="mem-fill" style="width:${Math.min(100, (100 * sw.used) / sw.memory)}%"></span></span><span class="home-dim">${sw.memory - sw.used} GB free</span></h2>
       <div class="sw-zone" data-zone="loaded">${sw.loaded.map(card).join('') || '<div class="sw-empty">drag programs here to take them into the net</div>'}</div>
       <h2 class="sw-head">storage <span class="home-dim">known, not loaded</span></h2>
       <div class="sw-zone" data-zone="stored">${sw.stored.map(card).join('') || '<div class="sw-empty">nothing in storage</div>'}</div>
