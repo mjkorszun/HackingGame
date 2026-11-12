@@ -196,6 +196,9 @@ function runCommand(raw: string): void {
     case 'deceive':
       if (!game.agentCommand(cmd.name, arg)) sfx.play('error');
       break;
+    case 'analyze':
+      if (!game.analyzeCommand(arg)) sfx.play('error');
+      break;
     case 'scout':
       if (!game.scoutCommand(arg)) sfx.play('error');
       break;

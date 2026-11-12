@@ -321,9 +321,10 @@ describe('stub programs', () => {
   it('starts paused', () => {
     expect(new Game(quiet).paused).toBe(true);
   });
-  it('passive programs only explain themselves; a warrior is released as your agent', () => {
+  it('hide only explains itself, analyze needs a target; a warrior is released as your agent', () => {
     const g = new Game(quiet);
-    for (const t of ['hide', 'analyze'] as const) expect(g.runProgram(t)).toBe(true);
+    expect(g.runProgram('hide')).toBe(true);
+    expect(g.runProgram('analyze')).toBe(false); // analyze needs an agent here to read
     expect(g.runProgram('warrior')).toBe(true);
     expect(g.allies.length).toBe(1);
     expect(g.runProgram('warrior')).toBe(false); // the only one is already out
@@ -1111,10 +1112,32 @@ describe('gates', () => {
     g.exposeSignature(3, 'test');
     expect(g.gateBlockChance()).toBeGreaterThan(calm);
     g.travelTo(gated[1]);
+    // You walk up to the gate, it stops you, and you walk back.
+    for (let i = 0; i < MOVE_TICKS * 3; i++) g.step();
     expect(g.isMoving).toBe(false);
+    expect(g.currentNode).toBe(gated[0]);
     // It holds for a while: trying again right away does not work either, even with a lucky roll.
     r = 0.999;
     g.travelTo(gated[1]);
     expect(g.isMoving).toBe(false);
+  });
+});
+
+describe('active analyze', () => {
+  it('takes a few seconds on an agent here and reads it; leaving breaks it off', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const g = new Game({ ...testSystem, gates: [], agents: [{ kind: 'warrior', node: testSystem.entry }] }, () => 0);
+    g.autoPause = false;
+    g.setPaused(false);
+    const tick = (gg: typeof g, n: number) => { for (let i = 0; i < n; i++) gg.step(); };
+    const a = g.agents[0];
+    a.stayLeft = 100_000;
+    expect(g.analyzeCommand('nobody')).toBe(false);
+    expect(g.analyzeCommand('')).toBe(true);
+    tick(g, 10);
+    expect(a.known).toBe('none'); // not yet
+    tick(g, 40);
+    expect(a.known).not.toBe('none');
   });
 });

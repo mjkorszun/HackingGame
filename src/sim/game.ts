@@ -145,10 +145,18 @@ interface MoveTask {
   to: string;
   elapsed: number;
   total: number;
+  /** A gate on the link: still ahead, passed, or it turned you back. */
+  gate?: 'ahead' | 'passed' | 'blocked';
 }
 
 /** Ticks a gate that stopped you holds before you may try it again (placeholder: 3 s). */
 export const GATE_RETRY_TICKS = 30;
+/** Ticks an active Analyze of one agent takes (placeholder: 3 s). */
+export const ANALYZE_TICKS = 30;
+/** Where along a hop the gate stands (the avatar walks up to it before it may stop you). */
+const GATE_POINT = 0.62;
+
+const gateKey = (a: string, b: string) => [a, b].sort().join('|');
 
 /** Ticks out of every agent's sight for your signature to drop one level (placeholder: 20 s). */
 export const SIGNATURE_COOL = 200;
@@ -459,16 +467,84 @@ export class Game {
     this.log(`ALARM ${name}`, level >= 3 ? 'alarm3' : level === 2 ? 'alarm2' : 'alarm1');
   }
 
-  /** Passive Analyze: a roll each time an agent deals with you, until it is fully known. */
-  private analyze(a: Agent): void {
+  /** Active Analyze on one agent in your node: takes a few seconds, then rolls like the passive one. */
+  private analysis: { agentId: string; elapsed: number; total: number; progressId: number } | null = null;
+
+  /** The analyze command: an agent here by name, or the first one here. */
+  analyzeCommand(target: string): boolean {
+    if (!this.findProgram('analyze')) {
+      this.log('no analyze program in your gear', 'alarm1');
+      return false;
+    }
+    const here = this.agentsIn(this.currentNode);
+    const q = target.trim().toLowerCase();
+    const a = q ? here.find((x) => x.name.toLowerCase() === q) : here.find((x) => x.known !== 'full') ?? here[0];
+    if (!a) {
+      this.log(q ? `no agent "${target}" here` : 'no agent here to analyze', 'alarm1');
+      return false;
+    }
+    return this.analyzeAgent(a.id);
+  }
+
+  /** Starts analyzing an agent in your node with the Analyze program. */
+  analyzeAgent(agentId: string): boolean {
+    const program = this.findProgram('analyze');
+    const a = this.agentById(agentId);
+    if (!program || !a) return false;
+    if (a.node !== this.currentNode || a.hop || this.move) {
+      this.log(`${program.name}: ${a.name} must be in your node`, 'alarm1');
+      return false;
+    }
+    if (a.known === 'full') {
+      this.log(`${a.name} is already fully analyzed (hover it to see)`, 'system');
+      return false;
+    }
+    if (this.analysis) {
+      this.log(`${program.name} is already analyzing`, 'alarm1');
+      return false;
+    }
+    this.analysis = { agentId, elapsed: 0, total: ANALYZE_TICKS, progressId: this.nextProgressId++ };
+    this.log(`${program.name}: analyzing ${a.name}...`);
+    this.events.push({ type: 'program', programType: 'analyze' });
+    this.actionStarted();
+    return true;
+  }
+
+  private updateAnalysis(): void {
+    const t = this.analysis;
+    if (!t) return;
+    const a = this.agentById(t.agentId);
+    const label = `analyze ${a?.name ?? 'agent'}`;
+    // It needs the agent in front of you the whole time.
+    if (!a || a.node !== this.currentNode || a.hop || this.move) {
+      this.events.push({ type: 'progress', line: { id: t.progressId, label: `${label}: lost it`, progress: t.elapsed / t.total, done: true } });
+      this.log(`analysis broken off: ${a ? `${a.name} is out of reach` : 'the agent is gone'}`, 'alarm1');
+      this.analysis = null;
+      this.actionEnded();
+      return;
+    }
+    t.elapsed++;
+    const done = t.elapsed >= t.total;
+    this.events.push({ type: 'progress', line: { id: t.progressId, label, progress: t.elapsed / t.total, done } });
+    if (!done) return;
+    this.analysis = null;
+    const before = a.known;
+    this.analyze(a, true);
+    this.outcome({ kind: 'agent', id: a.id }, a.known !== before, a.known !== before ? 'ANALYZED' : 'NO READ');
+    this.actionEnded();
+  }
+
+  /** Analyze: a roll each time an agent deals with you (or you analyze it on purpose), until it is fully known. */
+  private analyze(a: Agent, active = false): void {
     if (a.known === 'full') return;
     const program = this.findProgram('analyze');
     if (!program) return;
-    const chance = versus(program.rating, a.stats.scanResist);
+    // On purpose it reads better than in passing (placeholder: twice the rating).
+    const chance = versus(program.rating * (active ? 2 : 1), a.stats.scanResist);
     const roll = this.d100();
     const got = roll <= chance / 2 ? 'full' : roll <= chance ? 'partial' : 'none';
     if (got === 'none' || (got === 'partial' && a.known === 'partial')) {
-      if (a.known === 'none') this.log(`${program.name}: could not read ${a.name}`, 'system');
+      if (a.known === 'none' || active) this.log(`${program.name}: could not read ${a.name}${active ? ' this time' : ''}`, 'system');
       return;
     }
     // Agents of one type share their stats: what you learn about one applies to every agent of that type here.
@@ -911,6 +987,7 @@ export class Game {
     this.route = [];
     this.mapper = null;
     this.scan = null;
+    this.analysis = null;
     this.fileJob = null;
     this.allies.length = 0;
     const job = this.network.def.contract;
@@ -942,6 +1019,7 @@ export class Game {
     this.updateMove();
     this.updateMapper();
     this.updateScan();
+    this.updateAnalysis();
     this.updateFileJob();
     this.updateAgents();
     this.updateAllies();
@@ -1101,7 +1179,9 @@ export class Game {
 
   /** Hop progress part way into the next tick (for smooth drawing). */
   hopProgressAt(alpha: number): number {
-    return this.move ? Math.min(1, (this.move.elapsed + alpha) / this.move.total) : 0;
+    if (!this.move) return 0;
+    const step = this.move.gate === 'blocked' ? -alpha : alpha;
+    return Math.max(0, Math.min(1, (this.move.elapsed + step) / this.move.total));
   }
 
   /** Final destination of the current travel, if any. */
@@ -1160,25 +1240,17 @@ export class Game {
     const to = this.route.shift();
     if (!to) return;
     const from = this.currentNode;
-    if (this.network.hasGate(from, to)) {
-      const key = [from, to].sort().join('|');
-      const wait = (this.gateWait.get(key) ?? 0) - this.tick;
+    const gated = this.network.hasGate(from, to);
+    if (gated) {
+      const wait = (this.gateWait.get(gateKey(from, to)) ?? 0) - this.tick;
       if (wait > 0) {
         this.route = [];
         this.log(`the gate to ${this.nameOf(to)} is still holding you: try again in ${Math.ceil(wait / TICKS_PER_SECOND)} s`, 'alarm1');
         this.outcome({ kind: 'player' }, false, 'GATE CLOSED');
         return;
       }
-      if (this.d100() <= this.gateBlockChance()) {
-        this.route = [];
-        this.gateWait.set(key, this.tick + GATE_RETRY_TICKS);
-        this.log(`GATE BLOCKS YOU: the gate to ${this.nameOf(to)} does not let you through. try again in ${GATE_RETRY_TICKS / TICKS_PER_SECOND} s`, 'alarm2');
-        this.outcome({ kind: 'player' }, false, 'BLOCKED');
-        this.events.push({ type: 'blocked' });
-        return;
-      }
     }
-    this.move = { to, elapsed: 0, total: MOVE_TICKS };
+    this.move = { to, elapsed: 0, total: MOVE_TICKS, gate: gated ? 'ahead' : undefined };
     this.events.push({ type: 'hop', nodeId: to });
     this.log(`connecting to ${this.nameOf(to)}...`);
   }
@@ -1186,7 +1258,29 @@ export class Game {
   private updateMove(): void {
     const move = this.move;
     if (!move) return;
+    if (move.gate === 'blocked') {
+      // Turned back by the gate: walk back into the node.
+      move.elapsed -= 1;
+      if (move.elapsed <= 0) {
+        this.move = null;
+        this.actionEnded();
+      }
+      return;
+    }
     move.elapsed++;
+    // At the gate, halfway along the link: it may stop you.
+    if (move.gate === 'ahead' && move.elapsed >= Math.round(move.total * GATE_POINT)) {
+      move.gate = 'passed';
+      if (this.d100() <= this.gateBlockChance()) {
+        move.gate = 'blocked';
+        this.route = [];
+        this.gateWait.set(gateKey(this.currentNode, move.to), this.tick + GATE_RETRY_TICKS);
+        this.log(`GATE BLOCKS YOU: the gate to ${this.nameOf(move.to)} does not let you through. try again in ${GATE_RETRY_TICKS / TICKS_PER_SECOND} s`, 'alarm2');
+        this.outcome({ kind: 'player' }, false, 'BLOCKED');
+        this.events.push({ type: 'blocked' });
+        return;
+      }
+    }
     if (move.elapsed >= move.total) {
       // Leaving a node: agents there forget the encounter, unless they know you are an enemy.
       for (const a of this.agents) {
@@ -1279,7 +1373,8 @@ export class Game {
       this.log(`${program.name}: pick a file, e.g. ${program.type} f3`, 'system');
       return false;
     }
-    if (program.type === 'hide' || program.type === 'analyze') {
+    if (program.type === 'analyze') return this.analyzeCommand('');
+    if (program.type === 'hide') {
       this.log(`${program.name} (${program.type} ${program.rating}): ${PROGRAM_STUBS[program.type]}`, 'info');
       return true;
     }

@@ -9,7 +9,7 @@ const TYPE_INFO: Record<ProgramType, string> = {
   silence: 'cuts an agent off: its messages cannot leave the node, so it raises no alarm',
   deceive: 'answers an agent\'s query with a lie. it trusts you until you leave the node',
   hide: 'works on its own: agents roll their detection against it when they query you',
-  analyze: 'works on its own: every agent that deals with you gets analyzed',
+  analyze: 'right-click an agent in your node to analyze it: its type and stats. also works on its own on every agent that deals with you',
   skimmer: 'planted in the payment gateway of a local business, it stays there as your agent and takes a small cut every day',
   mapper: 'maps the network around you: finds and identifies nearby nodes. loud, and needs a long time to recharge',
   scan: 'reads archives: shows what each file holds and how it is protected',

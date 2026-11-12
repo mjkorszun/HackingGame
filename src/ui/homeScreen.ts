@@ -186,7 +186,7 @@ export class HomeScreen {
     const card = (taken: boolean, html: string, pick: () => Choice) => {
       const el = document.createElement('div');
       el.className = `contract-card${taken ? ' is-taken' : ''}`;
-      el.innerHTML = `${html}<button type="button" class="home-btn cc-btn">${taken ? 'Chosen' : 'Choose'}</button>`;
+      el.innerHTML = `${html}<button type="button" class="home-btn cc-btn" title="${taken ? 'Selected for your next run. Click to unselect' : 'Select it for your next run, then Enter the network'}">${taken ? 'Selected for the run ✓' : 'Select for the run'}</button>`;
       el.querySelector('button')!.addEventListener('click', () => {
         this.actions.click();
         this.chosen = taken ? undefined : pick();

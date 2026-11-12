@@ -3,7 +3,7 @@
  * later also shown after you win the game.
  */
 const CREDITS: { what: string; lines: string[] }[] = [
-  { what: 'game', lines: ['CyberHack (working title): a spiritual successor to Decker (2001) by Shawn Overcash'] },
+  { what: 'game', lines: ['CyberHack (working title)', 'by Maciej Korszuń'] },
   {
     what: 'icons',
     lines: [
@@ -13,7 +13,6 @@ const CREDITS: { what: string; lines: string[] }[] = [
     ],
   },
   { what: 'sound effects', lines: ['Kenney (kenney.nl)', 'licence: CC0 1.0 (public domain)'] },
-  { what: 'brain cross-section', lines: ['drawn for this game'] },
 ];
 
 export function showCredits(): void {

@@ -735,6 +735,7 @@ export class NetworkView {
       this.menu.show(e.clientX, e.clientY, `${live.name}: ${live.stats.kind}`, [
         { label: 'Attack', hint: here ? (this.warriorsHere() ? 'your warriors here' : this.game.findProgram('warrior') ? `release ${this.game.findProgram('warrior')!.name}` : 'needs a warrior') : 'not in your node', disabled: !here || (!this.warriorsHere() && !this.game.findProgram('warrior')), action: () => this.actions.command(`attack ${live.name}`) },
         { label: 'Silence', hint: here ? odds('silence', live.stats.silenceResist) : 'not in your node', disabled: !here || live.silenced || !this.game.findProgram('silence'), action: () => this.actions.command(`silence ${live.name}`) },
+        { label: 'Analyze', hint: live.known === 'full' ? 'already fully analyzed' : here ? `${this.game.findProgram('analyze')?.name ?? 'needs an analyze program'}: its type and stats` : 'not in your node', disabled: !here || live.known === 'full' || !this.game.findProgram('analyze'), action: () => this.actions.command(`analyze ${live.name}`) },
       ]);
     });
     return grp;
