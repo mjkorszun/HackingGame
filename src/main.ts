@@ -11,7 +11,7 @@ import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, usedMemory, type Program, type ProgramType } from './sim/programs';
 import { buyChip, installChip, loadAccount, rest, loadedPrograms, nextProgramId, passDay, placeProgram, removeChip, saveAccount, sellChip, toggleLoaded } from './ui/account';
 import { chipById } from './sim/implants';
-import { exitDamage } from './sim/health';
+import { exitDamage, REST_PER_DAY } from './sim/health';
 import { showGameOver } from './ui/gameOver';
 import { showRunSummary } from './ui/runSummary';
 import { showSkillPick } from './ui/skillPick';
@@ -315,13 +315,15 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
     showEntryScreen(system, intel, (node) => enterNetwork(choice, node), () => sfx.play('menuClose'), () => sfx.play('hover'));
   },
   click: () => sfx.play('menuItem'),
-  character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks, code: account.code, health: account.health }),
+  character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks, code: account.code, health: shownHealth() }),
   rest: (days) => {
     if (dayJob) return;
     const before = account.day;
+    const hp = account.health;
     rest(account, days);
     saveAccount(account);
-    showDaysPassing(before, `resting ${days} day${days === 1 ? '' : 's'}`);
+    // Health comes back day by day with the ticker, not all at once.
+    showDaysPassing(before, `resting ${days} day${days === 1 ? '' : 's'}`, undefined, { from: hp, to: account.health });
     homeState.news = account.news;
     renderHomeGear();
   },
@@ -463,14 +465,20 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
   },
 });
 /** Days passing at the base right now, shown as a progress bar: what is going on and how far it is. */
-let dayJob: { label: string; total: number; done: number } | null = null;
+let dayJob: { label: string; total: number; done: number; health?: { from: number; to: number } } | null = null;
 
 /**
  * Days spent at the base tick by one at a time, a second apart: a short tick for each day and a longer
  * tone on the last one. The account has already moved on; only the day shown catches up. Meanwhile the
  * screen still scrolls and works, but nothing else that costs days can start.
  */
-function showDaysPassing(from: number, label: string, onDone?: () => void): void {
+/** Health as shown: while resting it climbs with the days ticking by. */
+function shownHealth(): number {
+  const h = dayJob?.health;
+  return h ? Math.min(h.to, h.from + dayJob!.done * REST_PER_DAY) : account.health;
+}
+
+function showDaysPassing(from: number, label: string, onDone?: () => void, health?: { from: number; to: number }): void {
   const to = account.day;
   homeState.day = from;
   if (to <= from) {
@@ -478,7 +486,7 @@ function showDaysPassing(from: number, label: string, onDone?: () => void): void
     onDone?.();
     return;
   }
-  dayJob = { label, total: to - from, done: 0 };
+  dayJob = { label, total: to - from, done: 0, health };
   const step = () => {
     if (!dayJob) return;
     dayJob.done++;

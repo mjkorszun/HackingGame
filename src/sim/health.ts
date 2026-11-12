@@ -6,7 +6,7 @@
 
 export const MAX_HEALTH = 100;
 /** Health you get back for every day of rest. */
-export const REST_PER_DAY = 10;
+export const REST_PER_DAY = 5;
 
 /**
  * Health lost on leaving the net. Leaving on your own costs nothing above half integrity,

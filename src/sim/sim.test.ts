@@ -873,6 +873,10 @@ describe('agents', () => {
 
   it("an agent kind's name fits its icon, and kinds in one system differ", () => {
     const kinds = typeKinds('some-system', ['balanced', 'watchful', 'heavy', 'sentry']);
+    const all = Object.values(KINDS).flat();
+    for (const k of all) expect(k.names.length, k.icon).toBeGreaterThanOrEqual(10);
+    const names = all.flatMap((k) => k.names);
+    expect(new Set(names).size).toBe(names.length);
     const icons = [...kinds.values()].map((k) => k.icon);
     expect(new Set(icons).size).toBe(icons.length);
     for (const [type, k] of kinds) {
@@ -1166,7 +1170,7 @@ describe('health and deadlines', () => {
     expect(exitDamage(5, 100, false)).toBe(20);
     expect(exitDamage(0, 100, true, () => 0)).toBe(20);
     expect(exitDamage(0, 100, true, () => 0.99)).toBe(30);
-    expect(daysToHeal(75)).toBe(3);
+    expect(daysToHeal(75)).toBe(5);
   });
 
   it('heals by resting, and loses a contract after its deadline', async () => {
@@ -1174,7 +1178,7 @@ describe('health and deadlines', () => {
     const a = fresh();
     a.health = 55;
     rest(a, 2);
-    expect(a.health).toBe(75);
+    expect(a.health).toBe(65);
     a.contract = { title: 'Alter File', deadline: a.day + 1 };
     passDay(a);
     expect(a.contract).toBeDefined();
