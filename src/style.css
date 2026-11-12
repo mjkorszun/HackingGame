@@ -786,7 +786,7 @@ body {
 .sw-card { padding-bottom: 22px; }
 
 /* Attitude ring around system agents: green calm, yellow unsure, orange alert, red hostile. */
-.agent-ring { fill: none; stroke: var(--green); stroke-width: 3; stroke-dasharray: 18.7 8; transform-box: fill-box; transform-origin: center; animation: ring-spin 6s linear infinite; }
+.agent-ring { fill: none; stroke: var(--green); stroke-width: 2.2; stroke-dasharray: 18.7 8; transform-box: fill-box; transform-origin: center; animation: ring-spin 6s linear infinite; }
 .agent[data-attitude="unsure"] .agent-ring { stroke: var(--yellow); animation-duration: 3.5s; }
 .agent[data-attitude="alert"] .agent-ring { stroke: var(--orange); animation-duration: 2s; }
 .agent[data-attitude="hostile"] .agent-ring { stroke: var(--red); animation-duration: 1s; }
