@@ -5,6 +5,7 @@ import { devDays, MAX_DEV_RATING, RARITY_TRAITS, type DevProject } from '../sim/
 import { cleanGameCode, SKILLS, xpToNext } from '../sim/progression';
 import { AVATAR_ICONS, ICON_POOLS, iconSvg, programIcon, randomIcon } from './icons';
 import { showIconPicker } from './iconPicker';
+import { showProgramInfo } from './programInfo';
 import { PROGRAM_TYPES, programSize, type Program, type ProgramType } from '../sim/programs';
 
 /** A contract on offer: the job and the system it is in. */
@@ -44,6 +45,14 @@ export interface HomeActions {
   setAvatar(icon: string, color: string, body: string): void;
   /** Opens the skill choice for the level ups not picked yet; `done` runs after. */
   pickSkills(done: () => void): void;
+  /** Software tab: the programs in memory (in order) and in storage, and moving them by drag and drop. */
+  software: {
+    list(): { loaded: Program[]; stored: Program[]; used: number; memory: number };
+    /** Into memory at `index` (or moved there), or out of memory with null. False when it does not fit. */
+    place(id: string, index: number | null): boolean;
+    /** A drop that did not work. */
+    refused(): void;
+  };
   /** Software development: the project in progress, starting one, and working on it. */
   dev: {
     project(): DevProject | undefined;
@@ -62,13 +71,15 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
  */
 export class HomeScreen {
   private chosen: Choice | undefined;
-  private open: 'networks' | 'contracts' | 'dev' | 'character' | null = null;
+  private open: 'networks' | 'contracts' | 'software' | 'character' | null = null;
   /** What the last stretch of development did, shown under the project. */
   private devLines: string[] = [];
   private devDone: Program | undefined;
   /** The new-project form keeps its choices between renders. */
   private form = { type: 'hide' as ProgramType, rating: 1, name: '', icon: randomIcon('hide'), color: '#3dff7a', picked: false, body: '' };
   private readonly main: HTMLElement;
+  /** The Software tab takes the whole left side while it is open. */
+  private readonly soft: HTMLElement;
   readonly gear: HTMLElement;
 
   constructor(
@@ -78,8 +89,10 @@ export class HomeScreen {
   ) {
     root.innerHTML = `
       <section class="home-gear" aria-label="Your gear"></section>
+      <section class="home-soft" aria-label="Software" hidden></section>
       <section class="home-main"></section>`;
     this.gear = root.querySelector('.home-gear')!;
+    this.soft = root.querySelector('.home-soft')!;
     this.main = root.querySelector('.home-main')!;
     this.render();
   }
@@ -110,13 +123,13 @@ export class HomeScreen {
       <nav class="home-menu">
         <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">Known networks</button>
         <button type="button" class="home-btn${this.open === 'contracts' ? ' is-open' : ''}" data-act="contracts"${locked ? ` disabled title="Needs reputation ${CONTRACT_REPUTATION}"` : ''}>Choose contract${locked ? ` <span class="home-lock">(rep. ${CONTRACT_REPUTATION})</span>` : ''}</button>
-        <button type="button" class="home-btn${this.open === 'dev' ? ' is-open' : ''}" data-act="dev">Software development</button>
+        <button type="button" class="home-btn${this.open === 'software' ? ' is-open' : ''}" data-act="software">Software</button>
         <button type="button" class="home-btn${this.open === 'character' ? ' is-open' : ''}" data-act="character">Character${this.actions.character().picks ? ' <span class="home-lock">(skill to pick)</span>' : ''}</button>
         <button type="button" class="home-btn" data-act="enter"${this.chosen ? '' : ' disabled title="Pick a network or a contract first"'}>Enter the network</button>
       </nav>
       <div class="home-active">chosen network: ${this.label()}</div>
       <div class="home-list"></div>`;
-    for (const which of ['networks', 'contracts', 'dev', 'character'] as const) {
+    for (const which of ['networks', 'contracts', 'software', 'character'] as const) {
       this.main.querySelector(`[data-act="${which}"]`)!.addEventListener('click', () => {
         this.actions.click();
         this.open = this.open === which ? null : which;
@@ -132,6 +145,11 @@ export class HomeScreen {
       this.actions.enter(this.chosen);
     });
     const list = this.main.querySelector('.home-list')!;
+    const software = this.open === 'software';
+    this.root.classList.toggle('is-software', software);
+    this.gear.hidden = software;
+    this.soft.hidden = !software;
+    if (software) this.renderSoftware();
     const card = (taken: boolean, html: string, pick: () => Choice) => {
       const el = document.createElement('div');
       el.className = `contract-card${taken ? ' is-taken' : ''}`;
@@ -155,8 +173,6 @@ export class HomeScreen {
       }
     } else if (this.open === 'character') {
       this.renderCharacter(list);
-    } else if (this.open === 'dev') {
-      this.renderDev(list);
     } else if (this.open === 'contracts') {
       for (const offer of s.offers) {
         const { contract: c, system: sys } = offer;
@@ -220,6 +236,105 @@ export class HomeScreen {
       this.actions.pickSkills(() => this.render());
     });
     list.appendChild(box);
+  }
+
+  /**
+   * Software tab, on the whole left side: big cards for the programs in memory (in the order you set)
+   * and for the ones in storage. Drag a card into memory to load it, back to storage to unload it,
+   * or within memory to change the order. Software development sits at the bottom.
+   */
+  private renderSoftware(): void {
+    const sw = this.actions.software.list();
+    const card = (p: Program) => {
+      const rarity = p.rarity ?? 'common';
+      const traits = (p.traits ?? []).map((t) => `<div class="sw-trait">+ ${esc(t)}</div>`).join('');
+      return `<div class="sw-card rarity-${rarity}" draggable="true" data-id="${esc(p.id)}" title="drag to load, unload or reorder; right-click for details">
+        <div class="sw-icon">${programIcon(p, 'sw-icon-svg')}</div>
+        <div class="sw-body">
+          <div class="sw-name">${esc(p.name)}</div>
+          <div class="sw-meta">${p.type} ${p.rating}</div>
+          <div class="sw-rarity">${rarity} · ${programSize(p)} GB${p.author ? ` · by ${esc(p.author)}` : ''}</div>
+          ${traits}
+        </div>
+      </div>`;
+    };
+    this.soft.innerHTML = `
+      <h2 class="sw-head">memory <span class="sw-used${sw.used > sw.memory * 0.9 ? ' is-full' : ''}">${sw.used} / ${sw.memory} GB</span></h2>
+      <div class="sw-zone" data-zone="loaded">${sw.loaded.map(card).join('') || '<div class="sw-empty">drag programs here to take them into the net</div>'}</div>
+      <h2 class="sw-head">storage <span class="home-dim">known, not loaded</span></h2>
+      <div class="sw-zone" data-zone="stored">${sw.stored.map(card).join('') || '<div class="sw-empty">nothing in storage</div>'}</div>
+      <h2 class="sw-head">software development</h2>
+      <div class="sw-dev"></div>`;
+    this.renderDev(this.soft.querySelector('.sw-dev')!);
+    const all = [...sw.loaded, ...sw.stored];
+    let dragId: string | null = null;
+    const clearMarks = () => this.soft.querySelectorAll('.drop-before, .drop-end').forEach((e) => e.classList.remove('drop-before', 'drop-end'));
+    /** Where in the memory row a drop at this point lands: before the first card the pointer is ahead of. */
+    const dropIndex = (zone: HTMLElement, x: number, y: number): number => {
+      const cards = [...zone.querySelectorAll<HTMLElement>('.sw-card')];
+      for (let i = 0; i < cards.length; i++) {
+        const r = cards[i].getBoundingClientRect();
+        if (y < r.top || (y <= r.bottom && x < r.left + r.width / 2)) return i;
+      }
+      return cards.length;
+    };
+    this.soft.querySelectorAll<HTMLElement>('.sw-card').forEach((el) => {
+      const p = all.find((x) => x.id === el.dataset.id)!;
+      el.addEventListener('dragstart', (e) => {
+        dragId = p.id;
+        e.dataTransfer?.setData('text/plain', p.id);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+        el.classList.add('is-dragging');
+      });
+      el.addEventListener('dragend', () => {
+        dragId = null;
+        el.classList.remove('is-dragging');
+        clearMarks();
+      });
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const loaded = sw.loaded.includes(p);
+        showProgramInfo(p, { status: loaded ? 'loaded in memory' : 'in storage', action: { label: loaded ? 'Unload' : 'Load', run: () => this.place(p.id, loaded ? null : sw.loaded.length) } });
+      });
+    });
+    this.soft.querySelectorAll<HTMLElement>('.sw-zone').forEach((zone) => {
+      const intoMemory = zone.dataset.zone === 'loaded';
+      zone.addEventListener('dragover', (e) => {
+        if (!dragId) return;
+        e.preventDefault();
+        clearMarks();
+        if (!intoMemory) {
+          zone.classList.add('drop-end');
+          return;
+        }
+        const i = dropIndex(zone, e.clientX, e.clientY);
+        const cards = zone.querySelectorAll<HTMLElement>('.sw-card');
+        if (i < cards.length) cards[i].classList.add('drop-before');
+        else zone.classList.add('drop-end');
+      });
+      zone.addEventListener('dragleave', (e) => {
+        if (!zone.contains(e.relatedTarget as Node)) clearMarks();
+      });
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const id = dragId ?? e.dataTransfer?.getData('text/plain');
+        clearMarks();
+        if (!id) return;
+        this.place(id, intoMemory ? dropIndex(zone, e.clientX, e.clientY) : null);
+      });
+    });
+  }
+
+  /** Moves a program and draws the tab again; a program that does not fit is refused. */
+  private place(id: string, index: number | null): void {
+    if (this.actions.software.place(id, index)) this.actions.click();
+    else {
+      this.actions.software.refused();
+      this.soft.querySelector('[data-zone="loaded"]')?.classList.add('is-refused');
+      setTimeout(() => this.soft.querySelector('[data-zone="loaded"]')?.classList.remove('is-refused'), 500);
+      return;
+    }
+    this.render();
   }
 
   /** Software development: a form for a new project, or the project in progress with its buttons. */
