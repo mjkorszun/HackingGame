@@ -459,7 +459,7 @@ export class NetworkView {
         'agents are a bit wary of you',
         'agents are on guard',
         'every agent that sees you attacks at once',
-      ][sig] + '. it drops while no agent sees you; Mask resets it';
+      ][sig] + '. it does not drop by itself: a Mask program out of sight clears it';
     }
     const integ = `Integrity ${this.game.integrity}/${this.game.maxIntegrity}: at 0 you are thrown out of the net`;
     if (this.integrityEl.title !== integ) {
