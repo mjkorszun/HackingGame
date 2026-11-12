@@ -56,7 +56,7 @@ export interface SystemDef {
   security?: number;
   /** Agents that start in this system. */
   /** One entry per agent; several agents can share a type. */
-  agents?: { kind: 'warrior'; node: string; type?: WarriorType }[];
+  agents?: { kind?: 'agent' | 'warrior'; node: string; type?: WarriorType; route?: string[] }[];
   /** The job the player was hired for in this system. */
   contract?: ContractDef;
 }
@@ -70,6 +70,8 @@ export interface ContractDef {
   node: string;
   /** Pay in sats on success. */
   pay: number;
+  /** Days you have to finish it, counted from the day you take it (placeholder). */
+  days?: number;
 }
 
 import type { ProgramType } from './programs';
@@ -101,6 +103,8 @@ export type SimEvent =
   | { type: 'query'; agentId: string }
   /** The player's integrity hit zero: thrown out of the net. */
   | { type: 'kicked' }
+  /** A gate stopped the player on the way to the next node. */
+  | { type: 'blocked' }
   | { type: 'alarm'; level: number }
   | { type: 'hit' }
   /** A shot flies from one thing to another (drawn in the map view). */

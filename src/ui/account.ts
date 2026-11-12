@@ -3,6 +3,7 @@ import { programSize, usedMemory, type Program } from '../sim/programs';
 import { newPizzeria, type NetworkSeed } from '../sim/generate';
 import type { DevProject } from '../sim/development';
 import { newGameCode } from '../sim/progression';
+import { MAX_HEALTH, REST_PER_DAY } from '../sim/health';
 import { chipById, KINDS, REMOVE_DAYS, sellPrice, SOCKETS, STARTER_CHIPS, type SocketId } from '../sim/implants';
 
 /** What the player keeps between runs: sats and software. Saved in the browser. */
@@ -37,6 +38,10 @@ export interface Account {
   avatar: { icon: string; color: string };
   /** Icons picked from the full set (name to SVG body), so they show without loading the whole set. */
   customIcons: Record<string, string>;
+  /** Your health, 0-100: at 0 you die. */
+  health: number;
+  /** The contract you took and the last day to finish it. */
+  contract?: { title: string; deadline: number };
   /** Chips wired into your brain (socket to chip model id), spare chips you own, and market offers bought today. */
   hardware: { installed: Partial<Record<SocketId, string>>; spare: string[]; bought: { day: number; ids: string[] } };
   /** Save format: 2 = the scout is the agent, the old scout is the mapper. */
@@ -67,7 +72,19 @@ export function passDay(a: Account, roll: () => number = Math.random, days = 1):
     news.unshift(`skimmers brought in ${earned.toFixed(2)} §${days > 1 ? ` in ${days} days` : ''}`);
   }
   a.day += days;
+  if (a.contract && a.day > a.contract.deadline) {
+    news.push(`the deadline for ${a.contract.title} has passed: the contract is lost`);
+    a.contract = undefined;
+  }
   a.news = news;
+}
+
+/** Rests at your base: days pass and you heal. */
+export function rest(a: Account, days: number): void {
+  passDay(a, Math.random, days);
+  const before = a.health;
+  a.health = Math.min(MAX_HEALTH, a.health + days * REST_PER_DAY);
+  a.news.unshift(`you rested ${days} day${days === 1 ? '' : 's'}: health ${before}% → ${a.health}%`);
 }
 
 /** The bare minimum to go online: a basic jack in the spinal cord and memory in the hippocampus. */
@@ -143,7 +160,7 @@ const START_STORED = ['Sparrow 1.0', 'Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mim
 /** A new game's account. */
 export function fresh(): Account {
   const programs = STARTING_PROGRAMS.map((p) => ({ ...p }));
-  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {}, hardware: newHardware(), version: SAVE_VERSION };
+  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {}, hardware: newHardware(), health: MAX_HEALTH, version: SAVE_VERSION };
 }
 
 const SAVE_VERSION = 2;
@@ -253,6 +270,7 @@ function migrate(a: Account): Account {
   if (!a.avatar || typeof a.avatar.icon !== 'string') a.avatar = { ...DEFAULT_AVATAR };
   if (!a.customIcons || typeof a.customIcons !== 'object') a.customIcons = {};
   if (!a.hardware || typeof a.hardware !== 'object') a.hardware = newHardware();
+  if (typeof a.health !== 'number') a.health = MAX_HEALTH;
   if (!a.hardware.bought) a.hardware.bought = { day: 0, ids: [] };
   if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id);
   // Unload from the end until what is loaded fits.

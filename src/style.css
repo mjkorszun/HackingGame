@@ -407,6 +407,7 @@ body {
 }
 .game-tip[hidden] { display: none; }
 .game-tip .tip-title { color: #d4ffe0; }
+.game-tip .tip-act { color: #ffffff; font-size: 1.15em; margin-bottom: 3px; }
 .tip-worthless { color: var(--grey); }
 .tip-valuable { color: var(--yellow); }
 .tip-empty { color: #b5ad78; }
@@ -577,6 +578,19 @@ body {
 .agent.is-hostile.is-heavy .agent-body { fill: #5a8cff; stroke: #d8e6ff; }
 .mini-agent.is-watchful { fill: #ffc040; }
 .mini-agent.is-heavy { fill: #6f9cff; }
+.agent.is-inspector .agent-body { fill: #eef4ff; stroke: #3a4f78; }
+.agent.is-inspector .agent-icon { color: #24365c; }
+.agent.is-inspector .agent-name { fill: #eef4ff; }
+.agent.is-sentry .agent-body { fill: #ffa060; stroke: #7a3600; }
+.agent.is-sentry .agent-icon { color: #5c2800; }
+.agent.is-sentry .agent-name { fill: #ffa060; }
+.agent.is-worker .agent-body { fill: #a9e8a0; stroke: #2c6a26; }
+.agent.is-worker .agent-icon { color: #1f4d1a; }
+.agent.is-worker .agent-name { fill: #a9e8a0; }
+.agent.is-worker .agent-ring { display: none; }
+.mini-agent.is-inspector { fill: #eef4ff; }
+.mini-agent.is-sentry { fill: #ff9a50; }
+.mini-agent.is-worker { fill: #8fdc86; }
 
 .query-box {
   position: absolute;
@@ -776,6 +790,7 @@ body {
 /* Main screen buttons: an icon before the label. */
 .home-menu .home-btn { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .menu-icon { width: 22px; height: 22px; fill: currentColor; flex: none; }
+.cc-btn .menu-icon { width: 18px; height: 18px; margin-left: 10px; vertical-align: -3px; }
 
 /* Moving things are drawn every frame, so no transition while they travel. */
 .agent.is-hopping, .ally.is-hopping { transition: none; }
@@ -884,3 +899,19 @@ body {
 .hw-chip-head { align-items: center; }
 .hw-chip-icon { width: 22px; height: 22px; fill: currentColor; flex: none; }
 .hw-chip-name { margin-right: auto; }
+
+/* ---------- health, deadlines, pending skill point, credits ---------- */
+.home-health { color: var(--green); }
+.home-health.is-low { color: var(--orange); }
+.health-bar .xp-fill { background: var(--green); }
+.cc-deadline { color: var(--yellow); }
+.cc-deadline.is-urgent { color: var(--orange); }
+.rs-health { display: flex; justify-content: space-between; margin-top: 8px; padding: 6px 10px; border: 1px solid var(--green-faint); color: var(--green); }
+.rs-health.is-hurt { border-color: var(--orange); color: var(--orange); }
+.game-over h2 { color: var(--red); letter-spacing: 6px; }
+.go-buttons { display: flex; gap: 12px; justify-content: center; margin-top: 16px; }
+.home-btn.is-pending { animation: pending-pulse 2.4s ease-in-out infinite; }
+@keyframes pending-pulse { 0%, 100% { background: transparent; box-shadow: none; } 50% { background: #0b2a16; box-shadow: 0 0 10px rgba(61, 255, 122, 0.35); } }
+.credits-btn { position: fixed; right: 12px; bottom: 26px; background: transparent; border: 1px solid var(--green-dim); color: #b8c4bc; font: inherit; font-size: 12px; padding: 2px 10px; cursor: pointer; }
+.credits-btn:hover { color: var(--green); border-color: var(--green); }
+.credits .cr-line { margin: 2px 0; color: #c8d4cc; }

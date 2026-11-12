@@ -7,7 +7,8 @@ import { Game, MOVE_TICKS, shieldHp, warriorDamage } from './game';
 import { Network } from './network';
 
 /** The test system without its agents, so a query never pauses a test that is about something else. */
-const quiet = { ...testSystem, agents: [] };
+// No agents, and gates that never stop you (their own tests use testSystem).
+const quiet = { ...testSystem, agents: [], gates: [] as [string, string][] };
 
 function run(game: Game, ticks: number) {
   for (let i = 0; i < ticks; i++) game.step();
@@ -320,9 +321,10 @@ describe('stub programs', () => {
   it('starts paused', () => {
     expect(new Game(quiet).paused).toBe(true);
   });
-  it('passive programs only explain themselves; a warrior is released as your agent', () => {
+  it('hide only explains itself, analyze needs a target; a warrior is released as your agent', () => {
     const g = new Game(quiet);
-    for (const t of ['hide', 'analyze'] as const) expect(g.runProgram(t)).toBe(true);
+    expect(g.runProgram('hide')).toBe(true);
+    expect(g.runProgram('analyze')).toBe(false); // analyze needs an agent here to read
     expect(g.runProgram('warrior')).toBe(true);
     expect(g.allies.length).toBe(1);
     expect(g.runProgram('warrior')).toBe(false); // the only one is already out
@@ -866,7 +868,7 @@ describe('skimmer and days', () => {
     expect(g.planted?.name).toBe('Skimmer 1.0');
     expect(g.allies.some((a) => a.resident && a.node === 'payments')).toBe(true);
     expect(g.runProgram('skimmer')).toBe(false); // one skimmer per gateway
-    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } } };
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } }, health: 100 };
     passDay(account, () => 0.99);
     expect(account.sats).toBeCloseTo(0.08);
     passDay(account, () => 0);
@@ -916,7 +918,7 @@ describe('software development', () => {
     const { newPizzeria } = await import('./generate');
     const { passDay } = await import('../ui/account');
     const net = newPizzeria(7);
-    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } } };
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } }, health: 100 };
     passDay(account, () => 0.99, 7);
     expect(account.day).toBe(8);
     expect(account.sats).toBeCloseTo(0.56);
@@ -1066,5 +1068,159 @@ describe('hardware', () => {
     expect(typeof removeChip(a, 'spine1')).toBe('string');
     expect(sellChip(a, 'stock-memory')).toMatch(/sold/);
     expect(a.hardware.spare).toEqual([]);
+  });
+});
+
+describe('health and deadlines', () => {
+  it('costs health to leave hurt, more to be thrown out', async () => {
+    const { exitDamage, daysToHeal } = await import('./health');
+    expect(exitDamage(60, 100, false)).toBe(0);
+    expect(exitDamage(40, 100, false)).toBe(5);
+    expect(exitDamage(20, 100, false)).toBe(10);
+    expect(exitDamage(5, 100, false)).toBe(20);
+    expect(exitDamage(0, 100, true, () => 0)).toBe(20);
+    expect(exitDamage(0, 100, true, () => 0.99)).toBe(30);
+    expect(daysToHeal(75)).toBe(3);
+  });
+
+  it('heals by resting, and loses a contract after its deadline', async () => {
+    const { fresh, rest, passDay } = await import('../ui/account');
+    const a = fresh();
+    a.health = 55;
+    rest(a, 2);
+    expect(a.health).toBe(75);
+    a.contract = { title: 'Alter File', deadline: a.day + 1 };
+    passDay(a);
+    expect(a.contract).toBeDefined();
+    passDay(a);
+    expect(a.contract).toBeUndefined();
+    expect(a.news.join(' ')).toMatch(/deadline/);
+  });
+});
+
+describe('gates', () => {
+  it('can stop you on a gated link, more often at red alarm with a burned signature', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const gated = (testSystem.gates ?? [])[0];
+    expect(gated).toBeDefined();
+    let r = 0;
+    const g = new Game({ ...testSystem, entry: gated[0] }, () => r);
+    g.revealMap();
+    const calm = g.gateBlockChance();
+    g.raiseAlarm(3);
+    g.exposeSignature(3, 'test');
+    expect(g.gateBlockChance()).toBeGreaterThan(calm);
+    g.alarm = 0;
+    g.travelTo(gated[1]);
+    // You walk up to the gate and it stops you and asks; the game pauses.
+    for (let i = 0; i < MOVE_TICKS * 3; i++) g.step();
+    expect(g.gateQuery).not.toBeNull();
+    expect(g.isMoving).toBe(true);
+    expect(g.paused).toBe(true);
+    // Back off: you return, the alarm goes yellow.
+    expect(g.answerGate('back')).toBe(true);
+    g.setPaused(false);
+    for (let i = 0; i < MOVE_TICKS * 3; i++) g.step();
+    expect(g.isMoving).toBe(false);
+    expect(g.currentNode).toBe(gated[0]);
+    expect(g.alarm).toBe(1);
+  });
+
+  it('deceive: success passes quietly; a second failure is red; breaking the gate is red', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const [from, to] = (testSystem.gates ?? [])[0];
+    let r = 0;
+    const g = new Game({ ...testSystem, entry: from, agents: [] }, () => r);
+    g.revealMap();
+    const atGate = () => { g.travelTo(to); for (let i = 0; i < MOVE_TICKS * 3 && !g.gateQuery; i++) g.step(); };
+    atGate();
+    expect(g.answerGate('deceive')).toBe(true);
+    g.setPaused(false);
+    for (let i = 0; i < MOVE_TICKS * 3; i++) g.step();
+    expect(g.currentNode).toBe(to);
+    expect(g.alarm).toBe(0);
+    g.travelTo(from);
+    for (let i = 0; i < MOVE_TICKS * 3 && !g.gateQuery; i++) g.step();
+    r = 0.999; // every roll fails
+    g.answerGate('deceive');
+    expect(g.alarm).toBe(1);
+    expect(g.gateQuery?.strikes).toBe(1);
+    g.answerGate('deceive');
+    expect(g.alarm).toBe(3);
+    r = 0;
+    g.answerGate('attack');
+    expect(g.gateQuery).toBeNull();
+    expect(g.alarm).toBe(3);
+    expect(g.network.hasGate(from, to)).toBe(false);
+  });
+});
+
+describe('active analyze', () => {
+  it('takes a few seconds on an agent here and reads it; leaving breaks it off', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const g = new Game({ ...testSystem, gates: [], agents: [{ kind: 'warrior', node: testSystem.entry }] }, () => 0);
+    g.autoPause = false;
+    g.setPaused(false);
+    const tick = (gg: typeof g, n: number) => { for (let i = 0; i < n; i++) gg.step(); };
+    const a = g.agents[0];
+    a.stayLeft = 100_000;
+    expect(g.analyzeCommand('nobody')).toBe(false);
+    expect(g.analyzeCommand('')).toBe(true);
+    tick(g, 10);
+    expect(a.known).toBe('none'); // not yet
+    tick(g, 40);
+    expect(a.known).not.toBe('none');
+  });
+});
+
+describe('agent roles', () => {
+  const run = (g: { step(): void }, n: number) => { for (let i = 0; i < n; i++) g.step(); };
+
+  it('a worker shuttles along its route and never checks you', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const g = new Game({ ...testSystem, gates: [], agents: [{ node: 'gw', type: 'worker', route: ['gw', 'edge'] }] }, () => 0);
+    g.autoPause = false;
+    g.setPaused(false);
+    const seen = new Set<string>();
+    for (let i = 0; i < 600; i++) { g.step(); seen.add(g.agents[0].node); }
+    expect([...seen].sort()).toEqual(['edge', 'gw']);
+    expect(g.query).toBeNull();
+  });
+
+  it('an inspector that finds you out raises red alarm but never hits you', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const g = new Game({ ...testSystem, gates: [], agents: [{ node: 'gw', type: 'inspector' }] }, () => 0);
+    g.autoPause = false;
+    g.setPaused(false);
+    g.agents[0].stayLeft = 100_000;
+    const full = g.integrity;
+    run(g, 20);
+    expect(g.query).not.toBeNull();
+    g.answerQuery('ignore');
+    g.setPaused(false);
+    run(g, 40);
+    g.answerQuery('ignore');
+    g.setPaused(false);
+    expect(g.alarm).toBe(3);
+    run(g, 200);
+    expect(g.integrity).toBe(full);
+  });
+
+  it('a sentry stays put and may check you when you reach for its data', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const g = new Game({ ...testSystem, entry: 'orders', gates: [], agents: [{ node: 'orders', type: 'sentry' }] }, () => 0);
+    g.autoPause = false;
+    g.setPaused(false);
+    run(g, 300);
+    expect(g.agents[0].node).toBe('orders');
+    expect(g.query).toBeNull(); // it does not ask on its own
+    expect(g.scanCommand('')).toBe(false);
+    expect(g.query?.agentId).toBe(g.agents[0].id);
   });
 });

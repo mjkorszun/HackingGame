@@ -145,7 +145,16 @@ interface MoveTask {
   to: string;
   elapsed: number;
   total: number;
+  /** A gate on the link: still ahead, asking who you are, passed, or you are backing off from it. */
+  gate?: 'ahead' | 'asking' | 'passed' | 'back';
 }
+
+/** Ticks an active Analyze of one agent takes (placeholder: 3 s). */
+export const ANALYZE_TICKS = 30;
+/** Where along a hop the gate stands (the avatar walks up to it before it may stop you). */
+const GATE_POINT = 0.62;
+
+const gateKey = (a: string, b: string) => [a, b].sort().join('|');
 
 /** Ticks out of every agent's sight for your signature to drop one level (placeholder: 20 s). */
 export const SIGNATURE_COOL = 200;
@@ -248,7 +257,7 @@ export class Game {
     defs.forEach((a, i) => {
       const stats = WARRIORS[a.type ?? 'balanced'];
       this.agents.push({
-        id: `a${i + 1}`, typeName: names.get(stats.type)!, name: codeName(`${system.id}/${i}`), stats, hp: stats.hp, node: a.node, hop: null,
+        id: `a${i + 1}`, typeName: names.get(stats.type)!, name: codeName(`${system.id}/${i}`), stats, route: a.route, hp: stats.hp, node: a.node, hop: null,
         stayLeft: stats.stay[0], queryLeft: stats.queryEvery, attackLeft: stats.attackEvery,
         mood: 'patrol', strikes: 0, silenced: false, known: 'none',
       });
@@ -364,7 +373,8 @@ export class Game {
         continue;
       }
       const together = a.node === playerHere;
-      if (a.mood === 'hostile') {
+      const role = a.stats.role;
+      if (a.mood === 'hostile' && a.stats.damage > 0) {
         // Your agents in its node draw its fire first: the one fighting it, or any.
         const near = this.allies.filter((x) => x.node === a.node && !x.hop && !x.resident);
         const foe = near.find((x) => x.id === this.foes.get(a.id)) ?? near[0];
@@ -378,7 +388,7 @@ export class Game {
             a.attackLeft = a.stats.attackEvery;
             this.hitPlayer(a);
           }
-        } else {
+        } else if (a.stats.ai !== 'stationary') {
           // Chase the player.
           const target = this.move ? this.move.to : this.currentNode;
           const path = this.network.path(a.node, target);
@@ -386,14 +396,18 @@ export class Game {
         }
         continue;
       }
-      if (together && this.signature >= 3) {
+      if (a.mood === 'hostile') {
+        // An inspector or worker that found you out has already told the system; it just goes on with its work.
+      } else if (role === 'worker') {
+        // Workers do not check anyone.
+      } else if (together && this.signature >= 3) {
         if (this.query?.agentId === a.id) this.query = null;
         a.mood = 'hostile';
         a.attackLeft = a.stats.attackEvery;
         this.log(`${a.name} recognises your burned signature: ENEMY`, 'alarm3');
         continue;
       }
-      if (together && a.mood === 'patrol' && !this.query) {
+      if (together && a.mood === 'patrol' && role !== 'worker' && role !== 'sentry' && !this.query && !this.gateQuery) {
         if (--a.queryLeft <= 0) {
           a.queryLeft = a.stats.queryEvery;
           // After a first unanswered query it asks again for sure.
@@ -401,7 +415,21 @@ export class Game {
         }
       }
       if (together && (a.mood === 'trusting' || this.query?.agentId === a.id)) continue;
+      if (a.stats.ai === 'stationary') continue;
       if (--a.stayLeft <= 0) {
+        if (a.stats.ai === 'path' && a.route && a.route.length > 1) {
+          // Back and forth along its route.
+          const i = a.route.indexOf(a.node);
+          const back = (a.routeBack ??= false);
+          let j = i < 0 ? 0 : back ? i - 1 : i + 1;
+          if (j >= a.route.length || j < 0) {
+            a.routeBack = !back;
+            j = a.routeBack ? i - 1 : i + 1;
+          }
+          const step = this.network.path(a.node, a.route[j])[0];
+          if (step) a.hop = { to: step, elapsed: 0 };
+          continue;
+        }
         const next = this.network.neighbours(a.node).filter((n) => n.kind !== 'honeypot');
         if (next.length) a.hop = { to: this.pick(next).id, elapsed: 0 };
       }
@@ -420,7 +448,7 @@ export class Game {
   /** Your signature cools down while no agent sees you: one level every SIGNATURE_COOL ticks, not below 1. */
   private updateSignature(): void {
     if (!this.signature) return;
-    const seen = !this.move && this.agents.some((a) => a.node === this.currentNode && !a.hop);
+    const seen = !this.move && this.agents.some((a) => a.node === this.currentNode && !a.hop && a.stats.role !== 'worker');
     if (seen) {
       this.unseen = 0;
       return;
@@ -456,22 +484,104 @@ export class Game {
     this.log(`ALARM ${name}`, level >= 3 ? 'alarm3' : level === 2 ? 'alarm2' : 'alarm1');
   }
 
-  /** Passive Analyze: a roll each time an agent deals with you, until it is fully known. */
-  private analyze(a: Agent): void {
+  /** Active Analyze on one agent in your node: takes a few seconds, then rolls like the passive one. */
+  private analysis: { agentId: string; elapsed: number; total: number; progressId: number } | null = null;
+
+  /** The analyze command: an agent here by name, or the first one here. */
+  analyzeCommand(target: string): boolean {
+    if (!this.findProgram('analyze')) {
+      this.log('no analyze program in your gear', 'alarm1');
+      return false;
+    }
+    const here = this.agentsIn(this.currentNode);
+    const q = target.trim().toLowerCase();
+    const a = q ? here.find((x) => x.name.toLowerCase() === q) : here.find((x) => x.known !== 'full') ?? here[0];
+    if (!a) {
+      this.log(q ? `no agent "${target}" here` : 'no agent here to analyze', 'alarm1');
+      return false;
+    }
+    return this.analyzeAgent(a.id);
+  }
+
+  /** Starts analyzing an agent in your node with the Analyze program. */
+  analyzeAgent(agentId: string): boolean {
+    const program = this.findProgram('analyze');
+    const a = this.agentById(agentId);
+    if (!program || !a) return false;
+    if (a.node !== this.currentNode || a.hop || this.move) {
+      this.log(`${program.name}: ${a.name} must be in your node`, 'alarm1');
+      return false;
+    }
+    if (a.known === 'full') {
+      this.log(`${a.name} is already fully analyzed (hover it to see)`, 'system');
+      return false;
+    }
+    if (this.analysis) {
+      this.log(`${program.name} is already analyzing`, 'alarm1');
+      return false;
+    }
+    this.analysis = { agentId, elapsed: 0, total: ANALYZE_TICKS, progressId: this.nextProgressId++ };
+    this.log(`${program.name}: analyzing ${a.name}...`);
+    this.events.push({ type: 'program', programType: 'analyze' });
+    this.actionStarted();
+    return true;
+  }
+
+  private updateAnalysis(): void {
+    const t = this.analysis;
+    if (!t) return;
+    const a = this.agentById(t.agentId);
+    const label = `analyze ${a?.name ?? 'agent'}`;
+    // It needs the agent in front of you the whole time.
+    if (!a || a.node !== this.currentNode || a.hop || this.move) {
+      this.events.push({ type: 'progress', line: { id: t.progressId, label: `${label}: lost it`, progress: t.elapsed / t.total, done: true } });
+      this.log(`analysis broken off: ${a ? `${a.name} is out of reach` : 'the agent is gone'}`, 'alarm1');
+      this.analysis = null;
+      this.actionEnded();
+      return;
+    }
+    t.elapsed++;
+    const done = t.elapsed >= t.total;
+    this.events.push({ type: 'progress', line: { id: t.progressId, label, progress: t.elapsed / t.total, done } });
+    if (!done) return;
+    this.analysis = null;
+    const before = a.known;
+    this.analyze(a, true);
+    this.outcome({ kind: 'agent', id: a.id }, a.known !== before, a.known !== before ? 'ANALYZED' : 'NO READ');
+    this.actionEnded();
+  }
+
+  /** Analyze: a roll each time an agent deals with you (or you analyze it on purpose), until it is fully known. */
+  private analyze(a: Agent, active = false): void {
     if (a.known === 'full') return;
     const program = this.findProgram('analyze');
     if (!program) return;
-    const chance = versus(program.rating, a.stats.scanResist);
+    // On purpose it reads better than in passing (placeholder: twice the rating).
+    const chance = versus(program.rating * (active ? 2 : 1), a.stats.scanResist);
     const roll = this.d100();
     const got = roll <= chance / 2 ? 'full' : roll <= chance ? 'partial' : 'none';
     if (got === 'none' || (got === 'partial' && a.known === 'partial')) {
-      if (a.known === 'none') this.log(`${program.name}: could not read ${a.name}`, 'system');
+      if (a.known === 'none' || active) this.log(`${program.name}: could not read ${a.name}${active ? ' this time' : ''}`, 'system');
       return;
     }
     // Agents of one type share their stats: what you learn about one applies to every agent of that type here.
     for (const b of this.agents) if (b.stats.type === a.stats.type && b.known !== 'full') b.known = got;
     const others = this.agents.filter((b) => b !== a && b.stats.type === a.stats.type).length;
     this.log(`${program.name}: ${a.name} (${a.typeName}) ${got === 'full' ? 'fully analyzed' : 'partly analyzed'}${others ? `. this applies to every ${a.typeName} here` : ''} (hover it to see)`, 'info');
+  }
+
+  /**
+   * A sentry in your node may check you when you reach for its data: a roll of its detection against
+   * your hide. If it checks, the action does not start and you answer its query first.
+   */
+  private sentryChecks(): boolean {
+    if (this.query || this.gateQuery) return false;
+    const sentry = this.agentsIn(this.currentNode).find((a) => a.stats.role === 'sentry' && a.mood === 'patrol');
+    if (!sentry) return false;
+    if (sentry.strikes === 0 && this.d100() > this.queryChance(sentry)) return false;
+    this.log(`${sentry.name} (${sentry.typeName}) checks your access before you touch the data`, 'alarm2');
+    this.startQuery(sentry);
+    return true;
   }
 
   private startQuery(a: Agent): void {
@@ -531,7 +641,7 @@ export class Game {
   private makeHostile(a: Agent, alarm: boolean): void {
     a.mood = 'hostile';
     a.attackLeft = a.stats.attackEvery;
-    this.log(`${a.name} marks you as an ENEMY`, 'alarm3');
+    this.log(a.stats.damage > 0 ? `${a.name} marks you as an ENEMY` : `${a.name} reports you as an INTRUDER`, 'alarm3');
     if (alarm && !a.silenced) this.raiseAlarm(3);
     // A fight burns your signature: every agent will know you (unless this one is silenced and cannot tell).
     if (!a.silenced) this.exposeSignature(3, `${a.name} passed it on to every agent`);
@@ -908,6 +1018,8 @@ export class Game {
     this.route = [];
     this.mapper = null;
     this.scan = null;
+    this.analysis = null;
+    this.gateQuery = null;
     this.fileJob = null;
     this.allies.length = 0;
     const job = this.network.def.contract;
@@ -939,6 +1051,7 @@ export class Game {
     this.updateMove();
     this.updateMapper();
     this.updateScan();
+    this.updateAnalysis();
     this.updateFileJob();
     this.updateAgents();
     this.updateAllies();
@@ -950,6 +1063,10 @@ export class Game {
     if (this.paused === paused) return;
     if (!paused && this.query) {
       this.log(`${this.agentById(this.query.agentId)?.name ?? 'an agent'} is querying you: answer first`, 'alarm1');
+      return;
+    }
+    if (!paused && this.gateQuery) {
+      this.log('the gate is asking who you are: answer first', 'alarm1');
       return;
     }
     this.paused = paused;
@@ -1098,7 +1215,9 @@ export class Game {
 
   /** Hop progress part way into the next tick (for smooth drawing). */
   hopProgressAt(alpha: number): number {
-    return this.move ? Math.min(1, (this.move.elapsed + alpha) / this.move.total) : 0;
+    if (!this.move) return 0;
+    const step = this.move.gate === 'back' ? -alpha : this.move.gate === 'asking' ? 0 : alpha;
+    return Math.max(0, Math.min(1, (this.move.elapsed + step) / this.move.total));
   }
 
   /** Final destination of the current travel, if any. */
@@ -1139,10 +1258,116 @@ export class Game {
     return out;
   }
 
+  /** How many times each gate (by link) caught you lying this run. */
+  private gateStrikes = new Map<string, number>();
+  /** The gate stopping you and asking who you are, if any. */
+  gateQuery: { to: string; strikes: number } | null = null;
+
+  /** The gate's vigilance: higher with the system's security and the alarm. Placeholder numbers. */
+  private get gateVigilance(): number {
+    const security = this.network.def.security ?? 1;
+    return (0.25 + 0.25 * security) * (1 + 0.5 * this.alarm);
+  }
+
+  /**
+   * Chance in % that the gate on a link stops you and asks who you are: its vigilance, raised by how well
+   * agents know your signature, against your hide program. Placeholder numbers.
+   */
+  gateBlockChance(): number {
+    return versus(this.gateVigilance * (1 + this.signature), this.hideRating + 1);
+  }
+
+  /** Chance in % that a deceive program fools the gate (placeholder: rating against vigilance x 2). */
+  gateDeceiveChance(rating: number): number {
+    return versus(rating, this.gateVigilance * 2);
+  }
+
+  /** Chance in % that a warrior program breaks the gate (placeholder: rating against 1 + security). */
+  gateBreakChance(rating: number): number {
+    return versus(rating, 1 + (this.network.def.security ?? 1));
+  }
+
+  /** Answers the gate's query: show a privilege, deceive it, break it, or back off. */
+  answerGate(choice: 'present' | 'deceive' | 'attack' | 'back'): boolean {
+    const q = this.gateQuery;
+    const move = this.move;
+    if (!q || !move) {
+      this.log('no gate is asking you anything', 'system');
+      return false;
+    }
+    const key = gateKey(this.currentNode, q.to);
+    const pass = (text: string) => {
+      this.gateQuery = null;
+      move.gate = 'passed';
+      this.outcome({ kind: 'player' }, true, text);
+      this.actionStarted();
+    };
+    if (choice === 'present') {
+      if (!this.privileges.size) {
+        this.log('you hold no privilege to show', 'alarm1');
+        return false;
+      }
+      this.log(`you show your ${[...this.privileges].join(' / ')} privilege. the gate lets you through`, 'info');
+      pass('ACCEPTED');
+      return true;
+    }
+    if (choice === 'back') {
+      this.gateQuery = null;
+      move.gate = 'back';
+      this.route = [];
+      this.log(`you back off from the gate to ${this.nameOf(q.to)}`, 'system');
+      this.raiseAlarm(1);
+      this.actionStarted();
+      return true;
+    }
+    if (choice === 'deceive') {
+      const program = this.findProgram('deceive');
+      if (!program) {
+        this.log('no deceive program in your gear', 'alarm1');
+        return false;
+      }
+      if (this.d100() <= this.gateDeceiveChance(program.rating)) {
+        this.feats.push('deceive');
+        this.log(`${program.name}: the gate is deceived and lets you through`, 'info');
+        pass('DECEIVED');
+        return true;
+      }
+      q.strikes++;
+      this.gateStrikes.set(key, q.strikes);
+      this.outcome({ kind: 'player' }, false, 'NOT FOOLED');
+      if (q.strikes === 1) {
+        this.log(`${program.name}: the gate saw through it. it asks again`, 'alarm1');
+        this.raiseAlarm(1);
+      } else {
+        this.log(`${program.name}: the gate saw through it again and sounds the alarm`, 'alarm3');
+        this.raiseAlarm(3);
+      }
+      return true;
+    }
+    // Attacking the gate: the whole system knows at once.
+    const program = this.findProgram('warrior');
+    if (!program) {
+      this.log('no warrior program in your gear', 'alarm1');
+      return false;
+    }
+    this.log(`${program.name} goes for the gate`, 'alarm2');
+    this.raiseAlarm(3);
+    if (this.d100() <= this.gateBreakChance(program.rating)) {
+      this.network.breakGate(this.currentNode, q.to);
+      this.log(`${program.name}: the gate to ${this.nameOf(q.to)} is destroyed`, 'info');
+      pass('GATE DOWN');
+    } else {
+      this.outcome({ kind: 'player' }, false, 'GATE HOLDS');
+      this.log(`${program.name}: the gate holds`, 'alarm2');
+    }
+    return true;
+  }
+
   private startNextHop(): void {
     const to = this.route.shift();
     if (!to) return;
-    this.move = { to, elapsed: 0, total: MOVE_TICKS };
+    const gated = this.network.hasGate(this.currentNode, to);
+    this.move = { to, elapsed: 0, total: MOVE_TICKS, gate: gated ? 'ahead' : undefined };
     this.events.push({ type: 'hop', nodeId: to });
     this.log(`connecting to ${this.nameOf(to)}...`);
   }
@@ -1150,7 +1375,32 @@ export class Game {
   private updateMove(): void {
     const move = this.move;
     if (!move) return;
+    if (move.gate === 'asking') return; // waiting at the gate for your answer
+    if (move.gate === 'back') {
+      // Backing off from the gate: walk back into the node.
+      move.elapsed -= 1;
+      if (move.elapsed <= 0) {
+        this.move = null;
+        this.actionEnded();
+      }
+      return;
+    }
     move.elapsed++;
+    // At the gate, halfway along the link: it may stop you.
+    if (move.gate === 'ahead' && move.elapsed >= Math.round(move.total * GATE_POINT)) {
+      move.gate = 'passed';
+      const strikes = this.gateStrikes.get(gateKey(this.currentNode, move.to)) ?? 0;
+      // A gate that caught you lying before asks for sure.
+      if (strikes > 0 || this.d100() <= this.gateBlockChance()) {
+        move.gate = 'asking';
+        this.gateQuery = { to: move.to, strikes };
+        this.log(`the GATE to ${this.nameOf(move.to)} STOPS YOU${strikes ? ' again' : ''}: who are you?`, 'alarm2');
+        this.outcome({ kind: 'player' }, false, 'GATE');
+        this.events.push({ type: 'blocked' });
+        this.setPaused(true);
+        return;
+      }
+    }
     if (move.elapsed >= move.total) {
       // Leaving a node: agents there forget the encounter, unless they know you are an enemy.
       for (const a of this.agents) {
@@ -1243,7 +1493,8 @@ export class Game {
       this.log(`${program.name}: pick a file, e.g. ${program.type} f3`, 'system');
       return false;
     }
-    if (program.type === 'hide' || program.type === 'analyze') {
+    if (program.type === 'analyze') return this.analyzeCommand('');
+    if (program.type === 'hide') {
       this.log(`${program.name} (${program.type} ${program.rating}): ${PROGRAM_STUBS[program.type]}`, 'info');
       return true;
     }
@@ -1370,6 +1621,7 @@ export class Game {
       this.log(`${program.name}: nothing to scan here (files live in databases)`, 'alarm1');
       return false;
     }
+    if (this.sentryChecks()) return false;
     if (this.isBusy) {
       this.log(`${this.busyName} is already running`, 'alarm1');
       return false;
@@ -1468,6 +1720,7 @@ export class Game {
       this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
       return true;
     }
+    if (this.sentryChecks()) return false;
     let program: Program | null = null;
     if (action === guard || action === 'evaluate' || action === 'identify') {
       program = this.findProgram(action) ?? null;

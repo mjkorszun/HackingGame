@@ -36,7 +36,16 @@ export class Network {
 
   /** Whether the link between a and b has a gate on it. */
   hasGate(a: string, b: string): boolean {
+    if (this.brokenGates.has([a, b].sort().join('|'))) return false;
     return (this.def.gates ?? []).some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+  }
+
+  /** Gates destroyed in this run. */
+  private readonly brokenGates = new Set<string>();
+
+  /** Destroys the gate on the link between a and b (for the rest of the run). */
+  breakGate(a: string, b: string): void {
+    this.brokenGates.add([a, b].sort().join('|'));
   }
 
   isLinked(a: string, b: string): boolean {

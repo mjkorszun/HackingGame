@@ -146,11 +146,14 @@ function drawProgramIcon(cx: number, cy: number, parent: Element): void {
 
 /** What the game tooltip says about a data file. */
 function fileTip(f: DataFile): TipLine[] {
-  const lines: TipLine[] = [{ text: f.id, cls: 'tip-title' }];
+  const act = clickAction(f) ?? (f.scanned ? undefined : 'scan');
+  // What a click does comes first, so you know before you click.
+  const lines: TipLine[] = act ? [{ text: `click: ${act}`, cls: 'tip-act' }] : [];
+  lines.push({ text: f.id, cls: 'tip-title' });
   if (f.protection) lines.push({ text: PROTECTION_LABEL[f.protection] + (f.protection === 'lock' ? `: ${f.lockPrivilege}` : ''), cls: 'tip-protection' });
   if (!f.scanned) {
-    const hint = f.protection === 'seal' ? 'click to decrypt the seal first' : f.protection === 'lock' ? 'needs the privilege, or forge' : f.protection === 'killswitch' ? 'defuse it first, or it is lost' : 'click to scan';
-    return [...lines, { text: 'encrypted', cls: 'c-system' }, { text: hint, cls: 'c-system' }];
+    const hint = f.protection === 'seal' ? 'sealed: decrypt it first' : f.protection === 'lock' ? 'needs the privilege, or forge' : f.protection === 'killswitch' ? 'defuse it first, or it is lost' : '';
+    return [...lines, { text: 'encrypted', cls: 'c-system' }, ...(hint ? [{ text: hint, cls: 'c-system' }] : []), { text: 'right-click: all actions', cls: 'c-system' }];
   }
   const seen = apparentContent(f);
   lines.push({ text: CONTENT_LABEL[seen], cls: `tip-${seen}` });
@@ -162,8 +165,7 @@ function fileTip(f: DataFile): TipLine[] {
   }
   if (f.content === 'contract') lines.push({ text: f.altered ? 'altered' : `the contract wants it ${f.need === 'alter' ? 'altered' : 'deleted'}` });
   if (f.downloaded) lines.push({ text: 'downloaded', cls: 'c-info' });
-  const act = clickAction(f);
-  if (act) lines.push({ text: `click to ${act}`, cls: 'c-system' });
+  lines.push({ text: 'right-click: all actions', cls: 'c-system' });
   return lines;
 }
 
@@ -705,7 +707,7 @@ export class NetworkView {
     svg('circle', { r: 15, class: 'agent-ring' }, grp);
     svg('circle', { r: 11, class: 'agent-body' }, grp);
     const icon = svg('svg', { x: -7, y: -7, width: 14, height: 14, viewBox: '0 0 512 512', class: 'agent-icon' }, grp);
-    icon.innerHTML = iconBody(agentIcon(this.game.network.def.id, WARRIOR_TYPES.indexOf(a.stats.type))) ?? '';
+    icon.innerHTML = iconBody(agentIcon(this.game.network.def.id, WARRIOR_TYPES.indexOf(a.stats.type), a.stats.role)) ?? '';
     // Integrity bar over its head, shown once it has taken damage.
     svg('rect', { x: -12, y: -24, width: 24, height: 3, class: 'agent-hp-bg' }, grp);
     svg('rect', { x: -12, y: -24, width: 24, height: 3, class: 'agent-hp' }, grp);
@@ -732,9 +734,10 @@ export class NetworkView {
         if (!p) return `needs ${type}`;
         return live.known === 'none' ? 'odds unknown' : oddsWord(versus(p.rating, resist));
       };
-      this.menu.show(e.clientX, e.clientY, `${live.name}: ${live.stats.kind}`, [
+      this.menu.show(e.clientX, e.clientY, `${live.name}: ${live.typeName}`, [
         { label: 'Attack', hint: here ? (this.warriorsHere() ? 'your warriors here' : this.game.findProgram('warrior') ? `release ${this.game.findProgram('warrior')!.name}` : 'needs a warrior') : 'not in your node', disabled: !here || (!this.warriorsHere() && !this.game.findProgram('warrior')), action: () => this.actions.command(`attack ${live.name}`) },
         { label: 'Silence', hint: here ? odds('silence', live.stats.silenceResist) : 'not in your node', disabled: !here || live.silenced || !this.game.findProgram('silence'), action: () => this.actions.command(`silence ${live.name}`) },
+        { label: 'Analyze', hint: live.known === 'full' ? 'already fully analyzed' : here ? `${this.game.findProgram('analyze')?.name ?? 'needs an analyze program'}: its type and stats` : 'not in your node', disabled: !here || live.known === 'full' || !this.game.findProgram('analyze'), action: () => this.actions.command(`analyze ${live.name}`) },
       ]);
     });
     return grp;
@@ -744,12 +747,24 @@ export class NetworkView {
   private updateQuery(): void {
     const g = this.game;
     const a = g.query ? g.agentById(g.query.agentId) : undefined;
-    const key = a ? `${a.id}|${a.known}|${a.strikes}|${g.privileges.size}|${g.programs.length}|${g.deckVersion}` : '';
+    const gq = g.gateQuery;
+    const key = a ? `${a.id}|${a.known}|${a.strikes}|${g.privileges.size}|${g.programs.length}|${g.deckVersion}` : gq ? `gate|${gq.to}|${gq.strikes}|${g.alarm}|${g.privileges.size}|${g.deckVersion}` : '';
     if (key === this.queryKey) return;
     this.queryKey = key;
-    this.queryBox.hidden = !a;
-    if (!a) return;
+    this.queryBox.hidden = !a && !gq;
     const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+    if (!a && gq) {
+      const deceive = g.findProgram('deceive');
+      const warrior = g.findProgram('warrior');
+      this.fillQuery(`THE GATE TO ${esc(g.nameOf(gq.to)).toUpperCase()} STOPS YOU${gq.strikes ? ' AGAIN' : ''}`, 'who are you?', [
+        { cmd: 'present', label: 'Show privilege', hint: g.privileges.size ? `you hold: ${[...g.privileges].join(', ')}` : 'you hold no privilege', disabled: !g.privileges.size },
+        { cmd: 'deceive', label: 'Deceive', hint: deceive ? `${deceive.name}: odds ${oddsWord(g.gateDeceiveChance(deceive.rating))}. if it fails: ${gq.strikes ? 'RED alarm' : 'yellow alarm, it asks again'}` : 'needs a deceive program', disabled: !deceive },
+        { cmd: 'attack', label: 'Break the gate', hint: warrior ? `${warrior.name}: odds ${oddsWord(g.gateBreakChance(warrior.rating))}. RED alarm at once` : 'needs a warrior program', disabled: !warrior },
+        { cmd: 'back', label: 'Back off', hint: 'you go back. yellow alarm' },
+      ]);
+      return;
+    }
+    if (!a) return;
     const odds = (type: 'deceive' | 'silence' | 'warrior', resist: number): string => {
       const p = g.findProgram(type);
       if (!p) return `needs a ${type} program`;
@@ -764,9 +779,14 @@ export class NetworkView {
       { cmd: 'attack', label: 'Warrior', hint: mine ? 'your warriors here attack it. a kill in one blow is quiet' : warrior ? `release ${odds('warrior', a.stats.armor)}. it fights for you; a kill in one blow is quiet` : 'no warrior free', disabled: !mine && !warrior },
       { cmd: 'ignore', label: 'Ignore', hint: a.strikes ? 'RED alarm, it turns hostile' : 'yellow alarm, it asks again' },
     ];
+    this.fillQuery(`${esc(a.name)} (${esc(a.typeName)}) QUERIES YOU${a.strikes ? ' AGAIN' : ''}`, agentInfo(a).slice(1).map(esc).join('<br>'), options);
+  }
+
+  private fillQuery(title: string, info: string, options: { cmd: string; label: string; hint: string; disabled?: boolean }[]): void {
+    const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
     this.queryBox.innerHTML = `
-      <div class="qb-title">${esc(a.name)} (${esc(a.typeName)}) QUERIES YOU${a.strikes ? ' AGAIN' : ''}</div>
-      <div class="qb-info">${agentInfo(a).slice(1).map(esc).join('<br>')}</div>
+      <div class="qb-title">${title}</div>
+      <div class="qb-info">${info}</div>
       <div class="qb-options"></div>`;
     const box = this.queryBox.querySelector('.qb-options')!;
     for (const o of options) {
@@ -1113,8 +1133,19 @@ export class NetworkView {
       const label = svg('text', { x, y: bottom + 36, class: 'node-kind' }, grp);
       label.textContent = KIND_LABEL[kind];
     }
-    const title = svg('title', {}, grp);
-    title.textContent = opts.current ? `${nodeName} (you are here)` : `${nodeName}: click to connect`;
+    if (opts.current) svg('title', {}, grp).textContent = `${nodeName} (you are here)`;
+    else {
+      this.tip.attach(grp, () => {
+        const gated = this.game.network.hasGate(this.game.currentNode, node.id);
+        return [
+          { text: `click: connect${gated ? ' (through a gate)' : ''}`, cls: 'tip-act' },
+          { text: nodeName, cls: 'tip-title' },
+          ...(kind !== 'hidden' ? [{ text: KIND_LABEL[kind] }] : []),
+          ...(gated ? [{ text: `the gate: ${oddsWord(this.game.gateBlockChance())} chance it stops you`, cls: 'tip-protection' }] : []),
+          { text: 'right-click: all actions', cls: 'c-system' },
+        ];
+      });
+    }
 
     grp.addEventListener('click', () => {
       if (!opts.current) this.actions.travel(node.id);
@@ -1133,7 +1164,7 @@ export class NetworkView {
     if (!isCurrent) {
       items.push({
         label: 'Connect',
-        hint: number !== undefined && number <= 9 ? `click / ${number}` : 'click',
+        hint: `${number !== undefined && number <= 9 ? `click / ${number}` : 'click'}${this.game.network.hasGate(this.game.currentNode, node.id) ? `. gate: ${oddsWord(this.game.gateBlockChance())} chance it stops and questions you` : ''}`,
         action: () => this.actions.travel(node.id),
       });
     }
