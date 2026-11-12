@@ -1068,3 +1068,16 @@ body {
 .mm-no { color: var(--green); border: 1px solid var(--green); }
 .mm-no:hover { background: var(--green-faint); }
 .main-menu .mm-back { margin-top: 24px; width: 280px; }
+.home-gear-btn { position: absolute; top: 12px; right: 14px; z-index: 5; }
+.game-menu-buttons { display: flex; gap: 12px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--green-dim); }
+.game-menu-btn { flex: 1; background: transparent; color: var(--green); border: 1px solid var(--green); font: inherit; font-size: 15px; padding: 8px 16px; cursor: pointer; }
+.game-menu-btn:hover:not(:disabled) { background: var(--green-faint); }
+.game-menu-btn:disabled { color: var(--grey); border-color: #4a564f; cursor: not-allowed; }
+.game-menu-note { min-height: 0; margin-top: 10px; color: var(--green); font-size: 14px; }
+.game-menu-note:empty { display: none; }
+.game-menu-note.is-warning { color: var(--yellow); display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.game-menu-note button { background: transparent; font: inherit; padding: 3px 12px; cursor: pointer; }
+.game-menu-yes { color: var(--yellow); border: 1px solid var(--yellow); }
+.game-menu-yes:hover { background: #1a1604; }
+.game-menu-no { color: var(--green); border: 1px solid var(--green); }
+.game-menu-no:hover { background: var(--green-faint); }
