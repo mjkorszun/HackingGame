@@ -27,6 +27,10 @@ const ROOM_SCALE: Partial<Record<NodeKind, number>> = { monitoring: 1.3, vehicle
 const NEIGHBOUR_R = 30;
 /** Size of the player figure (1 = original). */
 const AVATAR_SCALE = 0.8;
+/** For keeping things apart in a node: the avatar's half height and radius, and an agent's radius (with its name). */
+const AVATAR_HALF = 25 * AVATAR_SCALE;
+const AVATAR_R = 28;
+const AGENT_R = 26;
 /** Neighbours sit on an ellipse around the room. */
 const RING_X = 305;
 const RING_Y = 232;
@@ -423,6 +427,8 @@ export class NetworkView {
   /** How far you lean towards the file you work on (0..1), and the line to it. */
   private lean = 0;
   private actionLink: SVGLineElement | null = null;
+  /** Spots taken in your node by agents (theirs and yours), so nobody covers a file or anyone else. */
+  private roomSpots = new Map<string, { x: number; y: number }>();
   private leanTo: { x: number; y: number } | null = null;
   private lastAvatarAt = 0;
   /** Top layer for shots and outcome texts. */
@@ -585,12 +591,19 @@ export class NetworkView {
     // Where you stand: just inside the door you came in by (the middle when you have just jacked in).
     const came = this.lastNode && this.lastNode !== current.id ? this.positions.get(this.lastNode) : undefined;
     if (this.lastNode !== current.id) {
+      // A new node: everyone gets a new spot here, clear of the files and of each other.
+      this.roomSpots.clear();
       if (came) {
         const door = this.doorTowards(came.x, came.y);
-        this.avatarHome = lerpXY(door, { x: CX, y: CY + 40 }, 0.38);
-        // You step in through that door and walk a little way in.
+        // You step in through that door and walk a little way in, to a free spot.
+        const want = lerpXY(door, { x: CX, y: CY + 40 }, 0.76);
+        const free = this.freeSpot({ x: want.x, y: want.y - AVATAR_HALF }, AVATAR_R, null);
+        this.avatarHome = { x: free.x, y: free.y + AVATAR_HALF };
         this.walkIn = { from: door, at: performance.now() };
-      } else if (!this.lastNode) this.avatarHome = { x: CX, y: CY + 40 };
+      } else {
+        const free = this.freeSpot({ x: CX, y: CY + 40 - AVATAR_HALF }, AVATAR_R, null);
+        this.avatarHome = { x: free.x, y: free.y + AVATAR_HALF };
+      }
       this.lastNode = current.id;
     }
     // A dashed line from you to the file you are working on, under the avatar.
@@ -640,7 +653,12 @@ export class NetworkView {
       // While it walks to the link it keeps its spot in the node, so the others don't jump.
       const i = count.get(a.node) ?? 0;
       count.set(a.node, i + 1);
-      const spot = this.agentSpot(a.node, i);
+      let spot = this.agentSpot(a.node, i);
+      if (a.node === g.currentNode && spot) {
+        // In your node it takes a free spot: near the door when it has just come in, else near its usual place.
+        const came = !a.hop ? this.lastHopPos.get(a.id) : undefined;
+        spot = this.roomSpot(a.id, came ? lerpXY(came.pos, { x: CX, y: CY }, 0.35) : spot);
+      } else this.roomSpots.delete(a.id);
       let cross = 0;
       if (a.hop) {
         // First it walks from its spot to where the link leaves the node, then it crosses the link.
@@ -791,8 +809,11 @@ export class NetworkView {
         const i = count.get(a.node) ?? 0;
         count.set(a.node, i + 1);
         pos = this.allySpot(a.node, i);
+        // Yours too stand where they cover no file and no one else.
+        if (pos && a.node === g.currentNode) pos = this.roomSpot(a.id, pos);
         miniPos = this.miniXY(a.node);
       }
+      if (a.hop || a.node !== g.currentNode || (a.program.type === 'shield' && !g.isMoving)) this.roomSpots.delete(a.id);
       els.main.classList.toggle('is-shield', a.program.type === 'shield');
       els.main.classList.toggle('is-resident', !!a.resident);
       els.main.style.display = pos ? '' : 'none';
@@ -1055,6 +1076,41 @@ export class NetworkView {
       else hi = mid;
     }
     return { x: CX + dx * lo, y: CY + dy * lo };
+  }
+
+  /**
+   * The free spot nearest to `want` in your node for something of radius r: inside the room, clear of the files,
+   * of your avatar and of the agents already standing here. Only a look: distances mean nothing in the game.
+   */
+  private freeSpot(want: { x: number; y: number }, r: number, self: string | null): { x: number; y: number } {
+    const taken: { x: number; y: number; r: number }[] = [];
+    for (const f of this.filePos.values()) taken.push({ x: f.x, y: f.y, r: CELL * 0.5 });
+    if (self !== null) taken.push({ x: this.avatarHome.x, y: this.avatarHome.y - AVATAR_HALF, r: AVATAR_R });
+    for (const [id, p] of this.roomSpots) if (id !== self) taken.push({ ...p, r: AGENT_R });
+    const fits = (x: number, y: number) =>
+      this.inRoom(x - r, y - r) && this.inRoom(x + r, y - r) && this.inRoom(x - r, y + r) && this.inRoom(x + r, y + r) &&
+      taken.every((t) => Math.hypot(t.x - x, t.y - y) >= t.r + r);
+    for (let ring = 0; ring < 40; ring++) {
+      const d = ring * 8;
+      const n = ring === 0 ? 1 : Math.max(8, ring * 6);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const x = want.x + Math.cos(a) * d;
+        const y = want.y + Math.sin(a) * d;
+        if (fits(x, y)) return { x, y };
+      }
+    }
+    return want;
+  }
+
+  /** An agent's spot in your node: kept while it stays, found free when it arrives. */
+  private roomSpot(id: string, want: { x: number; y: number }): { x: number; y: number } {
+    let p = this.roomSpots.get(id);
+    if (!p) {
+      p = this.freeSpot(want, AGENT_R, id);
+      this.roomSpots.set(id, p);
+    }
+    return p;
   }
 
   private inRoom(x: number, y: number): boolean {
