@@ -1022,3 +1022,6 @@ body {
   from { opacity: 1; transform: scale(1); filter: none; }
   to { opacity: 0; transform: scale(0.3) translateY(-10px); filter: brightness(3); }
 }
+.entry-agent { align-items: center; margin-bottom: 6px; cursor: default; }
+.entry-agent-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.entry-agent-icon { width: 22px; height: 22px; flex-basis: 22px; padding: 3px; }

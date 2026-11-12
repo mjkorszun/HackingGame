@@ -846,13 +846,12 @@ describe('agents', () => {
     expect(next.isKnown('ads')).toBe(true);
   });
 
-  it('remembers the types of agents met in a node', () => {
-    const g = new Game({ ...testSystem, gates: [], agents: [{ kind: 'warrior', node: 'gw', type: 'heavy' }] });
+  it('remembers the kinds of agents met in a node, each kind once', () => {
+    const g = new Game({ ...testSystem, gates: [], agents: [{ kind: 'warrior', node: 'gw', type: 'heavy' }, { kind: 'warrior', node: 'gw', type: 'heavy' }] });
     const seen = g.intel().agents.gw;
     expect(seen).toHaveLength(1);
     expect(seen[0].type).toBe('heavy');
     expect(seen[0].known).toBe('none');
-    expect(seen[0].name).toBe(g.agents[0].name);
   });
 
   it('a worker walks its route stop to stop, through the nodes between them', () => {

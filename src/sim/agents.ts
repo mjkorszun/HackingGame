@@ -193,6 +193,37 @@ export function agentInfo(a: Agent): string[] {
   return lines;
 }
 
+/** A role in a few words, for one-line lists. */
+export const ROLE_SHORT: Record<AgentRole, string> = {
+  fighter: 'fighter',
+  inspector: 'inspector',
+  sentry: 'sentry',
+  worker: 'worker',
+};
+
+/**
+ * Everything about a kind of agent, as far as your Analyze read it: what is not known yet says "unknown".
+ * Partly analyzed shows its health and attack; fully analyzed shows everything.
+ */
+export function kindInfo(typeName: string, s: AgentStats, known: Knowledge): { label: string; value: string }[] {
+  const part = known !== 'none';
+  const full = known === 'full';
+  const u = 'unknown';
+  const asks = s.role === 'worker' ? 'never checks you' : s.role === 'sentry' ? 'when you touch data in its node' : `every ${s.queryEvery / TPS} s`;
+  return [
+    { label: 'kind', value: `${typeName}, ${ROLE_LABEL[s.role]}` },
+    { label: 'analyzed', value: full ? 'fully' : part ? 'partly' : 'not yet' },
+    { label: 'HP', value: part ? String(s.hp) : u },
+    { label: 'attack', value: part ? (s.damage ? `${s.damage} every ${s.attackEvery / TPS} s (DPS ${dps(s)})` : 'does not fight') : u },
+    { label: 'armour', value: full ? String(s.armor) : u },
+    { label: 'detection', value: full ? String(s.detection) : u },
+    { label: 'checks you', value: full ? asks : u },
+    { label: 'speed', value: full ? (s.ai === 'stationary' ? 'never leaves its node' : `crosses a link in ${s.hopTicks / TPS} s`) : u },
+    { label: 'resists', value: full ? `silence ${s.silenceResist}, deceive ${s.deceiveResist}, analyze ${s.scanResist}` : u },
+    { label: 'AI', value: full ? s.ai : u },
+  ];
+}
+
 /** d100 chance for rating r against resistance d: 100r/(r+d). */
 export function versus(r: number, d: number): number {
   return (100 * r) / (r + Math.max(0.01, d));

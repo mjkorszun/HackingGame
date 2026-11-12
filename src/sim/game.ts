@@ -1,5 +1,5 @@
 import { sats } from './money';
-import type { AgentSighting, NetIntel } from './intel';
+import { RANK, type AgentSighting, type NetIntel } from './intel';
 import { CHASE_HOP_TICKS, codeName, LEAVE_TICKS, typeNames, versus, WARRIORS, type Agent } from './agents';
 import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
@@ -1248,7 +1248,9 @@ export class Game {
       for (const id of ids) {
         const a = this.agentById(id) ?? this.seenAgents.get(id);
         if (!a) continue;
-        list.push({ name: a.name, type: a.stats.type, typeName: a.typeName, role: a.stats.role, known: a.known });
+        const had = list.find((x) => x.type === a.stats.type);
+        if (!had) list.push({ type: a.stats.type, typeName: a.typeName, role: a.stats.role, known: a.known });
+        else if (RANK[a.known] > RANK[had.known]) had.known = a.known;
       }
       if (list.length) agents[node] = list;
     }

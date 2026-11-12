@@ -1,6 +1,7 @@
 import type { NodeKind, SystemDef } from '../sim/types';
 import type { NetIntel } from '../sim/intel';
-import { agentInfo, WARRIORS, type Agent, type WarriorType } from '../sim/agents';
+import { kindInfo, ROLE_SHORT, WARRIORS, type WarriorType } from '../sim/agents';
+import { Tooltip } from './tooltip';
 import { agentIcon, iconBody } from './icons';
 
 const WARRIOR_TYPES = Object.keys(WARRIORS) as WarriorType[];
@@ -44,6 +45,7 @@ export function showEntryScreen(system: SystemDef, intel: NetIntel | undefined, 
   };
   const nameOf = (id: string) => (identified.has(id) ? system.nodes.find((x) => x.id === id)!.name : 'unknown node');
 
+  const tip = new Tooltip();
   const box = document.createElement('div');
   box.className = 'run-summary';
   box.innerHTML = `
@@ -56,6 +58,10 @@ export function showEntryScreen(system: SystemDef, intel: NetIntel | undefined, 
       </div>
       <button type="button" class="entry-cancel">Cancel</button>
     </div>`;
+  const close = () => {
+    tip.hide();
+    box.remove();
+  };
   const map = box.querySelector('svg')!;
   const info = box.querySelector<HTMLElement>('.entry-info')!;
   const shown = system.nodes.filter((n) => known.has(n.id));
@@ -82,17 +88,23 @@ export function showEntryScreen(system: SystemDef, intel: NetIntel | undefined, 
     else if (entries.includes(id)) lines.push('<p class="entry-tag">your backdoor</p>');
     const seen = intel?.agents[id] ?? [];
     if (seen.length) {
-      lines.push('<p class="rs-dim">agents met here:</p><ul class="entry-agents">');
-      for (const s of seen) {
-        // As much as your Analyze read: only who it is, part of its stats, or everything.
+      lines.push('<p class="rs-dim">kinds of agents met here:</p><ul class="entry-agents">');
+      seen.forEach((s, i) => {
         const st = WARRIORS[s.type];
-        const [head, ...rest] = agentInfo({ name: s.name, typeName: s.typeName, stats: st, hp: st.hp, known: s.known } as Agent);
         const icon = iconBody(agentIcon(system.id, WARRIOR_TYPES.indexOf(s.type), s.role)) ?? '';
-        lines.push(`<li class="entry-agent is-${s.type}${st.ai === 'stationary' ? ' is-fixed' : ''}"><svg class="entry-agent-icon" viewBox="0 0 512 512">${icon}</svg><div><b>${esc(head)}</b>${rest.map((t) => `<br><span class="${t.startsWith('not analyzed') || t === 'partly analyzed' ? 'rs-dim' : ''}">${esc(t)}</span>`).join('')}</div></li>`);
-      }
+        const tag = s.known === 'full' ? ' · analyzed' : s.known === 'partial' ? ' · partly analyzed' : ' · not analyzed';
+        lines.push(`<li class="entry-agent is-${s.type}${st.ai === 'stationary' ? ' is-fixed' : ''}" data-kind="${i}"><svg class="entry-agent-icon" viewBox="0 0 512 512">${icon}</svg><span class="entry-agent-line"><b>${esc(s.typeName)}</b> · ${esc(ROLE_SHORT[s.role])}<span class="rs-dim">${tag}</span></span></li>`);
+      });
       lines.push('</ul>');
     } else if (identified.has(id) || known.has(id)) lines.push('<p class="rs-dim">no agents met here</p>');
     info.innerHTML = lines.join('');
+    info.querySelectorAll<HTMLElement>('.entry-agent').forEach((li) => {
+      const s = seen[Number(li.dataset.kind)];
+      tip.attach(li, () => [
+        { text: s.typeName, cls: 'tip-title' },
+        ...kindInfo(s.typeName, WARRIORS[s.type], s.known).slice(1).map((x) => ({ text: `${x.label}: ${x.value}`, cls: x.value === 'unknown' ? 'c-system' : undefined })),
+      ]);
+    });
   };
   for (const n of shown) {
     const can = entries.includes(n.id);
@@ -102,14 +114,14 @@ export function showEntryScreen(system: SystemDef, intel: NetIntel | undefined, 
       onHover?.();
     });
     if (can) shape.addEventListener('click', () => {
-      box.remove();
+      close();
       onEnter(n.id);
     });
     const label = svg('text', { x: sx(n.x), y: sy(n.y) + 26, class: 'entry-label' }, g);
     label.textContent = identified.has(n.id) ? n.name : '?';
   }
   box.querySelector('.entry-cancel')!.addEventListener('click', () => {
-    box.remove();
+    close();
     onCancel();
   });
   document.body.appendChild(box);
