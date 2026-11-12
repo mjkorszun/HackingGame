@@ -662,7 +662,7 @@ export class NetworkView {
   private drawAgent(a: Agent, parent: Element): SVGGElement {
     const grp = svg('g', { class: `agent is-${a.stats.type}`, 'data-agent': a.id }, parent) as SVGGElement;
     // Its attitude: a ring of four segments that spins, faster the warier it is.
-    svg('circle', { r: 17, class: 'agent-ring' }, grp);
+    svg('circle', { r: 15, class: 'agent-ring' }, grp);
     svg('circle', { r: 11, class: 'agent-body' }, grp);
     const icon = svg('svg', { x: -7, y: -7, width: 14, height: 14, viewBox: '0 0 512 512', class: 'agent-icon' }, grp);
     icon.innerHTML = iconBody(agentIcon(this.game.network.def.id, WARRIOR_TYPES.indexOf(a.stats.type))) ?? '';
