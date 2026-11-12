@@ -546,6 +546,7 @@ function flush(): void {
     else if (ev.type === 'paused' && !ev.auto) sfx.play(ev.paused ? 'pause' : 'resume');
     else if (ev.type === 'query') sfx.play('error');
     else if (ev.type === 'kicked') setTimeout(leaveNet, 600);
+    else if (ev.type === 'blocked') sfx.play('error');
     else if (ev.type === 'shot' || ev.type === 'outcome') view.fx(ev);
     else if (ev.type === 'program' && (ev.programType === 'mapper' || ev.programType === 'scan')) sfx.play(ev.programType);
   }

@@ -103,6 +103,8 @@ export type SimEvent =
   | { type: 'query'; agentId: string }
   /** The player's integrity hit zero: thrown out of the net. */
   | { type: 'kicked' }
+  /** A gate stopped the player on the way to the next node. */
+  | { type: 'blocked' }
   | { type: 'alarm'; level: number }
   | { type: 'hit' }
   /** A shot flies from one thing to another (drawn in the map view). */

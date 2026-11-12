@@ -1133,7 +1133,7 @@ export class NetworkView {
     if (!isCurrent) {
       items.push({
         label: 'Connect',
-        hint: number !== undefined && number <= 9 ? `click / ${number}` : 'click',
+        hint: `${number !== undefined && number <= 9 ? `click / ${number}` : 'click'}${this.game.network.hasGate(this.game.currentNode, node.id) ? `. gate: ${oddsWord(this.game.gateBlockChance())} chance it stops you` : ''}`,
         action: () => this.actions.travel(node.id),
       });
     }

@@ -147,6 +147,9 @@ interface MoveTask {
   total: number;
 }
 
+/** Ticks a gate that stopped you holds before you may try it again (placeholder: 3 s). */
+export const GATE_RETRY_TICKS = 30;
+
 /** Ticks out of every agent's sight for your signature to drop one level (placeholder: 20 s). */
 export const SIGNATURE_COOL = 200;
 export const SIGNATURE_NAMES = ['anonymous', 'noticed', 'suspected', 'burned'] as const;
@@ -1139,9 +1142,42 @@ export class Game {
     return out;
   }
 
+  /** When each gate (by link) lets you try again after it stopped you. */
+  private gateWait = new Map<string, number>();
+
+  /**
+   * Chance in % that the gate on a link stops you: its vigilance (higher with the system's security),
+   * raised by the alarm and by how well agents know your signature, against your hide program.
+   * Placeholder numbers.
+   */
+  gateBlockChance(): number {
+    const security = this.network.def.security ?? 1;
+    const vigilance = (0.25 + 0.25 * security) * (1 + 0.5 * this.alarm) * (1 + this.signature);
+    return versus(vigilance, this.hideRating + 1);
+  }
+
   private startNextHop(): void {
     const to = this.route.shift();
     if (!to) return;
+    const from = this.currentNode;
+    if (this.network.hasGate(from, to)) {
+      const key = [from, to].sort().join('|');
+      const wait = (this.gateWait.get(key) ?? 0) - this.tick;
+      if (wait > 0) {
+        this.route = [];
+        this.log(`the gate to ${this.nameOf(to)} is still holding you: try again in ${Math.ceil(wait / TICKS_PER_SECOND)} s`, 'alarm1');
+        this.outcome({ kind: 'player' }, false, 'GATE CLOSED');
+        return;
+      }
+      if (this.d100() <= this.gateBlockChance()) {
+        this.route = [];
+        this.gateWait.set(key, this.tick + GATE_RETRY_TICKS);
+        this.log(`GATE BLOCKS YOU: the gate to ${this.nameOf(to)} does not let you through. try again in ${GATE_RETRY_TICKS / TICKS_PER_SECOND} s`, 'alarm2');
+        this.outcome({ kind: 'player' }, false, 'BLOCKED');
+        this.events.push({ type: 'blocked' });
+        return;
+      }
+    }
     this.move = { to, elapsed: 0, total: MOVE_TICKS };
     this.events.push({ type: 'hop', nodeId: to });
     this.log(`connecting to ${this.nameOf(to)}...`);

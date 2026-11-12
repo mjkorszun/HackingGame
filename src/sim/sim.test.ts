@@ -7,7 +7,8 @@ import { Game, MOVE_TICKS, shieldHp, warriorDamage } from './game';
 import { Network } from './network';
 
 /** The test system without its agents, so a query never pauses a test that is about something else. */
-const quiet = { ...testSystem, agents: [] };
+// No agents, and gates that never stop you (their own tests use testSystem).
+const quiet = { ...testSystem, agents: [], gates: [] as [string, string][] };
 
 function run(game: Game, ticks: number) {
   for (let i = 0; i < ticks; i++) game.step();
@@ -1093,5 +1094,27 @@ describe('health and deadlines', () => {
     passDay(a);
     expect(a.contract).toBeUndefined();
     expect(a.news.join(' ')).toMatch(/deadline/);
+  });
+});
+
+describe('gates', () => {
+  it('can stop you on a gated link, more often at red alarm with a burned signature', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const gated = (testSystem.gates ?? [])[0];
+    expect(gated).toBeDefined();
+    let r = 0;
+    const g = new Game({ ...testSystem, entry: gated[0] }, () => r);
+    g.revealMap();
+    const calm = g.gateBlockChance();
+    g.raiseAlarm(3);
+    g.exposeSignature(3, 'test');
+    expect(g.gateBlockChance()).toBeGreaterThan(calm);
+    g.travelTo(gated[1]);
+    expect(g.isMoving).toBe(false);
+    // It holds for a while: trying again right away does not work either, even with a lucky roll.
+    r = 0.999;
+    g.travelTo(gated[1]);
+    expect(g.isMoving).toBe(false);
   });
 });
