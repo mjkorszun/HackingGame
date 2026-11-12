@@ -206,8 +206,8 @@ export interface Agent {
   known: Knowledge;
 }
 
-/** Placeholder: an agent takes 0.75 s to walk to the link before it crosses it. */
-export const LEAVE_TICKS = 7.5;
+/** Placeholder: an agent takes 1.125 s to walk to the link before it crosses it. */
+export const LEAVE_TICKS = 11.25;
 
 /** Placeholder: an agent chasing you crosses a link in 0.5 s, so with the walk to the link it takes 1.25 s a node (you take 1 s). */
 export const CHASE_HOP_TICKS = 5;

@@ -74,7 +74,7 @@ const HELP = [
   "programs: type a program's own name to run it (e.g. Hawkeye V2).",
   'Tab completes commands, node and program names; Tab twice lists the options.',
   'mouse: click a node to connect, right-click for actions, click the minimap to travel.',
-  'keys: Space pause, A auto-pause, 1-9 connect to a numbered neighbour, Esc stop travelling, M sound on/off.',
+  'keys: Space pause, A auto-pause, 1-9 connect to a numbered neighbour, Esc menu, M sound on/off. type stop to stop travelling.',
 ];
 
 let leaving = false;
@@ -607,6 +607,14 @@ view = new NetworkView(document.getElementById('view')!, game, menu, {
   autoPause: () => ui('autopause'),
   hover: () => sfx.play('hover'),
   exit: () => ui('exit'),
+  // The menu pauses the game; closing it lets time run again only if it was running before.
+  menuToggled: (open) => {
+    if (open) {
+      menuWasPaused = game.paused;
+      if (!game.paused) game.setPaused(true, true);
+    } else if (!menuWasPaused) game.setPaused(false, true);
+    flush();
+  },
   command: (cmd) => ui(cmd),
   sound: sfx,
 });
@@ -620,14 +628,21 @@ buildTag.textContent = __BUILD_LABEL__;
 document.getElementById('view')!.appendChild(buildTag);
 document.getElementById('home')!.appendChild(buildTag.cloneNode(true));
 
+let menuWasPaused = false;
+
 document.addEventListener('keydown', (e) => {
-  if (!game || term.inputFocused || game.ended) return;
+  if (!game || game.ended) return;
+  // Esc: closes a right-click menu, otherwise opens or closes the game menu.
+  if (e.key === 'Escape') {
+    if (menu.open) menu.dismiss();
+    else view.toggleMenu();
+    e.preventDefault();
+    return;
+  }
+  if (term.inputFocused || view.menuOpen) return;
   if (e.code === 'Space') {
     ui(game.paused ? 'resume' : 'pause');
     e.preventDefault();
-  } else if (e.key === 'Escape') {
-    if (menu.open) menu.dismiss();
-    else if (game.isMoving || game.isBusy) ui('stop');
   } else if (e.key === 'm' || e.key === 'M') {
     ui('mute');
   } else if (e.key === 'a' || e.key === 'A') {

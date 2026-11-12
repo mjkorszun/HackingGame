@@ -27,6 +27,10 @@ const ROOM_SCALE: Partial<Record<NodeKind, number>> = { monitoring: 1.3, vehicle
 const NEIGHBOUR_R = 30;
 /** Size of the player figure (1 = original). */
 const AVATAR_SCALE = 0.8;
+/** For keeping things apart in a node: the avatar's half height and radius, and an agent's radius (with its name). */
+const AVATAR_HALF = 25 * AVATAR_SCALE;
+const AVATAR_R = 28;
+const AGENT_R = 26;
 /** Neighbours sit on an ellipse around the room. */
 const RING_X = 305;
 const RING_Y = 232;
@@ -75,6 +79,8 @@ const KIND_LABEL: Record<NodeKind, string> = {
 
 /** How long an agent takes to walk from the link's end to its spot after arriving (a look only). */
 const ARRIVE_MS = 450;
+/** How long your avatar takes to walk in from the door after arriving (a look only). */
+const WALK_IN_MS = 650;
 
 function lerpXY(a: { x: number; y: number }, b: { x: number; y: number }, k: number): { x: number; y: number } {
   return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
@@ -114,6 +120,11 @@ const ICON_SPEAKER_OFF = icon(`${SPEAKER}<path d="M16 9l5 6M21 9l-5 6" stroke="c
 /** Stopwatch with pause bars: time that stops by itself. */
 const ICON_POWER = icon(
   '<path d="M7.5 6.5a8 8 0 1 0 9 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 3v8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+);
+
+/** A gear: opens the game menu. */
+const ICON_GEAR = icon(
+  '<path d="M10.3 2h3.4l.5 2.6c.6.2 1.2.5 1.7.9l2.5-.9 1.7 2.9-2 1.7c.1.6.1 1.3 0 1.9l2 1.7-1.7 2.9-2.5-.9c-.5.4-1.1.7-1.7.9l-.5 2.6h-3.4l-.5-2.6c-.6-.2-1.2-.5-1.7-.9l-2.5.9-1.7-2.9 2-1.7c-.1-.6-.1-1.3 0-1.9l-2-1.7 1.7-2.9 2.5.9c.5-.4 1.1-.7 1.7-.9z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" transform="translate(0 1)"/><circle cx="12" cy="11" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/>',
 );
 
 const ICON_AUTO_PAUSE = icon(
@@ -209,6 +220,8 @@ export interface ViewActions {
   hover(): void;
   /** Leave the net: ends the run. */
   exit(): void;
+  /** The game menu opened (true) or closed (false): the game pauses while it is open. */
+  menuToggled(open: boolean): void;
   /** Runs a console command (answers to a query, attack W1, ...). */
   command(cmd: string): void;
   sound: Sound;
@@ -234,6 +247,7 @@ export class NetworkView {
   private readonly pauseBtn: HTMLButtonElement;
   private readonly muteBtn: HTMLButtonElement;
   private readonly autoBtn: HTMLButtonElement;
+  private readonly menuBox: HTMLElement;
   private readonly stage: SVGSVGElement;
   /** The minimap is its own small SVG pinned to the bottom-right corner of the view. */
   private readonly miniSvg: SVGSVGElement;
@@ -321,7 +335,28 @@ export class NetworkView {
     vol.addEventListener('input', () => actions.sound.setVolume(Number(vol.value) / 100));
     vol.addEventListener('change', () => actions.sound.play('hop'));
     soundBox.append(this.muteBtn, vol);
-    this.header.append(title, alarm, this.integrityEl, soundBox, this.clock, this.autoBtn, this.pauseBtn);
+    const gearBtn = document.createElement('button');
+    gearBtn.type = 'button';
+    gearBtn.className = 'icon-btn gear-btn';
+    gearBtn.title = 'Menu (Esc)';
+    gearBtn.setAttribute('aria-label', 'Menu');
+    gearBtn.innerHTML = ICON_GEAR;
+    gearBtn.addEventListener('click', () => this.toggleMenu());
+    // Time controls on the left of the system's name; the menu gear alone on the right.
+    const timeBox = document.createElement('div');
+    timeBox.className = 'time-box';
+    timeBox.append(this.pauseBtn, this.autoBtn, this.clock);
+    this.header.append(timeBox, title, alarm, this.integrityEl, gearBtn);
+    // The game menu: a window in the middle of the screen. For now only the sound settings.
+    this.menuBox = document.createElement('div');
+    this.menuBox.className = 'game-menu';
+    this.menuBox.hidden = true;
+    this.menuBox.innerHTML = `<div class="game-menu-panel" role="dialog" aria-label="Menu"><button type="button" class="game-menu-close" aria-label="Close (Esc)" title="Back to the game (Esc)">✕</button><h2>MENU</h2><h3>sound</h3><div class="game-menu-row"></div></div>`;
+    this.menuBox.querySelector('.game-menu-row')!.append(soundBox);
+    this.menuBox.querySelector('.game-menu-close')!.addEventListener('click', () => this.toggleMenu(false));
+    this.menuBox.addEventListener('mousedown', (e) => {
+      if (e.target === this.menuBox) this.toggleMenu(false);
+    });
 
     this.stage = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stage', role: 'img' });
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -337,8 +372,21 @@ export class NetworkView {
     this.queryBox = document.createElement('div');
     this.queryBox.className = 'query-box';
     this.queryBox.hidden = true;
-    root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox);
+    root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox, this.menuBox);
     this.render();
+  }
+
+  get menuOpen(): boolean {
+    return !this.menuBox.hidden;
+  }
+
+  /** Opens or closes the game menu (toggles when not told which). */
+  toggleMenu(open = !this.menuOpen): void {
+    if (open === this.menuOpen) return;
+    this.menuBox.hidden = !open;
+    this.tip.hide();
+    this.actions.sound.play(open ? 'menuOpen' : 'menuClose');
+    this.actions.menuToggled(open);
   }
 
   /** Detection: a crossed-out eye icon over a vertical bar of three segments, under the node's name. */
@@ -372,6 +420,17 @@ export class NetworkView {
   /** The avatar has been drawn once this run (its arrival animation is done). */
   private spawned = false;
   private avatarPos = { x: CX, y: CY };
+  /** The node drawn last time, the spot you stand on in this node, and your walk in through its door. */
+  private lastNode: string | null = null;
+  private avatarHome = { x: CX, y: CY + 40 };
+  private walkIn: { from: { x: number; y: number }; at: number } | null = null;
+  /** How far you lean towards the file you work on (0..1), and the line to it. */
+  private lean = 0;
+  private actionLink: SVGLineElement | null = null;
+  /** Spots taken in your node by agents (theirs and yours), so nobody covers a file or anyone else. */
+  private roomSpots = new Map<string, { x: number; y: number }>();
+  private leanTo: { x: number; y: number } | null = null;
+  private lastAvatarAt = 0;
   /** Top layer for shots and outcome texts. */
   private fxLayer: SVGGElement | null = null;
   /** When a shot towards each target lands, so its outcome text waits for it. */
@@ -529,6 +588,26 @@ export class NetworkView {
       });
     });
     this.positions = new Map(positions.map((p) => [p.node.id, { x: p.x, y: p.y }]));
+    // Where you stand: just inside the door you came in by (the middle when you have just jacked in).
+    const came = this.lastNode && this.lastNode !== current.id ? this.positions.get(this.lastNode) : undefined;
+    if (this.lastNode !== current.id) {
+      // A new node: everyone gets a new spot here, clear of the files and of each other.
+      this.roomSpots.clear();
+      if (came) {
+        const door = this.doorTowards(came.x, came.y);
+        // You step in through that door and walk a little way in, to a free spot.
+        const want = lerpXY(door, { x: CX, y: CY + 40 }, 0.76);
+        const free = this.freeSpot({ x: want.x, y: want.y - AVATAR_HALF }, AVATAR_R, null);
+        this.avatarHome = { x: free.x, y: free.y + AVATAR_HALF };
+        this.walkIn = { from: door, at: performance.now() };
+      } else {
+        const free = this.freeSpot({ x: CX, y: CY + 40 - AVATAR_HALF }, AVATAR_R, null);
+        this.avatarHome = { x: free.x, y: free.y + AVATAR_HALF };
+      }
+      this.lastNode = current.id;
+    }
+    // A dashed line from you to the file you are working on, under the avatar.
+    this.actionLink = svg('line', { class: 'action-link' }, this.stage) as SVGLineElement;
     this.avatar = this.drawAvatar();
     this.updateAvatar(true);
     this.agentLayer = svg('g', { class: 'agent-layer' }, this.stage);
@@ -574,7 +653,12 @@ export class NetworkView {
       // While it walks to the link it keeps its spot in the node, so the others don't jump.
       const i = count.get(a.node) ?? 0;
       count.set(a.node, i + 1);
-      const spot = this.agentSpot(a.node, i);
+      let spot = this.agentSpot(a.node, i);
+      if (a.node === g.currentNode && spot) {
+        // In your node it takes a free spot: near the door when it has just come in, else near its usual place.
+        const came = !a.hop ? this.lastHopPos.get(a.id) : undefined;
+        spot = this.roomSpot(a.id, came ? lerpXY(came.pos, { x: CX, y: CY }, 0.35) : spot);
+      } else this.roomSpots.delete(a.id);
       let cross = 0;
       if (a.hop) {
         // First it walks from its spot to where the link leaves the node, then it crosses the link.
@@ -725,8 +809,11 @@ export class NetworkView {
         const i = count.get(a.node) ?? 0;
         count.set(a.node, i + 1);
         pos = this.allySpot(a.node, i);
+        // Yours too stand where they cover no file and no one else.
+        if (pos && a.node === g.currentNode) pos = this.roomSpot(a.id, pos);
         miniPos = this.miniXY(a.node);
       }
+      if (a.hop || a.node !== g.currentNode || (a.program.type === 'shield' && !g.isMoving)) this.roomSpots.delete(a.id);
       els.main.classList.toggle('is-shield', a.program.type === 'shield');
       els.main.classList.toggle('is-resident', !!a.resident);
       els.main.style.display = pos ? '' : 'none';
@@ -991,6 +1078,41 @@ export class NetworkView {
     return { x: CX + dx * lo, y: CY + dy * lo };
   }
 
+  /**
+   * The free spot nearest to `want` in your node for something of radius r: inside the room, clear of the files,
+   * of your avatar and of the agents already standing here. Only a look: distances mean nothing in the game.
+   */
+  private freeSpot(want: { x: number; y: number }, r: number, self: string | null): { x: number; y: number } {
+    const taken: { x: number; y: number; r: number }[] = [];
+    for (const f of this.filePos.values()) taken.push({ x: f.x, y: f.y, r: CELL * 0.5 });
+    if (self !== null) taken.push({ x: this.avatarHome.x, y: this.avatarHome.y - AVATAR_HALF, r: AVATAR_R });
+    for (const [id, p] of this.roomSpots) if (id !== self) taken.push({ ...p, r: AGENT_R });
+    const fits = (x: number, y: number) =>
+      this.inRoom(x - r, y - r) && this.inRoom(x + r, y - r) && this.inRoom(x - r, y + r) && this.inRoom(x + r, y + r) &&
+      taken.every((t) => Math.hypot(t.x - x, t.y - y) >= t.r + r);
+    for (let ring = 0; ring < 40; ring++) {
+      const d = ring * 8;
+      const n = ring === 0 ? 1 : Math.max(8, ring * 6);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const x = want.x + Math.cos(a) * d;
+        const y = want.y + Math.sin(a) * d;
+        if (fits(x, y)) return { x, y };
+      }
+    }
+    return want;
+  }
+
+  /** An agent's spot in your node: kept while it stays, found free when it arrives. */
+  private roomSpot(id: string, want: { x: number; y: number }): { x: number; y: number } {
+    let p = this.roomSpots.get(id);
+    if (!p) {
+      p = this.freeSpot(want, AGENT_R, id);
+      this.roomSpots.set(id, p);
+    }
+    return p;
+  }
+
   private inRoom(x: number, y: number): boolean {
     const shape = this.roomShape;
     if (!shape) return false;
@@ -1025,6 +1147,8 @@ export class NetworkView {
     svg('stop', { offset: '1', 'stop-color': 'currentColor', 'stop-opacity': 0.35 }, grad);
     const scan = svg('rect', { x: CX - span, y: CY - span - 60, width: 2 * span, height: 60, fill: 'url(#scan-grad)', class: 'room-scan' }, grid);
     scan.style.setProperty('--scan', `${2 * span + 60}px`);
+    // The outline goes on top of the grid, so the grid lines never cross it.
+    drawNodeShape(kind, CX, CY, this.roomR, 'room-outline', grp);
 
     // Doors where the links leave.
     for (const p of positions) {
@@ -1167,7 +1291,32 @@ export class NetworkView {
   private updateAvatar(instant = false): void {
     const av = this.avatar;
     if (!av) return;
-    const start = { x: CX, y: CY + 40 };
+    // Working on a file (scan, evaluate, download...): you step towards it, linked by a moving dashed line.
+    const job = this.game.scanningFile;
+    const filePos = job && job.nodeId === this.game.currentNode ? this.filePos.get(job.fileId) : undefined;
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - (this.lastAvatarAt || now)) / 1000);
+    this.lastAvatarAt = now;
+    this.lean = filePos ? Math.min(1, this.lean + dt * 2.5) : Math.max(0, this.lean - dt * 2.5);
+    if (filePos) {
+      // Step a little towards the file, but keep some distance so the line between you shows.
+      const h = this.avatarHome;
+      const fx = filePos.x;
+      const fy = filePos.y + 20;
+      const d = Math.hypot(h.x - fx, h.y - fy);
+      const keep = 90;
+      this.leanTo = d > keep ? lerpXY(h, { x: fx + ((h.x - fx) * keep) / d, y: fy + ((h.y - fy) * keep) / d }, 0.5) : h;
+    }
+    let start = this.lean > 0 && this.leanTo ? lerpXY(this.avatarHome, this.leanTo, easeInOut(this.lean)) : this.avatarHome;
+    let walking = false;
+    if (this.walkIn) {
+      const k = (now - this.walkIn.at) / WALK_IN_MS;
+      if (k >= 1) this.walkIn = null;
+      else {
+        start = lerpXY(this.walkIn.from, start, easeInOut(k));
+        walking = true;
+      }
+    }
     let pos = start;
     let facing = 1;
     const hop = this.game.nextHop;
@@ -1182,10 +1331,20 @@ export class NetworkView {
       pos = t < split ? lerp(start, door, t / split) : lerp(door, to, (t - split) / (1 - split));
       facing = to.x < start.x ? -1 : 1;
     }
-    av.classList.toggle('is-walking', !!end && !this.game.paused);
-    av.classList.toggle('no-transition', instant);
+    av.classList.toggle('is-walking', (!!end || walking) && !this.game.paused);
+    av.classList.toggle('no-transition', instant || walking);
     av.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
     this.avatarPos = { x: pos.x, y: pos.y - 25 * AVATAR_SCALE };
+    const link = this.actionLink;
+    if (link) {
+      link.style.display = filePos && !end ? '' : 'none';
+      if (filePos) {
+        link.setAttribute('x1', this.avatarPos.x.toFixed(1));
+        link.setAttribute('y1', this.avatarPos.y.toFixed(1));
+        link.setAttribute('x2', filePos.x.toFixed(1));
+        link.setAttribute('y2', filePos.y.toFixed(1));
+      }
+    }
     (av.firstElementChild as SVGGElement).style.transform = `scale(${facing * AVATAR_SCALE}, ${AVATAR_SCALE})`;
   }
 

@@ -1722,7 +1722,7 @@ export class Game {
     }
     this.events.push({ type: 'program', programType: 'scan' });
     this.log(`${program.name} (scan ${program.rating}): scanning ${queue.length === 1 ? files[queue[0]].id : `${queue.length} files`}`, 'system');
-    this.scan = { nodeId: here, queue, elapsed: 0, ticksPerFile: Math.max(2, Math.round(scanTicks(program.rating) / (this.keysFound ? 2 : 1))), name: program.name, rating: program.rating, progressId: this.nextProgressId++ };
+    this.scan = { nodeId: here, queue, elapsed: 0, ticksPerFile: Math.max(4, Math.round(scanTicks(program.rating) / (this.keysFound ? 2 : 1))), name: program.name, rating: program.rating, progressId: this.nextProgressId++ };
     this.scanProgress(false);
     this.actionStarted();
     return true;
