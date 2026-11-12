@@ -46,6 +46,8 @@ export interface HomeActions {
   day(): number;
   /** Money you have. */
   money(): number;
+  /** Days passing at the base right now, if any. */
+  dayJob(): { label: string; total: number; done: number } | null;
   /** Sets the game code (for testing for now). */
   setCode(code: string): void;
   /** For testing: gains exactly the XP the next level needs. */
@@ -75,6 +77,8 @@ export interface HomeActions {
     start(type: ProgramType, rating: number, name: string, icon: string, color: string, body: string): void;
     /** Works a day, a week, or the days left. Returns what happened, and the program if it got finished. */
     work(mode: 'day' | 'week' | 'finish'): { lines: string[]; program?: Program };
+    /** Abandons the project in progress (the days spent are lost). */
+    cancel(): void;
   };
 }
 
@@ -93,6 +97,8 @@ export class HomeScreen {
   /** What the last stretch of development did, shown under the project. */
   private devLines: string[] = [];
   private devDone: Program | undefined;
+  /** The Abandon project button was clicked once and asks to be clicked again. */
+  private cancelArmed = false;
   /** What the last bug fix did, shown in the Software tab. */
   private fixLine = '';
   /** The new-project form keeps its choices between renders. */
@@ -116,6 +122,7 @@ export class HomeScreen {
       <section class="home-soft" aria-label="Software" hidden></section>
       <section class="home-soft home-hard" aria-label="Hardware" hidden></section>
       <section class="home-soft home-panel" aria-label="Networks, contracts and character" hidden></section>
+      <section class="home-empty" aria-hidden="true"></section>
       <section class="home-main"></section>`;
     this.gear = root.querySelector('.home-gear')!;
     this.soft = root.querySelector('.home-soft:not(.home-hard):not(.home-panel)')!;
@@ -136,24 +143,48 @@ export class HomeScreen {
     return `<span class="home-job">${c.offer.system.name}</span> <span class="home-dim">(contract: ${c.offer.contract.title}, pays ${sats(c.offer.contract.pay)})</span>`;
   }
 
+  /** A progress bar for the days passing at the base (or nothing). Several can show; tickDays moves them all. */
+  private dayJobHtml(): string {
+    const j = this.actions.dayJob();
+    if (!j) return '';
+    return `<div class="day-job"><div class="day-job-label">${esc(j.label)}</div><div class="day-job-track"><div class="day-job-fill" style="width:${(100 * j.done) / j.total}%"></div></div><div class="day-job-count">day ${j.done}/${j.total}</div></div>`;
+  }
+
+  /** One more day went by: moves the bars and the day number in place, so scrolling and typing are not lost. */
+  tickDays(): void {
+    const j = this.actions.dayJob();
+    this.root.querySelectorAll('.home-day').forEach((n) => { n.textContent = String(this.state.day); });
+    if (!j) return;
+    this.root.querySelectorAll<HTMLElement>('.day-job-fill').forEach((n) => { n.style.width = `${(100 * j.done) / j.total}%`; });
+    this.root.querySelectorAll('.day-job-count').forEach((n) => { n.textContent = `day ${j.done}/${j.total}`; });
+  }
+
   /** Draws the screen again (after days passed elsewhere). */
   refresh(): void {
     this.render();
   }
 
   private render(): void {
+    // Redrawing must not jump the open tab back to the top.
+    const scroll = [this.soft, this.hard, this.panel].map((n) => n.scrollTop);
+    this.renderAll();
+    [this.soft, this.hard, this.panel].forEach((n, i) => { n.scrollTop = scroll[i]; });
+  }
+
+  private renderAll(): void {
     const s = this.state;
     const locked = s.reputation < CONTRACT_REPUTATION;
     this.main.innerHTML = `
       <h1 class="home-title">CYBERHACK</h1>
-      <div class="home-stats"><button type="button" class="home-avatar" title="Change avatar">${iconSvg(this.actions.avatar().icon, 'home-avatar-icon', this.actions.avatar().color)}</button> day ${s.day} · <span class="home-money">${sats(this.actions.money())}</span> · reputation ${s.reputation} · <span class="home-health${this.actions.character().health < 50 ? ' is-low' : ''}">health ${this.actions.character().health}%</span></div>
+      <div class="home-stats"><button type="button" class="home-avatar" title="Change avatar">${iconSvg(this.actions.avatar().icon, 'home-avatar-icon', this.actions.avatar().color)}</button> day <span class="home-day">${s.day}</span> · <span class="home-money">${sats(this.actions.money())}</span> · reputation ${s.reputation} · <span class="home-health${this.actions.character().health < 50 ? ' is-low' : ''}">health ${this.actions.character().health}%</span></div>
+      ${this.dayJobHtml()}
       ${s.news.length ? `<div class="home-news">${s.news.map((n) => `<div>${n}</div>`).join('')}</div>` : ''}
       <nav class="home-menu">
         <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">Known networks${iconSvg(MENU_ICONS.networks, 'menu-icon')}</button>
         <button type="button" class="home-btn${this.open === 'contracts' ? ' is-open' : ''}" data-act="contracts"${locked ? ` disabled title="Needs reputation ${CONTRACT_REPUTATION}"` : ''}>Choose contract${iconSvg(MENU_ICONS.contracts, 'menu-icon')}${locked ? ` <span class="home-lock">(rep. ${CONTRACT_REPUTATION})</span>` : ''}</button>
         <button type="button" class="home-btn${this.open === 'software' ? ' is-open' : ''}" data-act="software">Software${iconSvg(MENU_ICONS.software, 'menu-icon')}</button>
         <button type="button" class="home-btn${this.open === 'hardware' ? ' is-open' : ''}" data-act="hardware">Hardware${iconSvg(MENU_ICONS.hardware, 'menu-icon is-flipped')}</button>
-        <button type="button" class="home-btn${this.open === 'character' ? ' is-open' : ''}${this.actions.character().picks ? ' is-pending' : ''}" data-act="character">Character${iconSvg(this.actions.avatar().icon, 'menu-icon')}${this.actions.character().picks ? ' <span class="home-lock">(skill to pick)</span>' : ''}</button>
+        <button type="button" class="home-btn${this.open === 'character' ? ' is-open' : ''}${this.actions.character().picks ? ' is-pending' : ''}" data-act="character">Character${iconSvg(this.actions.avatar().icon, 'menu-icon')}</button>
         <button type="button" class="home-btn" data-act="enter"${this.chosen ? '' : ' disabled title="Pick a network or a contract first"'}>Enter the network${iconSvg(MENU_ICONS.enter, 'menu-icon')}</button>
       </nav>
       <div class="home-active">chosen network: ${this.label()}</div>
@@ -183,16 +214,22 @@ export class HomeScreen {
     const software = this.open === 'software';
     const hardware = this.open === 'hardware';
     const panel = this.open === 'networks' || this.open === 'contracts' || this.open === 'character';
-    this.root.classList.toggle('is-software', !!this.open);
-    this.gear.hidden = !!this.open;
+    // The left side keeps its size; with no tab open it is just empty.
+    this.root.classList.add('is-software');
+    this.root.classList.toggle('is-days', !!this.actions.dayJob());
+    this.gear.hidden = true;
     this.soft.hidden = !software;
     this.hard.hidden = !hardware;
     this.panel.hidden = !panel;
+    this.root.querySelector<HTMLElement>('.home-empty')!.hidden = !!this.open;
     const title = this.open === 'networks' ? 'known networks' : this.open === 'contracts' ? 'contracts' : 'character';
     this.panel.innerHTML = panel ? `<h2 class="sw-head">${title}</h2><div class="home-list panel-list"></div>` : '';
     const list = (panel ? this.panel.querySelector('.panel-list') : this.main.querySelector('.home-list'))!;
     if (software) this.renderSoftware();
-    if (hardware) renderHardware(this.hard, { ...this.actions.hardware, click: () => this.actions.click(), changed: () => this.render() }, this.hwView);
+    if (hardware) {
+      renderHardware(this.hard, { ...this.actions.hardware, click: () => this.actions.click(), changed: () => this.render() }, this.hwView);
+      this.hard.querySelector('.sw-head')?.insertAdjacentHTML('afterend', this.dayJobHtml());
+    }
     const card = (taken: boolean, html: string, pick: () => Choice) => {
       const el = document.createElement('div');
       el.className = `contract-card${taken ? ' is-taken' : ''}`;
@@ -280,7 +317,7 @@ export class HomeScreen {
       <div class="cc-head"><span class="home-health${c.health < 50 ? ' is-low' : ''}">${c.health}%</span><span class="home-dim">${c.health < 100 ? `${daysToHeal(c.health)} days of rest to heal fully` : 'fully healthy'}</span></div>
       <div class="xp-bar health-bar"><div class="xp-fill" style="width:${c.health}%"></div></div>
       <div class="cc-line home-dim">leaving the net badly hurt, or being thrown out, damages your brain. at 0 you die</div>
-      ${c.health < 100 ? `<div class="dev-row"><button type="button" class="home-btn cc-btn" data-rest="1">Rest 1 day (+${REST_PER_DAY}%)</button><button type="button" class="home-btn cc-btn" data-rest="${daysToHeal(c.health)}">Rest until healed (${daysToHeal(c.health)} days)</button></div>` : ''}
+      <div class="dev-row"><button type="button" class="home-btn cc-btn" data-rest="1"${c.health >= 100 ? ' disabled title="You are not hurt"' : ''}>Rest 1 day (+${REST_PER_DAY}%)</button><button type="button" class="home-btn cc-btn" data-rest="${Math.max(1, daysToHeal(c.health))}"${c.health >= 100 ? ' disabled title="You are not hurt"' : ''}>Rest until healed${c.health < 100 ? ` (${daysToHeal(c.health)} days)` : ''}</button></div>
       <div class="cc-line ch-head">skills</div>
       ${owned.length ? owned.map((s) => `<div class="cc-line"><span class="ch-skill">${s.name}</span> <span class="home-dim">${s.text}</span></div>`).join('') : '<div class="cc-line home-dim">none yet. every level up lets you pick one of three</div>'}
       <div class="cc-line ch-head">game code</div>
@@ -326,7 +363,7 @@ export class HomeScreen {
       const rarity = p.rarity ?? 'common';
       const traits = (p.traits ?? []).map((t) => `<div class="sw-trait">+ ${esc(t)}</div>`).join('');
       const bugs = (p.bugs ?? []).map((b, i) => `<div class="sw-bug">- ${esc(b)} <button type="button" class="sw-fix" data-fix="${i}" title="Spend ${bugFixDays(p)} days fixing this bug">fix ${bugFixDays(p)} d</button></div>`).join('');
-      return `<div class="sw-card rarity-${rarity}" draggable="true" data-id="${esc(p.id)}" title="drag to load, unload or reorder; right-click for details">
+      return `<div class="sw-card rarity-${rarity}${p.id === this.devDone?.id ? ' is-new' : ''}" draggable="true" data-id="${esc(p.id)}" title="drag to load, unload or reorder; right-click for details">
         <div class="sw-icon">${programIcon(p, 'sw-icon-svg')}</div>
         <div class="sw-body">
           <div class="sw-name">${esc(p.name)}</div>
@@ -447,16 +484,12 @@ export class HomeScreen {
     const p = this.actions.dev.project();
     const box = document.createElement('div');
     box.className = 'contract-card dev-card';
-    const done = this.devDone;
-    const result = `${this.devLines.length ? `<div class="dev-log">${this.devLines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>` : ''}${done ? `
-      <div class="dev-new rarity-${done.rarity}">
-        <div class="cc-head"><span class="cc-title">${programIcon(done, 'dev-icon')} ${esc(done.name)}</span><span>${done.rarity}</span></div>
-        <div class="cc-line">${done.type} ${done.rating} · ${programSize(done)} GB${done.author ? ` · by ${esc(done.author)}` : ''}</div>
-        ${(done.traits ?? []).map((t) => `<div class="cc-line dev-trait">+ ${esc(t)}</div>`).join('') || '<div class="cc-line home-dim">no traits</div>'}
-        ${(done.bugs ?? []).map((b) => `<div class="cc-line sw-bug">- bug: ${esc(b)}</div>`).join('')}
-        <div class="cc-line home-dim">saved in storage</div>
-      </div>` : ''}`;
-    if (!p) {
+    // What the last work did, until the next click elsewhere (a finished program shows up highlighted in storage).
+    const result = this.devLines.length && !p ? '' : this.devLines.length ? `<div class="dev-log">${this.devLines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>` : '';
+    const job = this.actions.dayJob();
+    if (job && job.label.startsWith('developing')) {
+      box.innerHTML = this.dayJobHtml();
+    } else if (!p) {
       const f = this.form;
       const name = f.name || `${cap(f.type)} ${f.rating}.0`;
       box.innerHTML = `
@@ -510,14 +543,27 @@ export class HomeScreen {
           <button type="button" class="home-btn cc-btn" data-dev="day">Develop for day</button>
           <button type="button" class="home-btn cc-btn" data-dev="week"${p.daysLeft < 7 ? ' disabled title="Needs at least 7 days of work left"' : ''}>Develop for week</button>
           <button type="button" class="home-btn cc-btn" data-dev="finish" title="Works the ${p.daysLeft} days left">Finish (${p.daysLeft} d)</button>
+          <button type="button" class="home-btn cc-btn dev-cancel" data-dev-cancel>${this.cancelArmed ? 'Really abandon it? The days are lost' : 'Abandon project'}</button>
         </div>
         ${result}`;
+      box.querySelector('[data-dev-cancel]')!.addEventListener('click', () => {
+        this.actions.click();
+        if (!this.cancelArmed) {
+          this.cancelArmed = true;
+        } else {
+          this.cancelArmed = false;
+          this.devLines = [];
+          this.actions.dev.cancel();
+        }
+        this.render();
+      });
       for (const mode of ['day', 'week', 'finish'] as const) {
         box.querySelector(`[data-dev="${mode}"]`)!.addEventListener('click', () => {
           this.actions.click();
           const r = this.actions.dev.work(mode);
           this.devLines = r.lines;
           this.devDone = r.program;
+          this.cancelArmed = false;
           this.render();
         });
       }

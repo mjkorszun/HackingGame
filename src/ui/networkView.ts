@@ -230,6 +230,8 @@ export class NetworkView {
   private roomShape: SVGGeometryElement | null = null;
   private roomR = ROOM_R;
   private readonly tip = new Tooltip();
+  /** Agents you have seen in this run: they stay on the map after they leave your node. */
+  private readonly metAgents = new Set<string>();
   /** Layers redrawn every frame with the mapper's eyes. */
   private mapperLayer: SVGGElement | null = null;
   private agentLayer: SVGGElement | null = null;
@@ -560,6 +562,20 @@ export class NetworkView {
         pos = this.agentSpot(a.node, i);
         miniPos = pos ? this.miniXY(a.node) : null;
       }
+      // You only see inside your own node. An agent you have not met yet stays hidden elsewhere; one coming
+      // your way fades in over the second half of its hop, and one leaving fades out the same way.
+      const here = g.currentNode;
+      if (!a.hop && a.node === here) this.metAgents.add(a.id);
+      const met = this.metAgents.has(a.id);
+      let opacity = met ? 1 : 0;
+      if (!met && a.hop?.to === here) {
+        const k = Math.min(1, (a.hop.elapsed + this.alpha) / a.stats.hopTicks);
+        opacity = Math.max(0, (k - 0.5) * 2);
+      }
+      if (opacity <= 0) pos = null;
+      els.main.style.opacity = opacity < 1 ? opacity.toFixed(2) : '';
+      els.mini.style.opacity = opacity < 1 ? opacity.toFixed(2) : '';
+      if (!pos) miniPos = null;
       els.main.style.display = pos ? '' : 'none';
       if (pos) {
         // Drawn every frame along its link; a short transition only smooths jumps between spots in a node.
@@ -1042,7 +1058,10 @@ export class NetworkView {
     const fig = svg('g', { class: 'avatar-figure' }, root);
     const a = this.actions.avatar ?? { icon: 'hood', color: '#3dff7a' };
     const bob = svg('g', { class: 'avatar-bob' }, fig);
-    const icon = svg('svg', { x: -25, y: -50, width: 50, height: 50, viewBox: '0 0 512 512', class: 'avatar-icon' }, bob);
+    // A disc behind the icon, ringed in the player's colour, so the avatar stands out from agents.
+    const disc = svg('circle', { cx: 0, cy: -26, r: 27, class: 'avatar-disc' }, bob);
+    disc.style.stroke = a.color;
+    const icon = svg('svg', { x: -19, y: -45, width: 38, height: 38, viewBox: '0 0 512 512', class: 'avatar-icon' }, bob);
     icon.style.color = a.color;
     icon.innerHTML = iconBody(a.icon) ?? '';
     return root;

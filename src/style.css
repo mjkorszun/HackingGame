@@ -259,6 +259,7 @@ body {
   transition: transform 0.1s linear;
 }
 .avatar.no-transition, .avatar.is-walking { transition: none; }
+.avatar-disc { fill: #0c1f14; stroke-width: 2.5; filter: drop-shadow(0 0 4px #000); }
 .avatar-icon { fill: currentColor; filter: drop-shadow(0 0 3px #000) drop-shadow(0 0 2px #000); }
 .is-walking .avatar-bob { animation: bob 0.3s ease-in-out infinite alternate; }
 @keyframes bob {
@@ -516,7 +517,13 @@ body {
 }
 .home-btn:hover:not(:disabled), .home-btn.is-open { background: var(--green-faint); }
 .home-btn:disabled { color: var(--grey); border-color: #4a564f; cursor: not-allowed; }
-#home.is-days { pointer-events: none; }
+#home.is-days [data-dev], #home.is-days [data-dev-cancel], #home.is-days [data-rest], #home.is-days [data-fix], #home.is-days [data-install], #home.is-days [data-remove], #home.is-days [data-act="enter"], #home.is-days .hw-drag { pointer-events: none; opacity: 0.45; }
+.day-job { margin: 10px auto 18px; width: min(460px, 100%); }
+.day-job-label { color: var(--yellow); margin-bottom: 4px; }
+.day-job-track { height: 10px; border: 1px solid var(--yellow); background: #111; }
+.day-job-fill { height: 100%; background: var(--yellow); transition: width 0.9s linear; }
+.day-job-count { color: var(--yellow); font-size: 13px; margin-top: 3px; text-align: right; }
+.sw-card.is-new { box-shadow: 0 0 0 2px var(--yellow), 0 0 14px rgba(255, 216, 74, 0.5); }
 .home-money { color: var(--yellow); }
 .home-active { margin-top: 24px; color: var(--green); }
 .home-job { color: var(--yellow); }
@@ -764,7 +771,8 @@ body {
 /* ---------- Software tab: the whole left side ---------- */
 #home.is-software { grid-template-columns: 62fr 38fr; }
 .home-soft { padding: 10px 14px 24px; border-right: 1px solid var(--green-faint); overflow-y: auto; }
-.home-soft[hidden] { display: none; }
+.home-soft[hidden], .home-empty[hidden] { display: none; }
+.home-empty { border-right: 1px solid var(--green-faint); }
 .sw-head { margin: 14px 0 8px; font-size: 14px; font-weight: normal; letter-spacing: 2px; text-transform: uppercase; color: var(--blue); display: flex; gap: 14px; align-items: baseline; }
 .sw-head:first-child { margin-top: 2px; }
 .sw-used { color: var(--yellow); letter-spacing: 0; }
@@ -915,7 +923,7 @@ body {
 .health-bar .xp-fill { background: var(--green); }
 .cc-deadline { color: var(--yellow); }
 .cc-deadline.is-urgent { color: var(--orange); }
-.rs-health { display: flex; justify-content: space-between; margin-top: 8px; padding: 6px 10px; border: 1px solid var(--green-faint); color: var(--green); }
+.rs-health { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 8px; padding: 6px 10px; border: 1px solid var(--green-faint); color: var(--green); }
 .rs-health.is-hurt { border-color: var(--orange); color: var(--orange); }
 .game-over h2 { color: var(--red); letter-spacing: 6px; }
 .go-buttons { display: flex; gap: 12px; justify-content: center; margin-top: 16px; }
@@ -924,3 +932,6 @@ body {
 .credits-btn { position: fixed; right: 12px; bottom: 26px; background: transparent; border: 1px solid var(--green-dim); color: #b8c4bc; font: inherit; font-size: 12px; padding: 2px 10px; cursor: pointer; }
 .credits-btn:hover { color: var(--green); border-color: var(--green); }
 .credits .cr-line { margin: 2px 0; color: #c8d4cc; }
+
+.sp-later { margin-top: 14px; background: none; border: 1px solid var(--green-faint); color: var(--grey); font: inherit; font-size: 13px; padding: 4px 12px; cursor: pointer; }
+.sp-later:hover { color: var(--green); border-color: var(--green-dim); }
