@@ -116,12 +116,12 @@ const SOFTWARE_NAMES: Record<string, string[]> = {
   decrypt: ['Skeleton Key 3', 'Crowbar 1.9'],
 };
 
-/** Placeholder: ticks to scan one file with a rating-1 scan program. */
-export const SCAN_TICKS = 12;
+/** Placeholder: ticks to scan one file with a rating-1 scan program (2.4 s). */
+export const SCAN_TICKS = 24;
 
 /** Ticks to scan one file with a program of this rating. */
 export function scanTicks(rating: number): number {
-  return Math.max(3, Math.round(SCAN_TICKS / Math.max(1, rating)));
+  return Math.max(6, Math.round(SCAN_TICKS / Math.max(1, rating)));
 }
 
 /** A small seeded generator, so a node holds the same files every run. */

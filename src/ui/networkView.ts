@@ -116,6 +116,11 @@ const ICON_POWER = icon(
   '<path d="M7.5 6.5a8 8 0 1 0 9 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 3v8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
 );
 
+/** A gear: opens the game menu. */
+const ICON_GEAR = icon(
+  '<path d="M10.3 2h3.4l.5 2.6c.6.2 1.2.5 1.7.9l2.5-.9 1.7 2.9-2 1.7c.1.6.1 1.3 0 1.9l2 1.7-1.7 2.9-2.5-.9c-.5.4-1.1.7-1.7.9l-.5 2.6h-3.4l-.5-2.6c-.6-.2-1.2-.5-1.7-.9l-2.5.9-1.7-2.9 2-1.7c-.1-.6-.1-1.3 0-1.9l-2-1.7 1.7-2.9 2.5.9c.5-.4 1.1-.7 1.7-.9z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" transform="translate(0 1)"/><circle cx="12" cy="11" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/>',
+);
+
 const ICON_AUTO_PAUSE = icon(
   '<circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 2.5h4M12 2.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="9" y="10" width="2.2" height="7" fill="currentColor"/><rect x="12.8" y="10" width="2.2" height="7" fill="currentColor"/>',
 );
@@ -209,6 +214,8 @@ export interface ViewActions {
   hover(): void;
   /** Leave the net: ends the run. */
   exit(): void;
+  /** The game menu opened (true) or closed (false): the game pauses while it is open. */
+  menuToggled(open: boolean): void;
   /** Runs a console command (answers to a query, attack W1, ...). */
   command(cmd: string): void;
   sound: Sound;
@@ -234,6 +241,7 @@ export class NetworkView {
   private readonly pauseBtn: HTMLButtonElement;
   private readonly muteBtn: HTMLButtonElement;
   private readonly autoBtn: HTMLButtonElement;
+  private readonly menuBox: HTMLElement;
   private readonly stage: SVGSVGElement;
   /** The minimap is its own small SVG pinned to the bottom-right corner of the view. */
   private readonly miniSvg: SVGSVGElement;
@@ -321,7 +329,28 @@ export class NetworkView {
     vol.addEventListener('input', () => actions.sound.setVolume(Number(vol.value) / 100));
     vol.addEventListener('change', () => actions.sound.play('hop'));
     soundBox.append(this.muteBtn, vol);
-    this.header.append(title, alarm, this.integrityEl, soundBox, this.clock, this.autoBtn, this.pauseBtn);
+    const gearBtn = document.createElement('button');
+    gearBtn.type = 'button';
+    gearBtn.className = 'icon-btn gear-btn';
+    gearBtn.title = 'Menu (Esc)';
+    gearBtn.setAttribute('aria-label', 'Menu');
+    gearBtn.innerHTML = ICON_GEAR;
+    gearBtn.addEventListener('click', () => this.toggleMenu());
+    // Time controls on the left of the system's name; the menu gear alone on the right.
+    const timeBox = document.createElement('div');
+    timeBox.className = 'time-box';
+    timeBox.append(this.pauseBtn, this.autoBtn, this.clock);
+    this.header.append(timeBox, title, alarm, this.integrityEl, gearBtn);
+    // The game menu: a window in the middle of the screen. For now only the sound settings.
+    this.menuBox = document.createElement('div');
+    this.menuBox.className = 'game-menu';
+    this.menuBox.hidden = true;
+    this.menuBox.innerHTML = `<div class="game-menu-panel" role="dialog" aria-label="Menu"><button type="button" class="game-menu-close" aria-label="Close (Esc)" title="Back to the game (Esc)">✕</button><h2>MENU</h2><h3>sound</h3><div class="game-menu-row"></div></div>`;
+    this.menuBox.querySelector('.game-menu-row')!.append(soundBox);
+    this.menuBox.querySelector('.game-menu-close')!.addEventListener('click', () => this.toggleMenu(false));
+    this.menuBox.addEventListener('mousedown', (e) => {
+      if (e.target === this.menuBox) this.toggleMenu(false);
+    });
 
     this.stage = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stage', role: 'img' });
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -337,8 +366,21 @@ export class NetworkView {
     this.queryBox = document.createElement('div');
     this.queryBox.className = 'query-box';
     this.queryBox.hidden = true;
-    root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox);
+    root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox, this.menuBox);
     this.render();
+  }
+
+  get menuOpen(): boolean {
+    return !this.menuBox.hidden;
+  }
+
+  /** Opens or closes the game menu (toggles when not told which). */
+  toggleMenu(open = !this.menuOpen): void {
+    if (open === this.menuOpen) return;
+    this.menuBox.hidden = !open;
+    this.tip.hide();
+    this.actions.sound.play(open ? 'menuOpen' : 'menuClose');
+    this.actions.menuToggled(open);
   }
 
   /** Detection: a crossed-out eye icon over a vertical bar of three segments, under the node's name. */

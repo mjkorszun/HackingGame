@@ -1025,3 +1025,19 @@ body {
 .entry-agent { align-items: center; margin-bottom: 6px; cursor: default; }
 .entry-agent-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .entry-agent-icon { width: 22px; height: 22px; flex-basis: 22px; padding: 3px; }
+
+/* ---------- header: time controls on the left, the menu gear on the right ---------- */
+.time-box { display: flex; align-items: center; gap: 8px; }
+.time-box .clock { min-width: 64px; text-align: left; }
+.gear-btn { margin-left: auto; }
+.gear-btn svg { width: 22px; height: 22px; }
+
+/* ---------- game menu: a window in the middle of the screen ---------- */
+.game-menu { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); }
+.game-menu[hidden] { display: none; }
+.game-menu-panel { position: relative; min-width: 340px; max-width: calc(100vw - 32px); padding: 22px 26px 26px; background: #000; border: 2px solid var(--green); box-shadow: 0 0 24px rgba(61, 255, 122, 0.25); color: var(--green); font-family: var(--font); }
+.game-menu-panel h2 { margin: 0 0 14px; padding-bottom: 8px; font-size: 20px; letter-spacing: 2px; border-bottom: 1px solid var(--green-dim); }
+.game-menu-panel h3 { margin: 10px 0 8px; font-size: 13px; color: var(--blue, #5ab4ff); font-weight: normal; letter-spacing: 1px; text-transform: uppercase; }
+.game-menu-close { position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; background: #000; color: var(--green); border: 1px solid var(--green); font: inherit; font-size: 16px; cursor: pointer; }
+.game-menu-close:hover { background: var(--green-faint); }
+.game-menu .volume { width: 180px; }
