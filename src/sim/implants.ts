@@ -156,15 +156,11 @@ const PRICE_TIER = [1, 2.5, 6, 15, 40];
 const CODE: Record<ChipKind, string> = { jack: 'J', surge: 'S', damper: 'D', bio: 'B', memory: 'M', processor: 'P', attack: 'A', stealth: 'X', analysis: 'N', trace: 'T', defense: 'G' };
 
 /** The chips you start with: the bare minimum to go online. */
-export const STARTER_CHIPS: Record<'jack' | 'memory', ChipModel> = {
-  jack: { id: 'stock-jack', kind: 'jack', name: 'Neural Jack 1.0', maker: 'clinic issue', rarity: 'common', value: 1, sides: { speed: 0, noise: 0, strain: 0, reliability: 85 }, surgery: 3, price: 30 },
-  memory: { id: 'stock-memory', kind: 'memory', name: 'Memory 500', maker: 'clinic issue', rarity: 'common', value: 500, sides: { speed: 0, noise: 0, strain: 0, reliability: 85 }, surgery: 2, price: 25 },
-};
 
 /** Every chip model that exists, built once from a fixed seed: each maker makes a few models of most kinds. */
 function buildCatalogue(): ChipModel[] {
   const roll = mulberry(2050);
-  const out: ChipModel[] = [STARTER_CHIPS.jack, STARTER_CHIPS.memory];
+  const out: ChipModel[] = [];
   for (const kind of Object.keys(KINDS) as ChipKind[]) {
     const k = KINDS[kind];
     for (const m of MAKERS) {
@@ -201,6 +197,15 @@ function buildCatalogue(): ChipModel[] {
 }
 
 export const CATALOGUE: readonly ChipModel[] = buildCatalogue();
+
+/** What you start with: the cheapest everyday models, from Tianwei, the mass-market maker. */
+export const STARTER_CHIPS: Record<'jack' | 'memory', ChipModel> = {
+  jack: CATALOGUE.find((c) => c.id === 'tianwei-jack-0-tn')!,
+  memory: CATALOGUE.find((c) => c.id === 'tianwei-memory-0-jade')!,
+};
+
+/** Old saves started with chips that no longer exist: these replace them. */
+export const RENAMED_CHIPS: Record<string, string> = { 'stock-jack': 'tianwei-jack-0-tn', 'stock-memory': 'tianwei-memory-0-jade' };
 
 /** Colour of a maker (chips you start with are clinic issue: light blue). */
 export function makerColor(maker: string): string {

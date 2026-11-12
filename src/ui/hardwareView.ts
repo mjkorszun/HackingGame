@@ -1,7 +1,7 @@
 import { chipById, chipValue, KINDS, makerColor, marketOffers, REMOVE_DAYS, sellPrice, SOCKETS, type ChipModel, type SocketId } from '../sim/implants';
 import { sats } from '../sim/money';
 import { BRAIN_ART } from './brainArt';
-import { iconBody, iconSvg } from './icons';
+import { iconBody, iconSvg, MENU_ICONS } from './icons';
 
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -45,7 +45,12 @@ export interface HardwareActions {
 
 /** What the tab shows between redraws. */
 export interface HardwareView {
-  sel: SocketId;
+  /** The socket you clicked (it stays open so you can use its buttons); null = none. */
+  sel: SocketId | null;
+  /** The socket under the mouse, shown while you point at it. */
+  hover?: SocketId | null;
+  /** The spare chip being dragged onto a socket. */
+  drag?: ChipModel;
   market: boolean;
   line: string;
 }
@@ -89,7 +94,7 @@ export function renderHardware(el: HTMLElement, act: HardwareActions, view: Hard
     redraw();
   };
   const head = `<h2 class="sw-head">${view.market ? 'hardware market' : 'hardware'} <span class="home-dim">${view.market ? `day ${st.day} · you have ${sats(st.sats)}` : 'chips wired into your brain'}</span>
-    <button type="button" class="home-btn hw-market-btn" data-act="market">${view.market ? 'Back to your brain' : 'Hardware Market'}</button></h2>
+    <button type="button" class="home-btn hw-market-btn" data-act="market">${view.market ? `Back to your brain${iconSvg(MENU_ICONS.hardware, 'menu-icon is-flipped')}` : `Hardware Market${iconSvg(MENU_ICONS.market, 'menu-icon')}`}</button></h2>
     ${view.line ? `<div class="hw-line">${esc(view.line)}</div>` : ''}`;
 
   if (view.market) {
@@ -117,6 +122,8 @@ export function renderHardware(el: HTMLElement, act: HardwareActions, view: Hard
       const cid = st.installed[id];
       return cid ? chipById(cid) : undefined;
     };
+    const shown = view.hover ?? view.sel;
+    const spareAll = st.spare.map((id) => chipById(id)).filter((c): c is ChipModel => !!c);
     const sockets = SOCKETS.map((s) => {
       const { x, y } = SOCKET_XY[s.id];
       const inst = chipIn(s.id);
@@ -128,49 +135,92 @@ export function renderHardware(el: HTMLElement, act: HardwareActions, view: Hard
            <svg x="${x - 9}" y="${y - 9}" width="18" height="18" viewBox="0 0 512 512" class="hw-die-icon">${iconBody(KINDS[inst.kind].icon) ?? ''}</svg>
            <path class="hw-pins" d="${[-6, 0, 6].map((o) => `M${x + o} ${y - 16}v5M${x + o} ${y + 11}v5M${x - 16} ${y + o}h5M${x + 11} ${y + o}h5`).join('')}"/></g>`
         : '';
-      return `<g class="hw-socket${inst ? ' is-installed' : ''}${view.sel === s.id ? ' is-selected' : ''}" data-slot="${s.id}" tabindex="0">
+      return `<g class="hw-socket${inst ? ' is-installed' : ''}${shown === s.id ? ' is-selected' : ''}" data-slot="${s.id}" tabindex="0">
         <rect class="hw-box" x="${x - h}" y="${y - h}" width="${SIZE}" height="${SIZE}" rx="3"/>${chip}
         <title>${esc(s.name)}: ${inst ? esc(inst.name) : 'empty'}</title></g>`;
     }).join('');
     const rows = SOCKETS.map((s) => {
       const inst = chipIn(s.id);
-      return `<button type="button" class="hw-row${inst ? ' is-installed' : ''}${view.sel === s.id ? ' is-selected' : ''}" data-slot="${s.id}">
+      return `<button type="button" class="hw-row${inst ? ' is-installed' : ''}${shown === s.id ? ' is-selected' : ''}" data-slot="${s.id}">
         <span class="hw-name">${esc(s.name)}</span><span class="hw-state${inst ? ` rarity-${inst.rarity}` : ''}">${inst ? esc(inst.name.includes(String(inst.value)) && inst.kind === 'memory' ? `${inst.name} GB` : `${inst.name} ${chipValue(inst)}`) : 'empty'}</span></button>`;
     }).join('');
-    const sel = SOCKETS.find((s) => s.id === view.sel)!;
-    const inst = chipIn(sel.id);
-    const fitting = [...new Set(st.spare)].map((id) => chipById(id)).filter((c): c is ChipModel => !!c && sel.fits.includes(c.kind));
+    const sel = SOCKETS.find((s) => s.id === shown);
+    const inst = sel ? chipIn(sel.id) : undefined;
+    const fitting = sel ? [...new Set(st.spare)].map((id) => chipById(id)).filter((c): c is ChipModel => !!c && sel.fits.includes(c.kind)) : [];
     el.innerHTML = `${head}
       <div class="hw-layout">
         <svg class="hw-brain" viewBox="95 55 475 500" role="img" aria-label="Brain cross-section with chip sockets">${BRAIN_ART}${sockets}</svg>
         <div class="hw-side">
           <div class="hw-list">${rows}</div>
-          <div class="hw-detail">
+          <div class="hw-detail">${sel ? `
             <div class="hw-detail-name">${esc(sel.name)}</div>
             ${inst ? chipCard(inst, inst.kind === 'memory' ? '' : `<button type="button" class="home-btn hw-remove" data-remove="${sel.id}">take out (${REMOVE_DAYS} day)</button>`) : '<div class="hw-detail-state">socket empty</div>'}
             <div class="hw-detail-fits">fits: ${sel.fits.map((k) => `<span class="hw-fit-name" title="${esc(KINDS[k].about)}">${esc(KINDS[k].name)}</span>`).join(', ')}</div>
             <div class="hw-fit-about">${esc(sel.fits.map((k) => KINDS[k].about).join('. '))}</div>
-            ${fitting.length ? `<div class="hw-detail-fits">your spare chips for it:</div>${fitting.map((c) => chipCard(c, `<button type="button" class="home-btn hw-install" data-install="${c.id}">${inst ? 'swap in' : 'put in'} (${c.surgery} day${c.surgery === 1 ? '' : 's'})</button>`)).join('')}` : ''}
+            ${fitting.length ? `<div class="hw-detail-fits">your spare chips for it:</div>${fitting.map((c) => chipCard(c, `<button type="button" class="home-btn hw-install" data-install="${c.id}">${inst ? 'swap in' : 'put in'} (${c.surgery} day${c.surgery === 1 ? '' : 's'})</button>`)).join('')}` : ''}` : `
+            <div class="hw-detail-state">point at a socket to see it. click it to work with it</div>`}
           </div>
         </div>
-      </div>`;
+      </div>
+      <h2 class="sw-head">spare chips <span class="home-dim">drag one onto a socket to put it in</span></h2>
+      <div class="hw-grid hw-spare">${spareAll.length ? spareAll.map((c) => `<div class="hw-drag" draggable="true" data-chip="${c.id}" title="drag onto a socket">${chipCard(c)}</div>`).join('') : '<div class="home-dim">none. buy chips in the Hardware Market; chips you take out wait here</div>'}</div>`;
+    // Drag a spare chip onto a socket: the sockets it fits light up.
+    el.querySelectorAll<HTMLElement>('[data-chip]').forEach((d) => {
+      d.addEventListener('dragstart', (e) => {
+        view.drag = chipById(d.dataset.chip!);
+        e.dataTransfer?.setData('text/plain', d.dataset.chip!);
+        const dragged = view.drag;
+        for (const s of SOCKETS) if (dragged && s.fits.includes(dragged.kind)) el.querySelector(`.hw-socket[data-slot="${s.id}"]`)?.classList.add('is-target');
+      });
+      d.addEventListener('dragend', () => {
+        view.drag = undefined;
+        el.querySelectorAll('.is-target, .is-over').forEach((n) => n.classList.remove('is-target', 'is-over'));
+      });
+    });
+    el.querySelectorAll<SVGGElement | HTMLElement>('[data-slot]').forEach((n) => {
+      const socket = SOCKETS.find((s) => s.id === n.dataset.slot)!;
+      const fits = () => !!view.drag && socket.fits.includes(view.drag.kind);
+      n.addEventListener('dragover', (e) => {
+        if (!fits()) return;
+        e.preventDefault();
+        n.classList.add('is-over');
+      });
+      n.addEventListener('dragleave', () => n.classList.remove('is-over'));
+      n.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (!view.drag || !fits()) return;
+        const chip = view.drag;
+        view.drag = undefined;
+        act.click();
+        view.sel = socket.id;
+        done(act.install(chip.id, socket.id));
+      });
+    });
     el.querySelectorAll<HTMLElement | SVGGElement>('[data-slot]').forEach((n) => {
-      const pick = () => {
-        view.sel = n.dataset.slot as SocketId;
+      const id = n.dataset.slot as SocketId;
+      // A click keeps the socket open (click again to close it); pointing only shows it while the mouse is there.
+      n.addEventListener('click', () => {
+        view.sel = view.sel === id ? null : id;
         redraw();
-      };
-      n.addEventListener('click', pick);
+      });
       n.addEventListener('mouseenter', () => {
-        if (view.sel !== n.dataset.slot) pick();
+        if (view.hover === id || view.drag) return;
+        view.hover = id;
+        redraw();
+      });
+      n.addEventListener('mouseleave', () => {
+        if (view.hover !== id || view.drag) return;
+        view.hover = null;
+        redraw();
       });
     });
     el.querySelector<HTMLButtonElement>('[data-remove]')?.addEventListener('click', () => {
       act.click();
-      done(act.remove(sel.id));
+      if (sel) done(act.remove(sel.id));
     });
     el.querySelectorAll<HTMLButtonElement>('[data-install]').forEach((b) => b.addEventListener('click', () => {
       act.click();
-      done(act.install(b.dataset.install!, sel.id));
+      if (sel) done(act.install(b.dataset.install!, sel.id));
     }));
   }
   el.querySelector('[data-act="market"]')!.addEventListener('click', () => {

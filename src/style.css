@@ -516,10 +516,13 @@ body {
 }
 .home-btn:hover:not(:disabled), .home-btn.is-open { background: var(--green-faint); }
 .home-btn:disabled { color: var(--grey); border-color: #4a564f; cursor: not-allowed; }
+#home.is-days { pointer-events: none; }
+.home-money { color: var(--yellow); }
 .home-active { margin-top: 24px; color: var(--green); }
 .home-job { color: var(--yellow); }
 .home-dim { color: var(--grey); }
 .home-list { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; width: min(460px, 100%); }
+.panel-list { width: 100%; max-width: 900px; margin-top: 8px; }
 .contract-card { border: 1px solid var(--green-dim); padding: 12px 14px; color: var(--green); }
 .contract-card.is-taken { border-color: var(--yellow); }
 .cc-head { display: flex; justify-content: space-between; margin-bottom: 4px; }
@@ -879,7 +882,12 @@ body {
 .hw-fit-about { color: var(--grey); }
 
 .menu-icon.is-flipped { transform: scaleX(-1); }
-.hw-market-btn { margin-left: auto; padding: 4px 12px; font-size: 13px; letter-spacing: 1px; text-transform: none; }
+.hw-market-btn { margin-left: auto; padding: 8px 18px; font-size: 16px; letter-spacing: 1px; text-transform: none; display: inline-flex; align-items: center; gap: 10px; border-width: 2px; color: var(--yellow); border-color: var(--yellow); }
+.hw-market-btn:hover { background: rgba(255, 216, 74, 0.12); }
+.hw-drag { cursor: grab; }
+.hw-drag:active { cursor: grabbing; }
+.hw-socket.is-target .hw-box { stroke: var(--yellow); stroke-width: 2.5; stroke-dasharray: 4 3; }
+.hw-socket.is-over .hw-box { fill: rgba(255, 216, 74, 0.25); stroke-dasharray: none; }
 .hw-line { color: var(--yellow); margin: 0 0 8px; }
 .hw-note { margin: -4px 0 8px; }
 .hw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; align-items: start; }

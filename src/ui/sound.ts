@@ -12,6 +12,9 @@ const SOUNDS = {
   menuItem: 'click_001.wav',
   menuClose: 'click_002.wav',
   hop: 'tick_002.wav',
+  // Days passing at the base: a tick for each day, a longer rising tone when the work is done.
+  dayTick: 'tick_002.wav',
+  dayDone: 'zap_three_tone_up.ogg',
   hover: { file: 'glass_001.wav', volume: 0.7 },
   command: 'switch_001.wav',
   error: 'error_005.wav',

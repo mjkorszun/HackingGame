@@ -1062,10 +1062,10 @@ describe('hardware', () => {
     expect(a.sats).toBe(9900);
     expect(installChip(a, big.id, 'hippocampus')).toEqual({ days: big.surgery });
     expect(a.memory).toBe(1000);
-    expect(a.hardware.spare).toEqual(['stock-memory']);
+    expect(a.hardware.spare).toEqual(['tianwei-memory-0-jade']);
     expect(typeof removeChip(a, 'hippocampus')).toBe('string');
     expect(typeof removeChip(a, 'spine1')).toBe('string');
-    expect(sellChip(a, 'stock-memory')).toMatch(/sold/);
+    expect(sellChip(a, 'tianwei-memory-0-jade')).toMatch(/sold/);
     expect(a.hardware.spare).toEqual([]);
   });
 });

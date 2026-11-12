@@ -4,7 +4,7 @@ import { newPizzeria, type NetworkSeed } from '../sim/generate';
 import type { DevProject } from '../sim/development';
 import { newGameCode } from '../sim/progression';
 import { MAX_HEALTH, REST_PER_DAY } from '../sim/health';
-import { chipById, KINDS, REMOVE_DAYS, sellPrice, SOCKETS, STARTER_CHIPS, type SocketId } from '../sim/implants';
+import { chipById, KINDS, REMOVE_DAYS, sellPrice, SOCKETS, STARTER_CHIPS, RENAMED_CHIPS, type SocketId } from '../sim/implants';
 
 /** What the player keeps between runs: sats and software. Saved in the browser. */
 export interface Account {
@@ -272,6 +272,10 @@ function migrate(a: Account): Account {
   if (!a.hardware || typeof a.hardware !== 'object') a.hardware = newHardware();
   if (typeof a.health !== 'number') a.health = MAX_HEALTH;
   if (!a.hardware.bought) a.hardware.bought = { day: 0, ids: [] };
+  // The first starting chips were renamed to catalogue models.
+  const renamed = (id: string) => RENAMED_CHIPS[id] ?? id;
+  for (const k of Object.keys(a.hardware.installed) as SocketId[]) a.hardware.installed[k] = renamed(a.hardware.installed[k]!);
+  a.hardware.spare = a.hardware.spare.map(renamed);
   if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id);
   // Unload from the end until what is loaded fits.
   while (a.loaded.length && usedMemory(loadedPrograms(a)) > a.memory) a.loaded.pop();

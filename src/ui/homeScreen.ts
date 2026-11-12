@@ -44,6 +44,8 @@ export interface HomeActions {
   /** The contract you took, with its last day. */
   contract(): { title: string; deadline: number } | undefined;
   day(): number;
+  /** Money you have. */
+  money(): number;
   /** Sets the game code (for testing for now). */
   setCode(code: string): void;
   /** For testing: gains exactly the XP the next level needs. */
@@ -87,7 +89,7 @@ export class HomeScreen {
   private chosen: Choice | undefined;
   private open: 'networks' | 'contracts' | 'software' | 'hardware' | 'character' | null = null;
   /** The Hardware tab's socket, market toggle and last message. */
-  private hwView: HardwareView = { sel: 'hippocampus', market: false, line: '' };
+  private hwView: HardwareView = { sel: null, hover: null, market: false, line: '' };
   /** What the last stretch of development did, shown under the project. */
   private devLines: string[] = [];
   private devDone: Program | undefined;
@@ -100,6 +102,8 @@ export class HomeScreen {
   private readonly soft: HTMLElement;
   /** The Hardware tab (your brain and its implants) also takes the whole left side. */
   private readonly hard: HTMLElement;
+  /** Known networks, contracts and the character also open on the left, like Software and Hardware. */
+  private readonly panel: HTMLElement;
   readonly gear: HTMLElement;
 
   constructor(
@@ -111,10 +115,12 @@ export class HomeScreen {
       <section class="home-gear" aria-label="Your gear"></section>
       <section class="home-soft" aria-label="Software" hidden></section>
       <section class="home-soft home-hard" aria-label="Hardware" hidden></section>
+      <section class="home-soft home-panel" aria-label="Networks, contracts and character" hidden></section>
       <section class="home-main"></section>`;
     this.gear = root.querySelector('.home-gear')!;
-    this.soft = root.querySelector('.home-soft:not(.home-hard)')!;
+    this.soft = root.querySelector('.home-soft:not(.home-hard):not(.home-panel)')!;
     this.hard = root.querySelector('.home-hard')!;
+    this.panel = root.querySelector('.home-panel')!;
     this.main = root.querySelector('.home-main')!;
     this.render();
   }
@@ -140,7 +146,7 @@ export class HomeScreen {
     const locked = s.reputation < CONTRACT_REPUTATION;
     this.main.innerHTML = `
       <h1 class="home-title">CYBERHACK</h1>
-      <div class="home-stats"><button type="button" class="home-avatar" title="Change avatar">${iconSvg(this.actions.avatar().icon, 'home-avatar-icon', this.actions.avatar().color)}</button> day ${s.day} · reputation ${s.reputation} · <span class="home-health${this.actions.character().health < 50 ? ' is-low' : ''}">health ${this.actions.character().health}%</span></div>
+      <div class="home-stats"><button type="button" class="home-avatar" title="Change avatar">${iconSvg(this.actions.avatar().icon, 'home-avatar-icon', this.actions.avatar().color)}</button> day ${s.day} · <span class="home-money">${sats(this.actions.money())}</span> · reputation ${s.reputation} · <span class="home-health${this.actions.character().health < 50 ? ' is-low' : ''}">health ${this.actions.character().health}%</span></div>
       ${s.news.length ? `<div class="home-news">${s.news.map((n) => `<div>${n}</div>`).join('')}</div>` : ''}
       <nav class="home-menu">
         <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">Known networks${iconSvg(MENU_ICONS.networks, 'menu-icon')}</button>
@@ -174,13 +180,17 @@ export class HomeScreen {
       this.actions.click();
       this.actions.enter(this.chosen);
     });
-    const list = this.main.querySelector('.home-list')!;
     const software = this.open === 'software';
     const hardware = this.open === 'hardware';
-    this.root.classList.toggle('is-software', software || hardware);
-    this.gear.hidden = software || hardware;
+    const panel = this.open === 'networks' || this.open === 'contracts' || this.open === 'character';
+    this.root.classList.toggle('is-software', !!this.open);
+    this.gear.hidden = !!this.open;
     this.soft.hidden = !software;
     this.hard.hidden = !hardware;
+    this.panel.hidden = !panel;
+    const title = this.open === 'networks' ? 'known networks' : this.open === 'contracts' ? 'contracts' : 'character';
+    this.panel.innerHTML = panel ? `<h2 class="sw-head">${title}</h2><div class="home-list panel-list"></div>` : '';
+    const list = (panel ? this.panel.querySelector('.panel-list') : this.main.querySelector('.home-list'))!;
     if (software) this.renderSoftware();
     if (hardware) renderHardware(this.hard, { ...this.actions.hardware, click: () => this.actions.click(), changed: () => this.render() }, this.hwView);
     const card = (taken: boolean, html: string, pick: () => Choice) => {
