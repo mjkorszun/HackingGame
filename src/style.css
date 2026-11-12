@@ -647,6 +647,8 @@ body {
 .home-lock { color: var(--grey); font-size: 13px; }
 .home-news { color: var(--yellow); margin: -16px 0 22px; text-align: center; line-height: 1.5; }
 .cc-skim { color: var(--yellow); }
+.cc-lasting { margin-top: 6px; border-left: 2px solid var(--yellow); padding-left: 8px; }
+.cc-lasting-head { color: var(--yellow); font-weight: bold; }
 
 /* ---------- software development ---------- */
 .dev-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; color: var(--green); }

@@ -202,7 +202,7 @@ export class HomeScreen {
         card(taken, `
           <div class="cc-head"><span class="cc-title">${net.name}</span><span class="home-dim">local network</span></div>
           <div class="cc-line home-dim">${net.location}. security level ${net.security}</div>
-          ${s.skimmers.filter((k) => k.netId === net.id).map((k) => `<div class="cc-line cc-skim">${k.program.name} planted: +${sats(Math.round((net.income ?? 0.08) * (k.program.efficiency ?? 1) * 100) / 100)} a day</div>`).join('')}`, () => ({ kind: 'network', net }));
+          ${this.lasting(net.id, net.income)}`, () => ({ kind: 'network', net }));
       }
     } else if (this.open === 'character') {
       this.renderCharacter(list);
@@ -214,9 +214,22 @@ export class HomeScreen {
           <div class="cc-head"><span class="cc-title">${c.title}</span><span class="cc-pay">${sats(c.pay)}</span></div>
           <div class="cc-line">${sys.name} <span class="home-dim">(${sys.location})</span></div>
           <div class="cc-line home-dim">${c.need} one file in the company's databases. security level ${sys.security ?? 1}</div>
-          ${this.deadlineLine(c.title, c.days ?? 5)}`, () => ({ kind: 'contract', offer }));
+          ${this.deadlineLine(c.title, c.days ?? 5)}
+          ${this.lasting(sys.id)}`, () => ({ kind: 'contract', offer }));
       }
     }
+  }
+
+  /**
+   * What you left behind in a network that is still there: planted skimmers and other agents of yours.
+   * Backdoors will show here too once they last between runs.
+   */
+  private lasting(netId: string, income = 0.08): string {
+    const lines = this.state.skimmers
+      .filter((k) => k.netId === netId)
+      .map((k) => `${k.program.name} (skimmer) planted: +${sats(Math.round(income * (k.program.efficiency ?? 1) * 100) / 100)} a day`);
+    if (!lines.length) return '';
+    return `<div class="cc-lasting"><div class="cc-lasting-head">left in this network:</div>${lines.map((l) => `<div class="cc-line cc-skim">${l}</div>`).join('')}</div>`;
   }
 
   /** How long you have for a contract: days left once taken, or how many days it gives. */
