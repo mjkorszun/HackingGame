@@ -485,9 +485,9 @@ export class NetworkView {
   /** Where an agent in a node is drawn: in the room around you, or beside a neighbour. */
   private agentSpot(nodeId: string, index: number): { x: number; y: number } | null {
     // Several agents in one node stand in a column (then a second one), so their code names don't overlap.
-    if (nodeId === this.game.currentNode) return { x: CX + 55 + Math.floor(index / 4) * 70, y: CY - 30 + (index % 4) * 46 };
+    if (nodeId === this.game.currentNode) return { x: CX + 55 + Math.floor(index / 4) * 70, y: CY - 60 + (index % 4) * 60 };
     const p = this.positions.get(nodeId);
-    return p ? { x: p.x + NEIGHBOUR_R * 0.75 + Math.floor(index / 3) * 62, y: p.y - NEIGHBOUR_R * 0.75 + (index % 3) * 44 } : null;
+    return p ? { x: p.x + NEIGHBOUR_R * 0.75 + Math.floor(index / 3) * 62, y: p.y - NEIGHBOUR_R * 0.75 + (index % 3) * 56 } : null;
   }
 
   /** Agents move every tick: their dots are kept and only moved, so hover and menus keep working. */
@@ -530,6 +530,9 @@ export class NetworkView {
       }
       els.main.classList.toggle('is-querying', g.query?.agentId === a.id);
       els.main.classList.toggle('is-hostile', a.mood === 'hostile');
+      // Calm (patrol), unsure (asking you, or you failed it once), alert (system alarm orange or red), hostile.
+      const attitude = a.mood === 'hostile' ? 'hostile' : g.query?.agentId === a.id || a.strikes > 0 ? 'unsure' : g.alarm >= 2 && a.mood !== 'trusting' ? 'alert' : 'calm';
+      if (els.main.dataset.attitude !== attitude) els.main.dataset.attitude = attitude;
       els.main.classList.toggle('is-trusting', a.mood === 'trusting');
       els.main.classList.toggle('is-silenced', a.silenced);
       const frac = Math.max(0, a.hp / a.stats.hp);
@@ -658,15 +661,17 @@ export class NetworkView {
   /** A warrior: a dot with a small sword inside, coloured by its type. */
   private drawAgent(a: Agent, parent: Element): SVGGElement {
     const grp = svg('g', { class: `agent is-${a.stats.type}`, 'data-agent': a.id }, parent) as SVGGElement;
+    // Its attitude: a ring of four segments that spins, faster the warier it is.
+    svg('circle', { r: 17, class: 'agent-ring' }, grp);
     svg('circle', { r: 11, class: 'agent-body' }, grp);
     const icon = svg('svg', { x: -7, y: -7, width: 14, height: 14, viewBox: '0 0 512 512', class: 'agent-icon' }, grp);
     icon.innerHTML = iconBody(agentIcon(this.game.network.def.id, WARRIOR_TYPES.indexOf(a.stats.type))) ?? '';
     // Integrity bar over its head, shown once it has taken damage.
-    svg('rect', { x: -12, y: -18, width: 24, height: 3, class: 'agent-hp-bg' }, grp);
-    svg('rect', { x: -12, y: -18, width: 24, height: 3, class: 'agent-hp' }, grp);
-    const label = svg('text', { x: 0, y: 22, class: 'agent-name' }, grp);
+    svg('rect', { x: -12, y: -24, width: 24, height: 3, class: 'agent-hp-bg' }, grp);
+    svg('rect', { x: -12, y: -24, width: 24, height: 3, class: 'agent-hp' }, grp);
+    const label = svg('text', { x: 0, y: 31, class: 'agent-name' }, grp);
     label.textContent = a.name;
-    const alert = svg('text', { x: 0, y: -15, class: 'agent-alert' }, grp);
+    const alert = svg('text', { x: 0, y: -26, class: 'agent-alert' }, grp);
     alert.textContent = '!';
     this.tip.attach(grp, () => {
       const live = this.game.agentById(a.id);
