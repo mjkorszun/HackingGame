@@ -75,6 +75,8 @@ const KIND_LABEL: Record<NodeKind, string> = {
 
 /** How long an agent takes to walk from the link's end to its spot after arriving (a look only). */
 const ARRIVE_MS = 450;
+/** How long your avatar takes to walk in from the door after arriving (a look only). */
+const WALK_IN_MS = 650;
 
 function lerpXY(a: { x: number; y: number }, b: { x: number; y: number }, k: number): { x: number; y: number } {
   return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
@@ -414,6 +416,15 @@ export class NetworkView {
   /** The avatar has been drawn once this run (its arrival animation is done). */
   private spawned = false;
   private avatarPos = { x: CX, y: CY };
+  /** The node drawn last time, the spot you stand on in this node, and your walk in through its door. */
+  private lastNode: string | null = null;
+  private avatarHome = { x: CX, y: CY + 40 };
+  private walkIn: { from: { x: number; y: number }; at: number } | null = null;
+  /** How far you lean towards the file you work on (0..1), and the line to it. */
+  private lean = 0;
+  private actionLink: SVGLineElement | null = null;
+  private leanTo: { x: number; y: number } | null = null;
+  private lastAvatarAt = 0;
   /** Top layer for shots and outcome texts. */
   private fxLayer: SVGGElement | null = null;
   /** When a shot towards each target lands, so its outcome text waits for it. */
@@ -571,6 +582,19 @@ export class NetworkView {
       });
     });
     this.positions = new Map(positions.map((p) => [p.node.id, { x: p.x, y: p.y }]));
+    // Where you stand: just inside the door you came in by (the middle when you have just jacked in).
+    const came = this.lastNode && this.lastNode !== current.id ? this.positions.get(this.lastNode) : undefined;
+    if (this.lastNode !== current.id) {
+      if (came) {
+        const door = this.doorTowards(came.x, came.y);
+        this.avatarHome = lerpXY(door, { x: CX, y: CY + 40 }, 0.38);
+        // You step in through that door and walk a little way in.
+        this.walkIn = { from: door, at: performance.now() };
+      } else if (!this.lastNode) this.avatarHome = { x: CX, y: CY + 40 };
+      this.lastNode = current.id;
+    }
+    // A dashed line from you to the file you are working on, under the avatar.
+    this.actionLink = svg('line', { class: 'action-link' }, this.stage) as SVGLineElement;
     this.avatar = this.drawAvatar();
     this.updateAvatar(true);
     this.agentLayer = svg('g', { class: 'agent-layer' }, this.stage);
@@ -1067,6 +1091,8 @@ export class NetworkView {
     svg('stop', { offset: '1', 'stop-color': 'currentColor', 'stop-opacity': 0.35 }, grad);
     const scan = svg('rect', { x: CX - span, y: CY - span - 60, width: 2 * span, height: 60, fill: 'url(#scan-grad)', class: 'room-scan' }, grid);
     scan.style.setProperty('--scan', `${2 * span + 60}px`);
+    // The outline goes on top of the grid, so the grid lines never cross it.
+    drawNodeShape(kind, CX, CY, this.roomR, 'room-outline', grp);
 
     // Doors where the links leave.
     for (const p of positions) {
@@ -1209,7 +1235,32 @@ export class NetworkView {
   private updateAvatar(instant = false): void {
     const av = this.avatar;
     if (!av) return;
-    const start = { x: CX, y: CY + 40 };
+    // Working on a file (scan, evaluate, download...): you step towards it, linked by a moving dashed line.
+    const job = this.game.scanningFile;
+    const filePos = job && job.nodeId === this.game.currentNode ? this.filePos.get(job.fileId) : undefined;
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - (this.lastAvatarAt || now)) / 1000);
+    this.lastAvatarAt = now;
+    this.lean = filePos ? Math.min(1, this.lean + dt * 2.5) : Math.max(0, this.lean - dt * 2.5);
+    if (filePos) {
+      // Step a little towards the file, but keep some distance so the line between you shows.
+      const h = this.avatarHome;
+      const fx = filePos.x;
+      const fy = filePos.y + 20;
+      const d = Math.hypot(h.x - fx, h.y - fy);
+      const keep = 90;
+      this.leanTo = d > keep ? lerpXY(h, { x: fx + ((h.x - fx) * keep) / d, y: fy + ((h.y - fy) * keep) / d }, 0.5) : h;
+    }
+    let start = this.lean > 0 && this.leanTo ? lerpXY(this.avatarHome, this.leanTo, easeInOut(this.lean)) : this.avatarHome;
+    let walking = false;
+    if (this.walkIn) {
+      const k = (now - this.walkIn.at) / WALK_IN_MS;
+      if (k >= 1) this.walkIn = null;
+      else {
+        start = lerpXY(this.walkIn.from, start, easeInOut(k));
+        walking = true;
+      }
+    }
     let pos = start;
     let facing = 1;
     const hop = this.game.nextHop;
@@ -1224,10 +1275,20 @@ export class NetworkView {
       pos = t < split ? lerp(start, door, t / split) : lerp(door, to, (t - split) / (1 - split));
       facing = to.x < start.x ? -1 : 1;
     }
-    av.classList.toggle('is-walking', !!end && !this.game.paused);
-    av.classList.toggle('no-transition', instant);
+    av.classList.toggle('is-walking', (!!end || walking) && !this.game.paused);
+    av.classList.toggle('no-transition', instant || walking);
     av.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
     this.avatarPos = { x: pos.x, y: pos.y - 25 * AVATAR_SCALE };
+    const link = this.actionLink;
+    if (link) {
+      link.style.display = filePos && !end ? '' : 'none';
+      if (filePos) {
+        link.setAttribute('x1', this.avatarPos.x.toFixed(1));
+        link.setAttribute('y1', this.avatarPos.y.toFixed(1));
+        link.setAttribute('x2', filePos.x.toFixed(1));
+        link.setAttribute('y2', filePos.y.toFixed(1));
+      }
+    }
     (av.firstElementChild as SVGGElement).style.transform = `scale(${facing * AVATAR_SCALE}, ${AVATAR_SCALE})`;
   }
 
