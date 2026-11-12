@@ -56,7 +56,7 @@ export interface SystemDef {
   security?: number;
   /** Agents that start in this system. */
   /** One entry per agent; several agents can share a type. */
-  agents?: { kind: 'warrior'; node: string; type?: WarriorType }[];
+  agents?: { kind?: 'agent' | 'warrior'; node: string; type?: WarriorType; route?: string[] }[];
   /** The job the player was hired for in this system. */
   contract?: ContractDef;
 }

@@ -146,11 +146,14 @@ function drawProgramIcon(cx: number, cy: number, parent: Element): void {
 
 /** What the game tooltip says about a data file. */
 function fileTip(f: DataFile): TipLine[] {
-  const lines: TipLine[] = [{ text: f.id, cls: 'tip-title' }];
+  const act = clickAction(f) ?? (f.scanned ? undefined : 'scan');
+  // What a click does comes first, so you know before you click.
+  const lines: TipLine[] = act ? [{ text: `click: ${act}`, cls: 'tip-act' }] : [];
+  lines.push({ text: f.id, cls: 'tip-title' });
   if (f.protection) lines.push({ text: PROTECTION_LABEL[f.protection] + (f.protection === 'lock' ? `: ${f.lockPrivilege}` : ''), cls: 'tip-protection' });
   if (!f.scanned) {
-    const hint = f.protection === 'seal' ? 'click to decrypt the seal first' : f.protection === 'lock' ? 'needs the privilege, or forge' : f.protection === 'killswitch' ? 'defuse it first, or it is lost' : 'click to scan';
-    return [...lines, { text: 'encrypted', cls: 'c-system' }, { text: hint, cls: 'c-system' }];
+    const hint = f.protection === 'seal' ? 'sealed: decrypt it first' : f.protection === 'lock' ? 'needs the privilege, or forge' : f.protection === 'killswitch' ? 'defuse it first, or it is lost' : '';
+    return [...lines, { text: 'encrypted', cls: 'c-system' }, ...(hint ? [{ text: hint, cls: 'c-system' }] : []), { text: 'right-click: all actions', cls: 'c-system' }];
   }
   const seen = apparentContent(f);
   lines.push({ text: CONTENT_LABEL[seen], cls: `tip-${seen}` });
@@ -162,8 +165,7 @@ function fileTip(f: DataFile): TipLine[] {
   }
   if (f.content === 'contract') lines.push({ text: f.altered ? 'altered' : `the contract wants it ${f.need === 'alter' ? 'altered' : 'deleted'}` });
   if (f.downloaded) lines.push({ text: 'downloaded', cls: 'c-info' });
-  const act = clickAction(f);
-  if (act) lines.push({ text: `click to ${act}`, cls: 'c-system' });
+  lines.push({ text: 'right-click: all actions', cls: 'c-system' });
   return lines;
 }
 
@@ -705,7 +707,7 @@ export class NetworkView {
     svg('circle', { r: 15, class: 'agent-ring' }, grp);
     svg('circle', { r: 11, class: 'agent-body' }, grp);
     const icon = svg('svg', { x: -7, y: -7, width: 14, height: 14, viewBox: '0 0 512 512', class: 'agent-icon' }, grp);
-    icon.innerHTML = iconBody(agentIcon(this.game.network.def.id, WARRIOR_TYPES.indexOf(a.stats.type))) ?? '';
+    icon.innerHTML = iconBody(agentIcon(this.game.network.def.id, WARRIOR_TYPES.indexOf(a.stats.type), a.stats.role)) ?? '';
     // Integrity bar over its head, shown once it has taken damage.
     svg('rect', { x: -12, y: -24, width: 24, height: 3, class: 'agent-hp-bg' }, grp);
     svg('rect', { x: -12, y: -24, width: 24, height: 3, class: 'agent-hp' }, grp);
@@ -732,7 +734,7 @@ export class NetworkView {
         if (!p) return `needs ${type}`;
         return live.known === 'none' ? 'odds unknown' : oddsWord(versus(p.rating, resist));
       };
-      this.menu.show(e.clientX, e.clientY, `${live.name}: ${live.stats.kind}`, [
+      this.menu.show(e.clientX, e.clientY, `${live.name}: ${live.typeName}`, [
         { label: 'Attack', hint: here ? (this.warriorsHere() ? 'your warriors here' : this.game.findProgram('warrior') ? `release ${this.game.findProgram('warrior')!.name}` : 'needs a warrior') : 'not in your node', disabled: !here || (!this.warriorsHere() && !this.game.findProgram('warrior')), action: () => this.actions.command(`attack ${live.name}`) },
         { label: 'Silence', hint: here ? odds('silence', live.stats.silenceResist) : 'not in your node', disabled: !here || live.silenced || !this.game.findProgram('silence'), action: () => this.actions.command(`silence ${live.name}`) },
         { label: 'Analyze', hint: live.known === 'full' ? 'already fully analyzed' : here ? `${this.game.findProgram('analyze')?.name ?? 'needs an analyze program'}: its type and stats` : 'not in your node', disabled: !here || live.known === 'full' || !this.game.findProgram('analyze'), action: () => this.actions.command(`analyze ${live.name}`) },
@@ -1131,8 +1133,19 @@ export class NetworkView {
       const label = svg('text', { x, y: bottom + 36, class: 'node-kind' }, grp);
       label.textContent = KIND_LABEL[kind];
     }
-    const title = svg('title', {}, grp);
-    title.textContent = opts.current ? `${nodeName} (you are here)` : `${nodeName}: click to connect`;
+    if (opts.current) svg('title', {}, grp).textContent = `${nodeName} (you are here)`;
+    else {
+      this.tip.attach(grp, () => {
+        const gated = this.game.network.hasGate(this.game.currentNode, node.id);
+        return [
+          { text: `click: connect${gated ? ' (through a gate)' : ''}`, cls: 'tip-act' },
+          { text: nodeName, cls: 'tip-title' },
+          ...(kind !== 'hidden' ? [{ text: KIND_LABEL[kind] }] : []),
+          ...(gated ? [{ text: `the gate: ${oddsWord(this.game.gateBlockChance())} chance it stops you`, cls: 'tip-protection' }] : []),
+          { text: 'right-click: all actions', cls: 'c-system' },
+        ];
+      });
+    }
 
     grp.addEventListener('click', () => {
       if (!opts.current) this.actions.travel(node.id);

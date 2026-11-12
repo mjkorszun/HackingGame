@@ -257,7 +257,7 @@ export class Game {
     defs.forEach((a, i) => {
       const stats = WARRIORS[a.type ?? 'balanced'];
       this.agents.push({
-        id: `a${i + 1}`, typeName: names.get(stats.type)!, name: codeName(`${system.id}/${i}`), stats, hp: stats.hp, node: a.node, hop: null,
+        id: `a${i + 1}`, typeName: names.get(stats.type)!, name: codeName(`${system.id}/${i}`), stats, route: a.route, hp: stats.hp, node: a.node, hop: null,
         stayLeft: stats.stay[0], queryLeft: stats.queryEvery, attackLeft: stats.attackEvery,
         mood: 'patrol', strikes: 0, silenced: false, known: 'none',
       });
@@ -373,7 +373,8 @@ export class Game {
         continue;
       }
       const together = a.node === playerHere;
-      if (a.mood === 'hostile') {
+      const role = a.stats.role;
+      if (a.mood === 'hostile' && a.stats.damage > 0) {
         // Your agents in its node draw its fire first: the one fighting it, or any.
         const near = this.allies.filter((x) => x.node === a.node && !x.hop && !x.resident);
         const foe = near.find((x) => x.id === this.foes.get(a.id)) ?? near[0];
@@ -387,7 +388,7 @@ export class Game {
             a.attackLeft = a.stats.attackEvery;
             this.hitPlayer(a);
           }
-        } else {
+        } else if (a.stats.ai !== 'stationary') {
           // Chase the player.
           const target = this.move ? this.move.to : this.currentNode;
           const path = this.network.path(a.node, target);
@@ -395,14 +396,18 @@ export class Game {
         }
         continue;
       }
-      if (together && this.signature >= 3) {
+      if (a.mood === 'hostile') {
+        // An inspector or worker that found you out has already told the system; it just goes on with its work.
+      } else if (role === 'worker') {
+        // Workers do not check anyone.
+      } else if (together && this.signature >= 3) {
         if (this.query?.agentId === a.id) this.query = null;
         a.mood = 'hostile';
         a.attackLeft = a.stats.attackEvery;
         this.log(`${a.name} recognises your burned signature: ENEMY`, 'alarm3');
         continue;
       }
-      if (together && a.mood === 'patrol' && !this.query && !this.gateQuery) {
+      if (together && a.mood === 'patrol' && role !== 'worker' && role !== 'sentry' && !this.query && !this.gateQuery) {
         if (--a.queryLeft <= 0) {
           a.queryLeft = a.stats.queryEvery;
           // After a first unanswered query it asks again for sure.
@@ -410,7 +415,21 @@ export class Game {
         }
       }
       if (together && (a.mood === 'trusting' || this.query?.agentId === a.id)) continue;
+      if (a.stats.ai === 'stationary') continue;
       if (--a.stayLeft <= 0) {
+        if (a.stats.ai === 'path' && a.route && a.route.length > 1) {
+          // Back and forth along its route.
+          const i = a.route.indexOf(a.node);
+          const back = (a.routeBack ??= false);
+          let j = i < 0 ? 0 : back ? i - 1 : i + 1;
+          if (j >= a.route.length || j < 0) {
+            a.routeBack = !back;
+            j = a.routeBack ? i - 1 : i + 1;
+          }
+          const step = this.network.path(a.node, a.route[j])[0];
+          if (step) a.hop = { to: step, elapsed: 0 };
+          continue;
+        }
         const next = this.network.neighbours(a.node).filter((n) => n.kind !== 'honeypot');
         if (next.length) a.hop = { to: this.pick(next).id, elapsed: 0 };
       }
@@ -429,7 +448,7 @@ export class Game {
   /** Your signature cools down while no agent sees you: one level every SIGNATURE_COOL ticks, not below 1. */
   private updateSignature(): void {
     if (!this.signature) return;
-    const seen = !this.move && this.agents.some((a) => a.node === this.currentNode && !a.hop);
+    const seen = !this.move && this.agents.some((a) => a.node === this.currentNode && !a.hop && a.stats.role !== 'worker');
     if (seen) {
       this.unseen = 0;
       return;
@@ -551,6 +570,20 @@ export class Game {
     this.log(`${program.name}: ${a.name} (${a.typeName}) ${got === 'full' ? 'fully analyzed' : 'partly analyzed'}${others ? `. this applies to every ${a.typeName} here` : ''} (hover it to see)`, 'info');
   }
 
+  /**
+   * A sentry in your node may check you when you reach for its data: a roll of its detection against
+   * your hide. If it checks, the action does not start and you answer its query first.
+   */
+  private sentryChecks(): boolean {
+    if (this.query || this.gateQuery) return false;
+    const sentry = this.agentsIn(this.currentNode).find((a) => a.stats.role === 'sentry' && a.mood === 'patrol');
+    if (!sentry) return false;
+    if (sentry.strikes === 0 && this.d100() > this.queryChance(sentry)) return false;
+    this.log(`${sentry.name} (${sentry.typeName}) checks your access before you touch the data`, 'alarm2');
+    this.startQuery(sentry);
+    return true;
+  }
+
   private startQuery(a: Agent): void {
     this.query = { agentId: a.id };
     this.analyze(a);
@@ -608,7 +641,7 @@ export class Game {
   private makeHostile(a: Agent, alarm: boolean): void {
     a.mood = 'hostile';
     a.attackLeft = a.stats.attackEvery;
-    this.log(`${a.name} marks you as an ENEMY`, 'alarm3');
+    this.log(a.stats.damage > 0 ? `${a.name} marks you as an ENEMY` : `${a.name} reports you as an INTRUDER`, 'alarm3');
     if (alarm && !a.silenced) this.raiseAlarm(3);
     // A fight burns your signature: every agent will know you (unless this one is silenced and cannot tell).
     if (!a.silenced) this.exposeSignature(3, `${a.name} passed it on to every agent`);
@@ -1588,6 +1621,7 @@ export class Game {
       this.log(`${program.name}: nothing to scan here (files live in databases)`, 'alarm1');
       return false;
     }
+    if (this.sentryChecks()) return false;
     if (this.isBusy) {
       this.log(`${this.busyName} is already running`, 'alarm1');
       return false;
@@ -1686,6 +1720,7 @@ export class Game {
       this.log('HONEYPOT: this node was a trap. alarm raised (alarms come later)', 'alarm3');
       return true;
     }
+    if (this.sentryChecks()) return false;
     let program: Program | null = null;
     if (action === guard || action === 'evaluate' || action === 'identify') {
       program = this.findProgram(action) ?? null;

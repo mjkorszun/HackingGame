@@ -1175,3 +1175,52 @@ describe('active analyze', () => {
     expect(a.known).not.toBe('none');
   });
 });
+
+describe('agent roles', () => {
+  const run = (g: { step(): void }, n: number) => { for (let i = 0; i < n; i++) g.step(); };
+
+  it('a worker shuttles along its route and never checks you', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const g = new Game({ ...testSystem, gates: [], agents: [{ node: 'gw', type: 'worker', route: ['gw', 'edge'] }] }, () => 0);
+    g.autoPause = false;
+    g.setPaused(false);
+    const seen = new Set<string>();
+    for (let i = 0; i < 600; i++) { g.step(); seen.add(g.agents[0].node); }
+    expect([...seen].sort()).toEqual(['edge', 'gw']);
+    expect(g.query).toBeNull();
+  });
+
+  it('an inspector that finds you out raises red alarm but never hits you', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const g = new Game({ ...testSystem, gates: [], agents: [{ node: 'gw', type: 'inspector' }] }, () => 0);
+    g.autoPause = false;
+    g.setPaused(false);
+    g.agents[0].stayLeft = 100_000;
+    const full = g.integrity;
+    run(g, 20);
+    expect(g.query).not.toBeNull();
+    g.answerQuery('ignore');
+    g.setPaused(false);
+    run(g, 40);
+    g.answerQuery('ignore');
+    g.setPaused(false);
+    expect(g.alarm).toBe(3);
+    run(g, 200);
+    expect(g.integrity).toBe(full);
+  });
+
+  it('a sentry stays put and may check you when you reach for its data', async () => {
+    const { Game } = await import('./game');
+    const { testSystem } = await import('../data/testSystem');
+    const g = new Game({ ...testSystem, entry: 'orders', gates: [], agents: [{ node: 'orders', type: 'sentry' }] }, () => 0);
+    g.autoPause = false;
+    g.setPaused(false);
+    run(g, 300);
+    expect(g.agents[0].node).toBe('orders');
+    expect(g.query).toBeNull(); // it does not ask on its own
+    expect(g.scanCommand('')).toBe(false);
+    expect(g.query?.agentId).toBe(g.agents[0].id);
+  });
+});

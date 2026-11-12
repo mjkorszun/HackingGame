@@ -85,5 +85,10 @@ export function generate(seed: NetworkSeed): SystemDef {
     local: true,
     nodes,
     links,
+    // A small shop: a worker carries orders from the intake to the orders database, and one sentry guards the orders.
+    agents: [
+      { node: 'intake', type: 'worker', route: ['intake', 'orders'] },
+      { node: 'orders', type: 'sentry' },
+    ],
   };
 }

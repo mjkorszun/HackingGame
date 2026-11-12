@@ -1,14 +1,28 @@
-/** AI agents that defend a system. For now one kind: the warrior. */
+/**
+ * AI agents in a system. Security agents defend it: fighters, inspectors that only check you, and
+ * sentries that sit in one node and guard its data. Workers are not security at all: they do the business's work.
+ */
 
-/** How an agent moves around its system. Only roam is built so far. */
-export type AgentAi = 'roam' | 'guard-entry' | 'path' | 'defend' | 'zone';
+/** How an agent moves around its system: roam at random, stay in one node, or shuttle along a fixed route. */
+export type AgentAi = 'roam' | 'stationary' | 'path' | 'guard-entry' | 'defend' | 'zone';
+
+/** What an agent is for. */
+export type AgentRole = 'fighter' | 'inspector' | 'sentry' | 'worker';
+
+/** How a role reads in the game. */
+export const ROLE_LABEL: Record<AgentRole, string> = {
+  fighter: 'security agent, fighter',
+  inspector: 'security agent, inspector: checks you, does not fight',
+  sentry: 'security agent, sentry: stays here and checks who touches the data',
+  worker: 'worker: does the business work, not security',
+};
 
 /**
  * Warrior archetypes: decide stats and colour. Each system gives every archetype it uses a name
  * drawn from WARRIOR_NAMES, so a heavy warrior may be a "knight" in one system and a "rocket" in another.
  * Agents of one type share their stats, so analyzing one reveals the others.
  */
-export type WarriorType = 'balanced' | 'watchful' | 'heavy';
+export type WarriorType = 'balanced' | 'watchful' | 'heavy' | 'inspector' | 'sentry' | 'worker';
 
 /** Military names for warrior types, drawn when a system is created. */
 export const WARRIOR_NAMES = [
@@ -18,14 +32,22 @@ export const WARRIOR_NAMES = [
   'corsair', 'praetorian', 'janissary', 'samurai', 'ronin', 'spartan', 'hoplite', 'templar', 'crusader', 'vanguard',
 ];
 
-/** Names for the warrior types a system uses: distinct, and the same every time for the same seed. */
+/** Names for the other roles, drawn the same way. */
+const ROLE_NAMES: Record<Exclude<AgentRole, 'fighter'>, string[]> = {
+  inspector: ['auditor', 'inspector', 'examiner', 'controller', 'checker', 'assessor', 'verifier', 'monitor'],
+  sentry: ['sentry', 'doorkeeper', 'custodian', 'keeper', 'watchman', 'concierge', 'porter', 'steward'],
+  worker: ['clerk', 'courier', 'runner', 'dispatcher', 'teller', 'cashier', 'operator', 'assistant'],
+};
+
+/** Names for the agent types a system uses: distinct, and the same every time for the same seed. */
 export function typeNames(seedText: string, types: WarriorType[]): Map<WarriorType, string> {
   let s = 7;
   for (const ch of seedText) s = (s * 31 + ch.charCodeAt(0)) >>> 0;
-  const pool = [...WARRIOR_NAMES];
+  const pools: Record<AgentRole, string[]> = { fighter: [...WARRIOR_NAMES], inspector: [...ROLE_NAMES.inspector], sentry: [...ROLE_NAMES.sentry], worker: [...ROLE_NAMES.worker] };
   const out = new Map<WarriorType, string>();
   for (const t of types) {
     if (out.has(t)) continue;
+    const pool = pools[WARRIORS[t].role];
     s = (s * 1664525 + 1013904223) >>> 0;
     out.set(t, pool.splice(Math.floor((s / 2 ** 32) * pool.length), 1)[0]);
   }
@@ -33,8 +55,8 @@ export function typeNames(seedText: string, types: WarriorType[]): Map<WarriorTy
 }
 
 export interface AgentStats {
-  kind: 'warrior';
-  /** Which type of warrior: decides its stats and colour. */
+  role: AgentRole;
+  /** Which type of agent: decides its stats and colour. */
   type: WarriorType;
   /** Detection: rolled against the player's hide when it queries. */
   detection: number;
@@ -62,7 +84,7 @@ export interface AgentStats {
 
 /** Placeholder warrior: detection 3, query every 3 s, hits 4 every 2 s (DPS 2), armour 2, 30 HP. */
 export const WARRIOR: AgentStats = {
-  kind: 'warrior',
+  role: 'fighter',
   type: 'balanced',
   detection: 3,
   queryEvery: 30,
@@ -87,6 +109,13 @@ export const WARRIORS: Record<WarriorType, AgentStats> = {
   balanced: WARRIOR,
   watchful: { ...WARRIOR, type: 'watchful', detection: 4, queryEvery: 20, damage: 3, attackEvery: 20, armor: 1, hp: 20, silenceResist: 1, deceiveResist: 3, scanResist: 1, stay: [40, 80] },
   heavy: { ...WARRIOR, type: 'heavy', detection: 2, queryEvery: 60, damage: 8, attackEvery: 30, armor: 4, hp: 60, silenceResist: 4, deceiveResist: 1, scanResist: 3, stay: [80, 140], hopTicks: 20 },
+  // Placeholder numbers. An inspector only checks: it asks often and sees well, but never hits you;
+  // when it finds you out it raises the alarm and the fighters come.
+  inspector: { ...WARRIOR, role: 'inspector', type: 'inspector', detection: 5, queryEvery: 15, damage: 0, attackEvery: 20, armor: 1, hp: 15, silenceResist: 1, deceiveResist: 3, scanResist: 1, stay: [30, 70] },
+  // A sentry never leaves its node. It checks whoever works with the data there, and it can fight.
+  sentry: { ...WARRIOR, role: 'sentry', type: 'sentry', detection: 4, queryEvery: 100_000, damage: 5, attackEvery: 20, armor: 3, hp: 40, silenceResist: 3, deceiveResist: 2, scanResist: 2, stay: [100_000, 100_000], ai: 'stationary' },
+  // A worker carries the business's data along its route. It does not check anyone and does not fight.
+  worker: { ...WARRIOR, role: 'worker', type: 'worker', detection: 0, queryEvery: 100_000, damage: 0, attackEvery: 20, armor: 0, hp: 10, silenceResist: 0, deceiveResist: 0, scanResist: 0, stay: [20, 40], hopTicks: 20, ai: 'path' },
 };
 
 /** A code name like Decker's: two letters, a dash, three digits (KX-271). Same seed, same name. */
@@ -111,6 +140,10 @@ export interface Agent {
   /** Short name used in the console: W1, W2... */
   name: string;
   stats: AgentStats;
+  /** A worker's fixed route (node ids), walked back and forth. */
+  route?: string[];
+  /** Walking its route backwards. */
+  routeBack?: boolean;
   hp: number;
   /** Node it is in, or the node it is leaving while on a link. */
   node: string;
@@ -138,11 +171,12 @@ export function dps(s: AgentStats): number {
 /** Lines describing an agent, as far as the player's Analyze revealed it. */
 export function agentInfo(a: Agent): string[] {
   const s = a.stats;
-  const lines = [`${a.name}: ${a.typeName} (${s.kind})`];
+  const lines = [`${a.name}: ${a.typeName}`, ROLE_LABEL[s.role]];
   if (a.known === 'none') return [...lines, 'not analyzed: stats unknown'];
-  lines.push(`HP ${a.hp}/${s.hp}   hits ${s.damage} every ${s.attackEvery / TPS} s (DPS ${dps(s)})`);
+  lines.push(`HP ${a.hp}/${s.hp}   ${s.damage ? `hits ${s.damage} every ${s.attackEvery / TPS} s (DPS ${dps(s)})` : 'does not fight'}`);
   if (a.known === 'partial') return [...lines, 'partly analyzed'];
-  lines.push(`armour ${s.armor}   detection ${s.detection}   queries every ${s.queryEvery / TPS} s`);
+  const asks = s.role === 'worker' ? 'never checks you' : s.role === 'sentry' ? 'checks you when you touch data here' : `queries every ${s.queryEvery / TPS} s`;
+  lines.push(`armour ${s.armor}   detection ${s.detection}   ${asks}`);
   lines.push(`resists: silence ${s.silenceResist}, deceive ${s.deceiveResist}, analyze ${s.scanResist}`);
   lines.push(`AI: ${s.ai}`);
   return lines;

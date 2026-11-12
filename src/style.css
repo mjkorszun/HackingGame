@@ -407,6 +407,7 @@ body {
 }
 .game-tip[hidden] { display: none; }
 .game-tip .tip-title { color: #d4ffe0; }
+.game-tip .tip-act { color: #ffffff; font-size: 1.15em; margin-bottom: 3px; }
 .tip-worthless { color: var(--grey); }
 .tip-valuable { color: var(--yellow); }
 .tip-empty { color: #b5ad78; }
@@ -577,6 +578,19 @@ body {
 .agent.is-hostile.is-heavy .agent-body { fill: #5a8cff; stroke: #d8e6ff; }
 .mini-agent.is-watchful { fill: #ffc040; }
 .mini-agent.is-heavy { fill: #6f9cff; }
+.agent.is-inspector .agent-body { fill: #eef4ff; stroke: #3a4f78; }
+.agent.is-inspector .agent-icon { color: #24365c; }
+.agent.is-inspector .agent-name { fill: #eef4ff; }
+.agent.is-sentry .agent-body { fill: #ffa060; stroke: #7a3600; }
+.agent.is-sentry .agent-icon { color: #5c2800; }
+.agent.is-sentry .agent-name { fill: #ffa060; }
+.agent.is-worker .agent-body { fill: #a9e8a0; stroke: #2c6a26; }
+.agent.is-worker .agent-icon { color: #1f4d1a; }
+.agent.is-worker .agent-name { fill: #a9e8a0; }
+.agent.is-worker .agent-ring { display: none; }
+.mini-agent.is-inspector { fill: #eef4ff; }
+.mini-agent.is-sentry { fill: #ff9a50; }
+.mini-agent.is-worker { fill: #8fdc86; }
 
 .query-box {
   position: absolute;

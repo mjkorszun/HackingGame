@@ -14,6 +14,9 @@ export const testSystem: SystemDef = {
     { kind: 'warrior', node: 'core', type: 'balanced' },
     { kind: 'warrior', node: 'staff', type: 'watchful' },
     { kind: 'warrior', node: 'cams', type: 'heavy' },
+    { node: 'auth', type: 'inspector' },
+    { node: 'staff', type: 'sentry' },
+    { node: 'core', type: 'worker', route: ['core', 'orch', 'ai'] },
   ],
   contract: { title: 'Alter File', need: 'alter', node: 'orders', pay: 50, days: 5 },
   nodes: [
