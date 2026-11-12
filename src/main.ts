@@ -613,7 +613,11 @@ view = new NetworkView(document.getElementById('view')!, game, menu, {
     flush();
   },
   command: (cmd) => ui(cmd),
-  quit: quitToMenu,
+  // Quitting a run takes the game back to just before you entered, day included.
+  quit: () => {
+    restoreBackup(activeSlot());
+    quitToMenu();
+  },
   sound: sfx,
 });
 

@@ -329,7 +329,7 @@ export class NetworkView {
       mute: () => actions.mute(),
       save: 'The game cannot be saved during a run',
       quit: actions.quit,
-      quitWarning: 'Quit to the main menu? This run is lost.',
+      quitWarning: 'Quit to the main menu? The game goes back to just before you entered: this run is lost, the day is not.',
       toggled: (open) => {
       this.tip.hide();
       actions.menuToggled(open);
