@@ -127,11 +127,11 @@ export class HomeScreen {
       <div class="home-stats"><button type="button" class="home-avatar" title="Change avatar">${iconSvg(this.actions.avatar().icon, 'home-avatar-icon', this.actions.avatar().color)}</button> day ${s.day} · reputation ${s.reputation}</div>
       ${s.news.length ? `<div class="home-news">${s.news.map((n) => `<div>${n}</div>`).join('')}</div>` : ''}
       <nav class="home-menu">
-        <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">${iconSvg(MENU_ICONS.networks, 'menu-icon')}Known networks</button>
-        <button type="button" class="home-btn${this.open === 'contracts' ? ' is-open' : ''}" data-act="contracts"${locked ? ` disabled title="Needs reputation ${CONTRACT_REPUTATION}"` : ''}>${iconSvg(MENU_ICONS.contracts, 'menu-icon')}Choose contract${locked ? ` <span class="home-lock">(rep. ${CONTRACT_REPUTATION})</span>` : ''}</button>
-        <button type="button" class="home-btn${this.open === 'software' ? ' is-open' : ''}" data-act="software">${iconSvg(MENU_ICONS.software, 'menu-icon')}Software</button>
-        <button type="button" class="home-btn${this.open === 'character' ? ' is-open' : ''}" data-act="character">${iconSvg(this.actions.avatar().icon, 'menu-icon')}Character${this.actions.character().picks ? ' <span class="home-lock">(skill to pick)</span>' : ''}</button>
-        <button type="button" class="home-btn" data-act="enter"${this.chosen ? '' : ' disabled title="Pick a network or a contract first"'}>${iconSvg(MENU_ICONS.enter, 'menu-icon')}Enter the network</button>
+        <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">Known networks${iconSvg(MENU_ICONS.networks, 'menu-icon')}</button>
+        <button type="button" class="home-btn${this.open === 'contracts' ? ' is-open' : ''}" data-act="contracts"${locked ? ` disabled title="Needs reputation ${CONTRACT_REPUTATION}"` : ''}>Choose contract${iconSvg(MENU_ICONS.contracts, 'menu-icon')}${locked ? ` <span class="home-lock">(rep. ${CONTRACT_REPUTATION})</span>` : ''}</button>
+        <button type="button" class="home-btn${this.open === 'software' ? ' is-open' : ''}" data-act="software">Software${iconSvg(MENU_ICONS.software, 'menu-icon')}</button>
+        <button type="button" class="home-btn${this.open === 'character' ? ' is-open' : ''}" data-act="character">Character${iconSvg(this.actions.avatar().icon, 'menu-icon')}${this.actions.character().picks ? ' <span class="home-lock">(skill to pick)</span>' : ''}</button>
+        <button type="button" class="home-btn" data-act="enter"${this.chosen ? '' : ' disabled title="Pick a network or a contract first"'}>Enter the network${iconSvg(MENU_ICONS.enter, 'menu-icon')}</button>
       </nav>
       <div class="home-active">chosen network: ${this.label()}</div>
       <div class="home-list"></div>`;
