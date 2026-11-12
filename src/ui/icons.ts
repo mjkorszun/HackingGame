@@ -199,7 +199,7 @@ export function agentIcon(systemId: string, typeIndex: number): string {
 }
 
 /** Icons of the main screen buttons. */
-export const MENU_ICONS = { networks: 'world', contracts: 'scroll-quill', software: 'processor', enter: 'plug' } as const;
+export const MENU_ICONS = { networks: 'world', contracts: 'scroll-quill', software: 'processor', hardware: 'brain', enter: 'plug' } as const;
 
 /** A random icon from a type's pool, for a newly made program. */
 export function randomIcon(type: ProgramType, roll: () => number = Math.random): string {
