@@ -1,7 +1,8 @@
 /**
- * Software development on the main screen: you write your own programs. Every project costs days;
- * a bug found on a day of work pushes the end back. A finished program gets a rarity and random traits.
- * All numbers here are placeholders. Traits have no effect yet.
+ * Software development on the main screen: you write your own programs. Every project costs a fixed
+ * number of days. A finished program gets a rarity and random traits, and may come out with up to two
+ * bugs: you can use it as it is, or spend days fixing each bug later.
+ * All numbers here are placeholders. Traits and bugs have no effect in the net yet.
  */
 import type { Program, ProgramType } from './programs';
 
@@ -33,8 +34,42 @@ export const TRAIT_POOL = [
 /** Highest rating you can develop for now (later: skill and hardware). */
 export const MAX_DEV_RATING = 5;
 
-/** Chance in % that a day of work finds a bug. */
-export const BUG_CHANCE = 10;
+/** Most bugs a finished program can have. */
+export const MAX_BUGS = 2;
+
+/** Chance in % of each possible bug when a program is finished (placeholder; later: complexity and your skills). */
+export const BUG_CHANCE = 35;
+
+/** The drawbacks a bug can bring (placeholder; none of them works yet). */
+export const BUG_POOL = [
+  'unstable: 10% chance to crash when run',
+  'sloppy: -10% on its rolls',
+  'slow: +30% run time',
+  'leaky: makes more noise',
+  'bloated: +20% size',
+  'flaky: 10% chance to do nothing',
+] as const;
+
+/** Days it takes to fix one bug (placeholder: 1 + rating). */
+export function bugFixDays(p: Pick<Program, 'rating'>): number {
+  return 1 + p.rating;
+}
+
+/** Up to MAX_BUGS different bugs for a newly finished program. */
+export function rollBugs(roll: () => number = Math.random): string[] {
+  const pool: string[] = [...BUG_POOL];
+  const out: string[] = [];
+  for (let i = 0; i < MAX_BUGS; i++) if (roll() * 100 < BUG_CHANCE) out.push(pool.splice(Math.floor(roll() * pool.length), 1)[0]);
+  return out;
+}
+
+/** Fixes one bug of a program. Returns false if there is no such bug. */
+export function fixBug(p: Program, index: number): boolean {
+  if (!p.bugs || index < 0 || index >= p.bugs.length) return false;
+  p.bugs.splice(index, 1);
+  if (!p.bugs.length) delete p.bugs;
+  return true;
+}
 
 export interface DevProject {
   type: ProgramType;
@@ -44,7 +79,8 @@ export interface DevProject {
   daysLeft: number;
   /** Days already worked. */
   daysSpent: number;
-  bugs: number;
+  /** Old saves only: bugs used to push the end back during work. */
+  bugs?: number;
   /** Icon and its colour the finished program will have (chosen by the player). */
   icon?: string;
   color?: string;
@@ -56,33 +92,22 @@ export function devDays(rating: number): number {
 }
 
 export function newProject(type: ProgramType, rating: number, name: string): DevProject {
-  return { type, rating, name, daysLeft: devDays(rating), daysSpent: 0, bugs: 0 };
+  return { type, rating, name, daysLeft: devDays(rating), daysSpent: 0 };
 }
 
 /** What a stretch of work did. */
 export interface WorkResult {
   days: number;
-  /** Days each bug added, in order. */
-  bugs: number[];
   done: boolean;
 }
 
-/**
- * Works on the project for up to `days` days. Each day may find a bug that adds 1-3 days.
- * Work stops early only when the project is done.
- */
-export function work(p: DevProject, days: number, roll: () => number = Math.random): WorkResult {
-  const result: WorkResult = { days: 0, bugs: [], done: false };
+/** Works on the project for up to `days` days; it stops early when the project is done. */
+export function work(p: DevProject, days: number): WorkResult {
+  const result: WorkResult = { days: 0, done: false };
   for (let i = 0; i < days && p.daysLeft > 0; i++) {
     p.daysLeft--;
     p.daysSpent++;
     result.days++;
-    if (roll() * 100 < BUG_CHANCE) {
-      const extra = 1 + Math.floor(roll() * 3);
-      p.daysLeft += extra;
-      p.bugs++;
-      result.bugs.push(extra);
-    }
   }
   result.done = p.daysLeft === 0;
   return result;
@@ -110,6 +135,8 @@ export function finishProgram(p: DevProject, id: string, author: string, roll: (
   const rarity = rollRarity(roll);
   const program: Program = { id, type: p.type, name: p.name, rating: p.rating, rarity, traits: rollTraits(RARITY_TRAITS[rarity], roll) };
   if (rarity === 'legendary') program.author = author;
+  const bugs = rollBugs(roll);
+  if (bugs.length) program.bugs = bugs;
   if (p.type === 'skimmer') {
     program.efficiency = 1;
     program.detection = 2;

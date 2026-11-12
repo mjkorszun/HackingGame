@@ -258,7 +258,7 @@ body {
   pointer-events: none;
   transition: transform 0.1s linear;
 }
-.avatar.no-transition { transition: none; }
+.avatar.no-transition, .avatar.is-walking { transition: none; }
 .avatar-icon { fill: currentColor; filter: drop-shadow(0 0 3px #000) drop-shadow(0 0 2px #000); }
 .is-walking .avatar-bob { animation: bob 0.3s ease-in-out infinite alternate; }
 @keyframes bob {
@@ -616,6 +616,11 @@ body {
 /* ---------- memory ---------- */
 .deck-hw { margin: 0; padding: 0; list-style: none; }
 .deck-mem.is-full { color: var(--yellow); }
+/* Memory as a bar: filled = used, dark = free. */
+.mem-bar { display: inline-block; width: 70px; height: 9px; border: 1px solid var(--green-dim); padding: 1px; vertical-align: middle; }
+.mem-fill { display: block; height: 100%; background: var(--green); }
+.deck-mem.is-full + li .mem-fill, .mem-bar.is-full .mem-fill { background: var(--yellow); }
+.sw-mem-bar { width: 220px; height: 12px; align-self: center; }
 .deck-program.is-stored { color: var(--grey); }
 .deck-program.is-blocked { cursor: not-allowed; }
 .deck-program.is-blocked:hover { text-decoration: none; color: var(--grey); }
@@ -745,7 +750,7 @@ body {
 .sw-head:first-child { margin-top: 2px; }
 .sw-used { color: var(--yellow); letter-spacing: 0; }
 .sw-used.is-full { color: var(--orange); }
-.sw-zone { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; min-height: 96px; padding: 8px; border: 1px dashed var(--green-faint); transition: border-color 0.15s, background 0.15s; }
+.sw-zone { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); align-items: start; gap: 8px; min-height: 96px; padding: 8px; border: 1px dashed var(--green-faint); transition: border-color 0.15s, background 0.15s; }
 .sw-zone[data-zone="loaded"] { border-color: var(--green-dim); }
 .sw-zone.drop-end { border-color: var(--green); background: #04140a; }
 .sw-zone.is-refused { border-color: var(--red); background: #2a0808; }
@@ -761,3 +766,28 @@ body {
 .sw-rarity { font-size: 12px; }
 .sw-trait { color: var(--green); font-size: 12px; }
 .sw-dev .contract-card { max-width: 560px; }
+
+/* Bugs: drawbacks of a program you wrote, until you fix them. */
+.sw-bug, .pi-bugs li { color: #ff7a6a; font-size: 12px; }
+.sw-fix { margin-left: 4px; background: #000; color: var(--yellow); border: 1px solid #6b5a10; font: inherit; font-size: 11px; padding: 0 5px; cursor: pointer; }
+.sw-fix:hover { border-color: var(--yellow); }
+.sw-fixed { margin-top: 8px; color: var(--yellow); }
+
+/* Main screen buttons: an icon before the label. */
+.home-menu .home-btn { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.menu-icon { width: 22px; height: 22px; fill: currentColor; flex: none; }
+
+/* Moving things are drawn every frame, so no transition while they travel. */
+.agent.is-hopping, .ally.is-hopping { transition: none; }
+
+.sw-del { position: absolute; right: 4px; bottom: 4px; background: #000; color: var(--grey); border: 1px solid #333; font: inherit; font-size: 11px; padding: 0 5px; cursor: pointer; }
+.sw-del:hover { color: var(--red); border-color: var(--red); }
+.sw-del.is-sure { color: var(--red); border-color: var(--red); background: #2a0808; }
+.sw-card { padding-bottom: 22px; }
+
+/* Attitude ring around system agents: green calm, yellow unsure, orange alert, red hostile. */
+.agent-ring { fill: none; stroke: var(--green); stroke-width: 1.4; stroke-dasharray: 17 6.56; transform-box: fill-box; transform-origin: center; animation: ring-spin 6s linear infinite; }
+.agent[data-attitude="unsure"] .agent-ring { stroke: var(--yellow); animation-duration: 3.5s; }
+.agent[data-attitude="alert"] .agent-ring { stroke: var(--orange); animation-duration: 2s; }
+.agent[data-attitude="hostile"] .agent-ring { stroke: var(--red); animation-duration: 1s; }
+@keyframes ring-spin { to { transform: rotate(360deg); } }

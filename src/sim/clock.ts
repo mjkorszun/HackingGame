@@ -11,6 +11,11 @@ export class FixedClock {
     private readonly maxTicksPerFrame = 10,
   ) {}
 
+  /** How far the time is into the next tick (0..1): lets the view draw motion between ticks. */
+  get alpha(): number {
+    return Math.min(1, this.acc / (1000 / this.ticksPerSecond));
+  }
+
   /** Adds elapsed milliseconds and returns how many ticks to run now. */
   advance(ms: number): number {
     const tickMs = 1000 / this.ticksPerSecond;

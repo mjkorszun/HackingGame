@@ -32,6 +32,8 @@ export interface Program {
   /** Programs you develop yourself get a rarity and random traits. */
   rarity?: Rarity;
   traits?: string[];
+  /** Bugs left in a program you wrote: each one is a drawback until you spend days fixing it. */
+  bugs?: string[];
   /** Icon name from its type's pool (game-icons.net); without one, the name picks it. */
   icon?: string;
   /** Colour of the icon (CSS), if the player chose one. */

@@ -240,6 +240,8 @@ export class NetworkView {
   private queryBox!: HTMLDivElement;
   private queryKey = '';
   private miniMapperLayer: SVGGElement | null = null;
+  /** How far the time is into the next tick: moving things are drawn that much further along. */
+  private alpha = 0;
   private miniXY: (id: string) => { x: number; y: number } = () => ({ x: 0, y: 0 });
 
   constructor(
@@ -394,7 +396,8 @@ export class NetworkView {
   }
 
   /** Called every frame. Redraws the stage only when something visible changed. */
-  update(): void {
+  update(alpha = 0): void {
+    this.alpha = alpha;
     this.clock.textContent = formatTime(this.game.tick);
     this.pauseBtn.setAttribute('aria-label', this.game.paused ? 'Resume' : 'Pause');
     const muted = this.actions.sound.muted;
@@ -482,9 +485,9 @@ export class NetworkView {
   /** Where an agent in a node is drawn: in the room around you, or beside a neighbour. */
   private agentSpot(nodeId: string, index: number): { x: number; y: number } | null {
     // Several agents in one node stand in a column (then a second one), so their code names don't overlap.
-    if (nodeId === this.game.currentNode) return { x: CX + 55 + Math.floor(index / 4) * 70, y: CY - 30 + (index % 4) * 46 };
+    if (nodeId === this.game.currentNode) return { x: CX + 55 + Math.floor(index / 4) * 70, y: CY - 60 + (index % 4) * 60 };
     const p = this.positions.get(nodeId);
-    return p ? { x: p.x + NEIGHBOUR_R * 0.75 + Math.floor(index / 3) * 62, y: p.y - NEIGHBOUR_R * 0.75 + (index % 3) * 44 } : null;
+    return p ? { x: p.x + NEIGHBOUR_R * 0.75 + Math.floor(index / 3) * 62, y: p.y - NEIGHBOUR_R * 0.75 + (index % 3) * 56 } : null;
   }
 
   /** Agents move every tick: their dots are kept and only moved, so hover and menus keep working. */
@@ -507,7 +510,7 @@ export class NetworkView {
       if (a.hop) {
         const from = a.node === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.node);
         const to = a.hop.to === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.hop.to);
-        const k = a.hop.elapsed / a.stats.hopTicks;
+        const k = Math.min(1, (a.hop.elapsed + this.alpha) / a.stats.hopTicks);
         pos = from && to ? { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k } : null;
         const m1 = this.miniXY(a.node);
         const m2 = this.miniXY(a.hop.to);
@@ -520,12 +523,16 @@ export class NetworkView {
       }
       els.main.style.display = pos ? '' : 'none';
       if (pos) {
-        // Moved by CSS with a short transition, so the 10 steps a second look like smooth motion.
+        // Drawn every frame along its link; a short transition only smooths jumps between spots in a node.
+        els.main.classList.toggle('is-hopping', !!a.hop);
         els.main.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
         this.agentPos.set(a.id, pos);
       }
       els.main.classList.toggle('is-querying', g.query?.agentId === a.id);
       els.main.classList.toggle('is-hostile', a.mood === 'hostile');
+      // Calm (patrol), unsure (asking you, or you failed it once), alert (system alarm orange or red), hostile.
+      const attitude = a.mood === 'hostile' ? 'hostile' : g.query?.agentId === a.id || a.strikes > 0 ? 'unsure' : g.alarm >= 2 && a.mood !== 'trusting' ? 'alert' : 'calm';
+      if (els.main.dataset.attitude !== attitude) els.main.dataset.attitude = attitude;
       els.main.classList.toggle('is-trusting', a.mood === 'trusting');
       els.main.classList.toggle('is-silenced', a.silenced);
       const frac = Math.max(0, a.hp / a.stats.hp);
@@ -578,7 +585,7 @@ export class NetworkView {
       if (a.hop) {
         const from = a.node === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.node);
         const to = a.hop.to === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.hop.to);
-        const k = a.hop.elapsed / ALLY_HOP_TICKS;
+        const k = Math.min(1, (a.hop.elapsed + this.alpha) / ALLY_HOP_TICKS);
         pos = from && to ? { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k } : null;
         const m1 = this.miniXY(a.node);
         const m2 = this.miniXY(a.hop.to);
@@ -598,6 +605,7 @@ export class NetworkView {
       els.main.classList.toggle('is-resident', !!a.resident);
       els.main.style.display = pos ? '' : 'none';
       if (pos) {
+        els.main.classList.toggle('is-hopping', !!a.hop || (a.program.type === 'shield' && !a.hop));
         els.main.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
         this.allyPos.set(a.id, pos);
       }
@@ -653,15 +661,17 @@ export class NetworkView {
   /** A warrior: a dot with a small sword inside, coloured by its type. */
   private drawAgent(a: Agent, parent: Element): SVGGElement {
     const grp = svg('g', { class: `agent is-${a.stats.type}`, 'data-agent': a.id }, parent) as SVGGElement;
+    // Its attitude: a ring of four segments that spins, faster the warier it is.
+    svg('circle', { r: 15, class: 'agent-ring' }, grp);
     svg('circle', { r: 11, class: 'agent-body' }, grp);
     const icon = svg('svg', { x: -7, y: -7, width: 14, height: 14, viewBox: '0 0 512 512', class: 'agent-icon' }, grp);
     icon.innerHTML = iconBody(agentIcon(this.game.network.def.id, WARRIOR_TYPES.indexOf(a.stats.type))) ?? '';
     // Integrity bar over its head, shown once it has taken damage.
-    svg('rect', { x: -12, y: -18, width: 24, height: 3, class: 'agent-hp-bg' }, grp);
-    svg('rect', { x: -12, y: -18, width: 24, height: 3, class: 'agent-hp' }, grp);
-    const label = svg('text', { x: 0, y: 22, class: 'agent-name' }, grp);
+    svg('rect', { x: -12, y: -24, width: 24, height: 3, class: 'agent-hp-bg' }, grp);
+    svg('rect', { x: -12, y: -24, width: 24, height: 3, class: 'agent-hp' }, grp);
+    const label = svg('text', { x: 0, y: 31, class: 'agent-name' }, grp);
     label.textContent = a.name;
-    const alert = svg('text', { x: 0, y: -15, class: 'agent-alert' }, grp);
+    const alert = svg('text', { x: 0, y: -26, class: 'agent-alert' }, grp);
     alert.textContent = '!';
     this.tip.attach(grp, () => {
       const live = this.game.agentById(a.id);
@@ -988,7 +998,7 @@ export class NetworkView {
     const end = hop ? this.positions.get(hop) : undefined;
     if (end) {
       // Walk across the room to its door, then along the link.
-      const t = this.game.hopProgress;
+      const t = this.game.hopProgressAt(this.alpha);
       const door = this.doorTowards(end.x, end.y);
       const to = { x: end.x, y: end.y + NEIGHBOUR_R * 0.6 };
       const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, k: number) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });

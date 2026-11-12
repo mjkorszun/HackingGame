@@ -1045,6 +1045,11 @@ export class Game {
     return this.move ? this.move.elapsed / this.move.total : 0;
   }
 
+  /** Hop progress part way into the next tick (for smooth drawing). */
+  hopProgressAt(alpha: number): number {
+    return this.move ? Math.min(1, (this.move.elapsed + alpha) / this.move.total) : 0;
+  }
+
   /** Final destination of the current travel, if any. */
   get moveTarget(): string | null {
     return this.route[this.route.length - 1] ?? this.move?.to ?? null;

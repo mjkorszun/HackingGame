@@ -1,9 +1,9 @@
 import type { ContractDef, SystemDef } from '../sim/types';
 import type { NetworkSeed } from '../sim/generate';
 import { sats } from '../sim/money';
-import { devDays, MAX_DEV_RATING, RARITY_TRAITS, type DevProject } from '../sim/development';
+import { bugFixDays, devDays, MAX_BUGS, MAX_DEV_RATING, RARITY_TRAITS, type DevProject } from '../sim/development';
 import { cleanGameCode, SKILLS, xpToNext } from '../sim/progression';
-import { AVATAR_ICONS, ICON_POOLS, iconSvg, programIcon, randomIcon } from './icons';
+import { AVATAR_ICONS, ICON_POOLS, MENU_ICONS, iconSvg, programIcon, randomIcon } from './icons';
 import { showIconPicker } from './iconPicker';
 import { showProgramInfo } from './programInfo';
 import { PROGRAM_TYPES, programSize, type Program, type ProgramType } from '../sim/programs';
@@ -52,6 +52,10 @@ export interface HomeActions {
     place(id: string, index: number | null): boolean;
     /** A drop that did not work. */
     refused(): void;
+    /** Deletes a stored program for good. */
+    remove(id: string): void;
+    /** Spends the days to fix one bug of a program; returns what happened. */
+    fix(id: string, index: number): string | undefined;
   };
   /** Software development: the project in progress, starting one, and working on it. */
   dev: {
@@ -75,6 +79,8 @@ export class HomeScreen {
   /** What the last stretch of development did, shown under the project. */
   private devLines: string[] = [];
   private devDone: Program | undefined;
+  /** What the last bug fix did, shown in the Software tab. */
+  private fixLine = '';
   /** The new-project form keeps its choices between renders. */
   private form = { type: 'hide' as ProgramType, rating: 1, name: '', icon: randomIcon('hide'), color: '#3dff7a', picked: false, body: '' };
   private readonly main: HTMLElement;
@@ -121,11 +127,11 @@ export class HomeScreen {
       <div class="home-stats"><button type="button" class="home-avatar" title="Change avatar">${iconSvg(this.actions.avatar().icon, 'home-avatar-icon', this.actions.avatar().color)}</button> day ${s.day} · reputation ${s.reputation}</div>
       ${s.news.length ? `<div class="home-news">${s.news.map((n) => `<div>${n}</div>`).join('')}</div>` : ''}
       <nav class="home-menu">
-        <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">Known networks</button>
-        <button type="button" class="home-btn${this.open === 'contracts' ? ' is-open' : ''}" data-act="contracts"${locked ? ` disabled title="Needs reputation ${CONTRACT_REPUTATION}"` : ''}>Choose contract${locked ? ` <span class="home-lock">(rep. ${CONTRACT_REPUTATION})</span>` : ''}</button>
-        <button type="button" class="home-btn${this.open === 'software' ? ' is-open' : ''}" data-act="software">Software</button>
-        <button type="button" class="home-btn${this.open === 'character' ? ' is-open' : ''}" data-act="character">Character${this.actions.character().picks ? ' <span class="home-lock">(skill to pick)</span>' : ''}</button>
-        <button type="button" class="home-btn" data-act="enter"${this.chosen ? '' : ' disabled title="Pick a network or a contract first"'}>Enter the network</button>
+        <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">Known networks${iconSvg(MENU_ICONS.networks, 'menu-icon')}</button>
+        <button type="button" class="home-btn${this.open === 'contracts' ? ' is-open' : ''}" data-act="contracts"${locked ? ` disabled title="Needs reputation ${CONTRACT_REPUTATION}"` : ''}>Choose contract${iconSvg(MENU_ICONS.contracts, 'menu-icon')}${locked ? ` <span class="home-lock">(rep. ${CONTRACT_REPUTATION})</span>` : ''}</button>
+        <button type="button" class="home-btn${this.open === 'software' ? ' is-open' : ''}" data-act="software">Software${iconSvg(MENU_ICONS.software, 'menu-icon')}</button>
+        <button type="button" class="home-btn${this.open === 'character' ? ' is-open' : ''}" data-act="character">Character${iconSvg(this.actions.avatar().icon, 'menu-icon')}${this.actions.character().picks ? ' <span class="home-lock">(skill to pick)</span>' : ''}</button>
+        <button type="button" class="home-btn" data-act="enter"${this.chosen ? '' : ' disabled title="Pick a network or a contract first"'}>Enter the network${iconSvg(MENU_ICONS.enter, 'menu-icon')}</button>
       </nav>
       <div class="home-active">chosen network: ${this.label()}</div>
       <div class="home-list"></div>`;
@@ -135,6 +141,7 @@ export class HomeScreen {
         this.open = this.open === which ? null : which;
         this.devLines = [];
         this.devDone = undefined;
+        this.fixLine = '';
         this.render();
       });
     }
@@ -245,9 +252,10 @@ export class HomeScreen {
    */
   private renderSoftware(): void {
     const sw = this.actions.software.list();
-    const card = (p: Program) => {
+    const card = (p: Program, stored = false) => {
       const rarity = p.rarity ?? 'common';
       const traits = (p.traits ?? []).map((t) => `<div class="sw-trait">+ ${esc(t)}</div>`).join('');
+      const bugs = (p.bugs ?? []).map((b, i) => `<div class="sw-bug">- ${esc(b)} <button type="button" class="sw-fix" data-fix="${i}" title="Spend ${bugFixDays(p)} days fixing this bug">fix ${bugFixDays(p)} d</button></div>`).join('');
       return `<div class="sw-card rarity-${rarity}" draggable="true" data-id="${esc(p.id)}" title="drag to load, unload or reorder; right-click for details">
         <div class="sw-icon">${programIcon(p, 'sw-icon-svg')}</div>
         <div class="sw-body">
@@ -255,14 +263,17 @@ export class HomeScreen {
           <div class="sw-meta">${p.type} ${p.rating}</div>
           <div class="sw-rarity">${rarity} · ${programSize(p)} GB${p.author ? ` · by ${esc(p.author)}` : ''}</div>
           ${traits}
+          ${bugs}
         </div>
+        ${stored ? `<button type="button" class="sw-del" title="Delete this program for good">delete</button>` : ''}
       </div>`;
     };
     this.soft.innerHTML = `
-      <h2 class="sw-head">memory <span class="sw-used${sw.used > sw.memory * 0.9 ? ' is-full' : ''}">${sw.used} / ${sw.memory} GB</span></h2>
-      <div class="sw-zone" data-zone="loaded">${sw.loaded.map(card).join('') || '<div class="sw-empty">drag programs here to take them into the net</div>'}</div>
+      <h2 class="sw-head">memory <span class="sw-used${sw.used > sw.memory * 0.9 ? ' is-full' : ''}">${sw.used} / ${sw.memory} GB</span><span class="mem-bar sw-mem-bar${sw.used > sw.memory * 0.9 ? ' is-full' : ''}" title="${sw.used} GB used, ${sw.memory - sw.used} GB free"><span class="mem-fill" style="width:${Math.min(100, (100 * sw.used) / sw.memory)}%"></span></span><span class="home-dim">${sw.memory - sw.used} GB free</span></h2>
+      <div class="sw-zone" data-zone="loaded">${sw.loaded.map((p) => card(p)).join('') || '<div class="sw-empty">drag programs here to take them into the net</div>'}</div>
       <h2 class="sw-head">storage <span class="home-dim">known, not loaded</span></h2>
-      <div class="sw-zone" data-zone="stored">${sw.stored.map(card).join('') || '<div class="sw-empty">nothing in storage</div>'}</div>
+      <div class="sw-zone" data-zone="stored">${sw.stored.map((p) => card(p, true)).join('') || '<div class="sw-empty">nothing in storage</div>'}</div>
+      ${this.fixLine ? `<div class="sw-fixed">${esc(this.fixLine)}</div>` : ''}
       <h2 class="sw-head">software development</h2>
       <div class="sw-dev"></div>`;
     this.renderDev(this.soft.querySelector('.sw-dev')!);
@@ -290,6 +301,30 @@ export class HomeScreen {
         dragId = null;
         el.classList.remove('is-dragging');
         clearMarks();
+      });
+      el.querySelectorAll<HTMLElement>('.sw-fix').forEach((b) => b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.actions.click();
+        this.fixLine = this.actions.software.fix(p.id, Number(b.dataset.fix)) ?? '';
+        this.render();
+      }));
+      const del = el.querySelector<HTMLButtonElement>('.sw-del');
+      // Two clicks: the first asks, the second deletes for good.
+      del?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!del.classList.contains('is-sure')) {
+          this.actions.click();
+          del.classList.add('is-sure');
+          del.textContent = 'delete for good?';
+          setTimeout(() => {
+            del.classList.remove('is-sure');
+            del.textContent = 'delete';
+          }, 3000);
+          return;
+        }
+        this.actions.software.remove(p.id);
+        this.fixLine = `${p.name} deleted`;
+        this.render();
       });
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -348,6 +383,7 @@ export class HomeScreen {
         <div class="cc-head"><span class="cc-title">${programIcon(done, 'dev-icon')} ${esc(done.name)}</span><span>${done.rarity}</span></div>
         <div class="cc-line">${done.type} ${done.rating} · ${programSize(done)} GB${done.author ? ` · by ${esc(done.author)}` : ''}</div>
         ${(done.traits ?? []).map((t) => `<div class="cc-line dev-trait">+ ${esc(t)}</div>`).join('') || '<div class="cc-line home-dim">no traits</div>'}
+        ${(done.bugs ?? []).map((b) => `<div class="cc-line sw-bug">- bug: ${esc(b)}</div>`).join('')}
         <div class="cc-line home-dim">saved in storage</div>
       </div>` : ''}`;
     if (!p) {
@@ -360,7 +396,7 @@ export class HomeScreen {
         <div class="dev-row">icon <button type="button" class="dev-icon-btn" title="Choose the icon and its colour">${iconSvg(f.icon, 'dev-icon', f.color)} change</button></div>
         <label class="dev-row">rating <select class="dev-rating">${Array.from({ length: MAX_DEV_RATING }, (_, i) => `<option${i + 1 === f.rating ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></label>
         <label class="dev-row">name <input class="dev-name" maxlength="20" value="${esc(name)}"></label>
-        <div class="cc-line home-dim">size ${programSize(f)} GB. bugs can make it take longer. rarity and traits are rolled when it is done: common ${RARITY_TRAITS.common} traits, uncommon ${RARITY_TRAITS.uncommon}, rare ${RARITY_TRAITS.rare}, epic ${RARITY_TRAITS.epic}, legendary ${RARITY_TRAITS.legendary} and your name</div>
+        <div class="cc-line home-dim">size ${programSize(f)} GB. when it is done it may have up to ${MAX_BUGS} bugs: use it as it is, or fix them later (${bugFixDays(f)} days a bug). rarity and traits are rolled when it is done: common ${RARITY_TRAITS.common} traits, uncommon ${RARITY_TRAITS.uncommon}, rare ${RARITY_TRAITS.rare}, epic ${RARITY_TRAITS.epic}, legendary ${RARITY_TRAITS.legendary} and your name</div>
         <button type="button" class="home-btn cc-btn" data-dev="start">Start project</button>`;
       const type = box.querySelector<HTMLSelectElement>('.dev-type')!;
       const rating = box.querySelector<HTMLSelectElement>('.dev-rating')!;
@@ -399,11 +435,11 @@ export class HomeScreen {
       box.innerHTML = `
         <div class="cc-head"><span class="cc-title">${programIcon(p, 'dev-icon')} ${esc(p.name)}</span><span class="home-dim">${p.type} ${p.rating}</span></div>
         <div class="cc-line dev-bar">[${'#'.repeat(filled)}${'.'.repeat(width - filled)}] ${p.daysSpent}/${total} days</div>
-        <div class="cc-line">${p.daysLeft} day${p.daysLeft === 1 ? '' : 's'} of work left${p.bugs ? ` · bugs found: ${p.bugs}` : ''}</div>
+        <div class="cc-line">${p.daysLeft} day${p.daysLeft === 1 ? '' : 's'} of work left</div>
         <div class="dev-btns">
           <button type="button" class="home-btn cc-btn" data-dev="day">Develop for day</button>
           <button type="button" class="home-btn cc-btn" data-dev="week"${p.daysLeft < 7 ? ' disabled title="Needs at least 7 days of work left"' : ''}>Develop for week</button>
-          <button type="button" class="home-btn cc-btn" data-dev="finish" title="Works the ${p.daysLeft} days left. A bug can still push the end back">Finish (${p.daysLeft} d)</button>
+          <button type="button" class="home-btn cc-btn" data-dev="finish" title="Works the ${p.daysLeft} days left">Finish (${p.daysLeft} d)</button>
         </div>
         ${result}`;
       for (const mode of ['day', 'week', 'finish'] as const) {

@@ -876,29 +876,29 @@ describe('skimmer and days', () => {
 });
 
 describe('software development', () => {
-  it('a day of work brings the project closer; a bug pushes the end back', async () => {
+  it('work takes the planned days; finish works the days left', async () => {
     const { newProject, work } = await import('./development');
     const p = newProject('hide', 2, 'Veil 1.0');
     expect(p.daysLeft).toBe(6);
-    expect(work(p, 1, () => 0.99)).toEqual({ days: 1, bugs: [], done: false });
+    expect(work(p, 1)).toEqual({ days: 1, done: false });
     expect(p.daysLeft).toBe(5);
-    // bug roll (0) then extra-days roll (0.99 → 3 days)
-    const rolls = [0, 0.99];
-    const r = work(p, 1, () => rolls.shift() ?? 0.99);
-    expect(r.bugs).toEqual([3]);
-    expect(p.daysLeft).toBe(7);
+    expect(work(p, 99)).toEqual({ days: 5, done: true });
   });
 
-  it('finish works the days left; with no bug it ends, with a bug it does not', async () => {
-    const { newProject, work } = await import('./development');
-    const a = newProject('scan', 1, 'A');
-    expect(work(a, a.daysLeft, () => 0.99).done).toBe(true);
-    const b = newProject('scan', 1, 'B');
-    const rolls = [0.99, 0, 0];
-    const r = work(b, b.daysLeft, () => rolls.shift() ?? 0.99);
-    expect(r.days).toBe(3);
-    expect(r.done).toBe(false);
-    expect(b.daysLeft).toBe(1);
+  it('a finished program may have up to two bugs; each one is fixed on its own', async () => {
+    const { finishProgram, newProject, fixBug, bugFixDays, MAX_BUGS } = await import('./development');
+    // rarity common (0), then both bug rolls hit (0) and pick from the pool (0)
+    const buggy = finishProgram(newProject('scan', 2, 'Probe X'), 'p300', 'you', () => 0);
+    expect(buggy.bugs!.length).toBe(MAX_BUGS);
+    expect(new Set(buggy.bugs).size).toBe(2);
+    const clean = finishProgram(newProject('scan', 2, 'Probe Y'), 'p301', 'you', () => 0.99);
+    expect(clean.bugs).toBeUndefined();
+    expect(bugFixDays(buggy)).toBe(3);
+    expect(fixBug(buggy, 5)).toBe(false);
+    expect(fixBug(buggy, 0)).toBe(true);
+    expect(buggy.bugs!.length).toBe(1);
+    expect(fixBug(buggy, 0)).toBe(true);
+    expect(buggy.bugs).toBeUndefined();
   });
 
   it('a finished program gets a rarity and that many different traits', async () => {
