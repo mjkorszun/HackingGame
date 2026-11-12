@@ -23,6 +23,7 @@ import { generate } from './sim/generate';
 import { mergeIntel } from './sim/intel';
 import { needsEntryScreen, showEntryScreen } from './ui/entryScreen';
 import { activeSlot, clearSlot, markLast, reloadIntoGame, slotInfo, restoreBackup, writeBackup } from './ui/saves';
+import { GameMenu, ICON_GEAR } from './ui/gameMenu';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
 const account = loadAccount();
@@ -612,6 +613,7 @@ view = new NetworkView(document.getElementById('view')!, game, menu, {
     flush();
   },
   command: (cmd) => ui(cmd),
+  quit: quitToMenu,
   sound: sfx,
 });
 
@@ -626,7 +628,28 @@ document.getElementById('home')!.appendChild(buildTag.cloneNode(true));
 
 let menuWasPaused = false;
 
+/** Back to the main menu: a plain reload opens it. Everything outside a run is already saved. */
+function quitToMenu(): void {
+  location.reload();
+}
+
+// The same game menu on the main screen, with the gear in the top right corner and Esc.
+const homeMenu = new GameMenu(sfx, { save: () => saveAccount(account), quit: quitToMenu });
+const homeGearBtn = document.createElement('button');
+homeGearBtn.type = 'button';
+homeGearBtn.className = 'icon-btn gear-btn home-gear-btn';
+homeGearBtn.title = 'Menu (Esc)';
+homeGearBtn.setAttribute('aria-label', 'Menu');
+homeGearBtn.innerHTML = ICON_GEAR;
+homeGearBtn.addEventListener('click', () => homeMenu.toggle());
+document.getElementById('home')!.append(homeGearBtn, homeMenu.box);
+
 document.addEventListener('keydown', (e) => {
+  if (!game && e.key === 'Escape') {
+    homeMenu.toggle();
+    e.preventDefault();
+    return;
+  }
   if (!game || game.ended) return;
   // Esc: closes a right-click menu, otherwise opens or closes the game menu.
   if (e.key === 'Escape') {

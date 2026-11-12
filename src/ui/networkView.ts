@@ -8,7 +8,7 @@ import { SIGNATURE_NAMES, TICKS_PER_SECOND } from '../sim/game';
 import type { FxTarget, NodeDef, NodeKind, SimEvent } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
 import type { Sound } from './sound';
-import { GameMenu } from './gameMenu';
+import { GameMenu, ICON_GEAR } from './gameMenu';
 import { drawNodeShape, halfHeight, hasTag } from './shapes';
 import { iconBody, iconName } from './icons';
 
@@ -120,10 +120,6 @@ const ICON_POWER = icon(
   '<path d="M7.5 6.5a8 8 0 1 0 9 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 3v8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
 );
 
-/** A gear: opens the game menu. */
-const ICON_GEAR = icon(
-  '<path d="M10.3 2h3.4l.5 2.6c.6.2 1.2.5 1.7.9l2.5-.9 1.7 2.9-2 1.7c.1.6.1 1.3 0 1.9l2 1.7-1.7 2.9-2.5-.9c-.5.4-1.1.7-1.7.9l-.5 2.6h-3.4l-.5-2.6c-.6-.2-1.2-.5-1.7-.9l-2.5.9-1.7-2.9 2-1.7c-.1-.6-.1-1.3 0-1.9l-2-1.7 1.7-2.9 2.5.9c.5-.4 1.1-.7 1.7-.9z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" transform="translate(0 1)"/><circle cx="12" cy="11" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/>',
-);
 
 const ICON_AUTO_PAUSE = icon(
   '<circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 2.5h4M12 2.5v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="9" y="10" width="2.2" height="7" fill="currentColor"/><rect x="12.8" y="10" width="2.2" height="7" fill="currentColor"/>',
@@ -220,6 +216,8 @@ export interface ViewActions {
   exit(): void;
   /** The game menu opened (true) or closed (false): the game pauses while it is open. */
   menuToggled(open: boolean): void;
+  /** Quit to the main menu (the run is lost). */
+  quit: () => void;
   /** Runs a console command (answers to a query, attack W1, ...). */
   command(cmd: string): void;
   sound: Sound;
@@ -327,7 +325,12 @@ export class NetworkView {
     timeBox.append(this.pauseBtn, this.autoBtn, this.clock);
     this.header.append(timeBox, title, alarm, this.integrityEl, gearBtn);
     // The game menu: a window in the middle of the screen.
-    this.gameMenu = new GameMenu(actions.sound, { mute: () => actions.mute(), toggled: (open) => {
+    this.gameMenu = new GameMenu(actions.sound, {
+      mute: () => actions.mute(),
+      save: 'The game cannot be saved during a run',
+      quit: actions.quit,
+      quitWarning: 'Quit to the main menu? This run is lost.',
+      toggled: (open) => {
       this.tip.hide();
       actions.menuToggled(open);
     } });
