@@ -1047,3 +1047,24 @@ body {
 /* The room's fill stays under the grid; its outline is drawn again on top. */
 .room .room-body { stroke: none; animation: none; }
 .room-outline { fill: none; stroke: var(--kc, var(--green)); stroke-width: 3; pointer-events: none; animation: room-pulse 3.2s ease-in-out infinite; }
+
+/* ---------- main menu (before a save is loaded) ---------- */
+.main-menu { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; padding: 90px 16px 16px; overflow-y: auto; background: #000; font-family: var(--font); color: var(--green); }
+.main-menu .home-title { margin-bottom: 48px; }
+.mm-head { margin: -20px 0 18px; font-size: 15px; font-weight: normal; letter-spacing: 1px; text-transform: uppercase; color: var(--blue, #5ab4ff); }
+.mm-slots { display: flex; flex-direction: column; gap: 10px; width: min(560px, 100%); }
+.mm-slot-btn { display: flex; align-items: baseline; gap: 18px; width: 100%; background: transparent; color: var(--green); border: 1px solid var(--green); font: inherit; padding: 12px 16px; cursor: pointer; text-align: left; }
+.mm-slot-btn:hover:not(:disabled) { background: var(--green-faint); }
+.mm-slot-btn:disabled { color: var(--grey); border-color: #4a564f; cursor: not-allowed; }
+.mm-slot-name { min-width: 56px; text-transform: uppercase; letter-spacing: 1px; }
+.mm-slot-info { flex: 1; }
+.mm-when { float: right; color: #9aa8a0; font-size: 13px; }
+.mm-empty { color: var(--grey); }
+.mm-slot.is-asking .mm-slot-btn { border-color: var(--yellow); }
+.mm-confirm { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border: 1px solid var(--yellow); border-top: none; color: var(--yellow); }
+.mm-confirm button { background: transparent; font: inherit; padding: 4px 14px; cursor: pointer; }
+.mm-yes { color: var(--yellow); border: 1px solid var(--yellow); }
+.mm-yes:hover { background: #1a1604; }
+.mm-no { color: var(--green); border: 1px solid var(--green); }
+.mm-no:hover { background: var(--green-faint); }
+.main-menu .mm-back { margin-top: 24px; width: 280px; }

@@ -8,6 +8,7 @@ import { SIGNATURE_NAMES, TICKS_PER_SECOND } from '../sim/game';
 import type { FxTarget, NodeDef, NodeKind, SimEvent } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
 import type { Sound } from './sound';
+import { GameMenu } from './gameMenu';
 import { drawNodeShape, halfHeight, hasTag } from './shapes';
 import { iconBody, iconName } from './icons';
 
@@ -114,9 +115,6 @@ function drawEye(x: number, y: number, scale: number, opacity: number, parent: E
 }
 
 const icon = (body: string) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${body}</svg>`;
-const SPEAKER = '<path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>';
-const ICON_SPEAKER_ON = icon(`${SPEAKER}<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`);
-const ICON_SPEAKER_OFF = icon(`${SPEAKER}<path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`);
 /** Stopwatch with pause bars: time that stops by itself. */
 const ICON_POWER = icon(
   '<path d="M7.5 6.5a8 8 0 1 0 9 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 3v8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
@@ -245,9 +243,8 @@ export class NetworkView {
   private readonly header: HTMLElement;
   private readonly clock: HTMLElement;
   private readonly pauseBtn: HTMLButtonElement;
-  private readonly muteBtn: HTMLButtonElement;
   private readonly autoBtn: HTMLButtonElement;
-  private readonly menuBox: HTMLElement;
+  private readonly gameMenu: GameMenu;
   private readonly stage: SVGSVGElement;
   /** The minimap is its own small SVG pinned to the bottom-right corner of the view. */
   private readonly miniSvg: SVGSVGElement;
@@ -311,30 +308,12 @@ export class NetworkView {
     this.pauseBtn.addEventListener('click', () => actions.togglePause());
     // A spinning arc shows that time runs; it stops (yellow) while paused.
     this.pauseBtn.innerHTML = '<svg class="time-spinner" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M10 2.5a7.5 7.5 0 0 1 7.5 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="2.6"/></svg>';
-    const soundBox = document.createElement('div');
-    soundBox.className = 'sound-box';
-    this.muteBtn = document.createElement('button');
-    this.muteBtn.type = 'button';
-    this.muteBtn.className = 'mute-btn';
-    this.muteBtn.title = 'Sound on / off (M)';
-    this.muteBtn.addEventListener('click', () => actions.mute());
     this.autoBtn = document.createElement('button');
     this.autoBtn.type = 'button';
     this.autoBtn.className = 'icon-btn auto-btn';
     this.autoBtn.title = 'Auto-pause: time stops after every action (A)';
     this.autoBtn.innerHTML = ICON_AUTO_PAUSE;
     this.autoBtn.addEventListener('click', () => actions.autoPause());
-    const vol = document.createElement('input');
-    vol.type = 'range';
-    vol.min = '0';
-    vol.max = '100';
-    vol.value = String(Math.round(actions.sound.volume * 100));
-    vol.className = 'volume';
-    vol.title = 'Volume';
-    vol.setAttribute('aria-label', 'Volume');
-    vol.addEventListener('input', () => actions.sound.setVolume(Number(vol.value) / 100));
-    vol.addEventListener('change', () => actions.sound.play('hop'));
-    soundBox.append(this.muteBtn, vol);
     const gearBtn = document.createElement('button');
     gearBtn.type = 'button';
     gearBtn.className = 'icon-btn gear-btn';
@@ -347,16 +326,11 @@ export class NetworkView {
     timeBox.className = 'time-box';
     timeBox.append(this.pauseBtn, this.autoBtn, this.clock);
     this.header.append(timeBox, title, alarm, this.integrityEl, gearBtn);
-    // The game menu: a window in the middle of the screen. For now only the sound settings.
-    this.menuBox = document.createElement('div');
-    this.menuBox.className = 'game-menu';
-    this.menuBox.hidden = true;
-    this.menuBox.innerHTML = `<div class="game-menu-panel" role="dialog" aria-label="Menu"><button type="button" class="game-menu-close" aria-label="Close (Esc)" title="Back to the game (Esc)">✕</button><h2>MENU</h2><h3>sound</h3><div class="game-menu-row"></div></div>`;
-    this.menuBox.querySelector('.game-menu-row')!.append(soundBox);
-    this.menuBox.querySelector('.game-menu-close')!.addEventListener('click', () => this.toggleMenu(false));
-    this.menuBox.addEventListener('mousedown', (e) => {
-      if (e.target === this.menuBox) this.toggleMenu(false);
-    });
+    // The game menu: a window in the middle of the screen.
+    this.gameMenu = new GameMenu(actions.sound, { mute: () => actions.mute(), toggled: (open) => {
+      this.tip.hide();
+      actions.menuToggled(open);
+    } });
 
     this.stage = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stage', role: 'img' });
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -372,21 +346,17 @@ export class NetworkView {
     this.queryBox = document.createElement('div');
     this.queryBox.className = 'query-box';
     this.queryBox.hidden = true;
-    root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox, this.menuBox);
+    root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox, this.gameMenu.box);
     this.render();
   }
 
   get menuOpen(): boolean {
-    return !this.menuBox.hidden;
+    return this.gameMenu.open;
   }
 
   /** Opens or closes the game menu (toggles when not told which). */
   toggleMenu(open = !this.menuOpen): void {
-    if (open === this.menuOpen) return;
-    this.menuBox.hidden = !open;
-    this.tip.hide();
-    this.actions.sound.play(open ? 'menuOpen' : 'menuClose');
-    this.actions.menuToggled(open);
+    this.gameMenu.toggle(open);
   }
 
   /** Detection: a crossed-out eye icon over a vertical bar of three segments, under the node's name. */
@@ -505,13 +475,8 @@ export class NetworkView {
     this.alpha = alpha;
     this.clock.textContent = formatTime(this.game.tick);
     this.pauseBtn.setAttribute('aria-label', this.game.paused ? 'Resume' : 'Pause');
-    const muted = this.actions.sound.muted;
-    if (this.muteBtn.dataset.muted !== String(muted)) {
-      this.muteBtn.dataset.muted = String(muted);
-      this.muteBtn.innerHTML = muted ? ICON_SPEAKER_OFF : ICON_SPEAKER_ON;
-    }
+    this.gameMenu.refresh();
     this.autoBtn.classList.toggle('is-on', this.game.autoPause);
-    this.muteBtn.classList.toggle('is-muted', this.actions.sound.muted);
     this.header.classList.toggle('is-paused', this.game.paused);
     const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}|${this.game.knownCount}|${this.game.filesKey}`;
     if (key !== this.lastKey) this.render();
