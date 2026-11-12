@@ -91,7 +91,7 @@ export function showEntryScreen(system: SystemDef, intel: NetIntel | undefined, 
       lines.push('<p class="rs-dim">kinds of agents met here:</p><ul class="entry-agents">');
       seen.forEach((s, i) => {
         const st = WARRIORS[s.type];
-        const icon = iconBody(agentIcon(system.id, WARRIOR_TYPES.indexOf(s.type), s.role)) ?? '';
+        const icon = iconBody(s.icon ?? agentIcon(system.id, WARRIOR_TYPES.indexOf(s.type), s.role)) ?? '';
         const tag = s.known === 'full' ? ' · analyzed' : s.known === 'partial' ? ' · partly analyzed' : ' · not analyzed';
         lines.push(`<li class="entry-agent is-${s.type}${st.ai === 'stationary' ? ' is-fixed' : ''}" data-kind="${i}"><svg class="entry-agent-icon" viewBox="0 0 512 512">${icon}</svg><span class="entry-agent-line"><b>${esc(s.typeName)}</b> · ${esc(ROLE_SHORT[s.role])}<span class="rs-dim">${tag}</span></span></li>`);
       });

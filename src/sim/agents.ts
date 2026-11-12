@@ -18,38 +18,76 @@ export const ROLE_LABEL: Record<AgentRole, string> = {
 };
 
 /**
- * Warrior archetypes: decide stats and colour. Each system gives every archetype it uses a name
- * drawn from WARRIOR_NAMES, so a heavy warrior may be a "knight" in one system and a "rocket" in another.
+ * Warrior archetypes: decide stats and colour. Each system gives every archetype it uses a kind drawn from
+ * KINDS: an icon first, then one of the names that fit that icon (a battle axe makes an axeman, a barbarian...).
+ * So a heavy warrior may be a "barbarian" in one system and a "rocketeer" in another.
  * Agents of one type share their stats, so analyzing one reveals the others.
  */
 export type WarriorType = 'balanced' | 'watchful' | 'heavy' | 'inspector' | 'sentry' | 'worker';
 
-/** Military names for warrior types, drawn when a system is created. */
-export const WARRIOR_NAMES = [
-  'musketeer', 'ranger', 'guardian', 'tank', 'knight', 'rocket', 'hussar', 'grenadier', 'sentinel', 'dragoon',
-  'lancer', 'sniper', 'cuirassier', 'legionnaire', 'centurion', 'trooper', 'marine', 'commando', 'gunner', 'sapper',
-  'scout', 'warden', 'paladin', 'halberdier', 'pikeman', 'cavalier', 'mortar', 'howitzer', 'artillery', 'bombardier',
-  'corsair', 'praetorian', 'janissary', 'samurai', 'ronin', 'spartan', 'hoplite', 'templar', 'crusader', 'vanguard',
-];
+/** An icon (game-icons.net name) and the names that suit it. */
+export interface KindPick {
+  icon: string;
+  names: string[];
+}
 
-/** Names for the other roles, drawn the same way. */
-const ROLE_NAMES: Record<Exclude<AgentRole, 'fighter'>, string[]> = {
-  inspector: ['auditor', 'inspector', 'examiner', 'controller', 'checker', 'assessor', 'verifier', 'monitor'],
-  sentry: ['sentry', 'doorkeeper', 'custodian', 'keeper', 'watchman', 'concierge', 'porter', 'steward'],
-  worker: ['clerk', 'courier', 'runner', 'dispatcher', 'teller', 'cashier', 'operator', 'assistant'],
+/** Icons for each role, each with names that match the picture. */
+export const KINDS: Record<AgentRole, KindPick[]> = {
+  fighter: [
+    { icon: 'broadsword', names: ['knight', 'swordsman', 'paladin', 'templar', 'crusader'] },
+    { icon: 'katana', names: ['samurai', 'ronin', 'kensei'] },
+    { icon: 'daggers', names: ['assassin', 'cutthroat', 'rogue'] },
+    { icon: 'energy-sword', names: ['blademaster', 'arc knight', 'duelist'] },
+    { icon: 'battle-axe', names: ['axeman', 'barbarian', 'berserker', 'viking'] },
+    { icon: 'flying-dagger', names: ['knife thrower', 'skirmisher'] },
+    { icon: 'lightning-saber', names: ['stormblade', 'arc duelist'] },
+    { icon: 'crossed-swords', names: ['legionnaire', 'gladiator', 'centurion'] },
+    { icon: 'fist', names: ['brawler', 'bruiser', 'pugilist'] },
+    { icon: 'crescent-blade', names: ['reaper', 'harvester'] },
+    { icon: 'ak47', names: ['trooper', 'rifleman', 'insurgent'] },
+    { icon: 'winchester-rifle', names: ['ranger', 'marksman', 'sniper'] },
+    { icon: 'uzi', names: ['gunner', 'enforcer'] },
+    { icon: 'revolver', names: ['gunslinger', 'sheriff', 'outlaw'] },
+    { icon: 'machine-gun', names: ['heavy gunner', 'suppressor'] },
+    { icon: 'grenade', names: ['grenadier', 'bombardier', 'sapper'] },
+    { icon: 'rocket', names: ['rocket', 'rocketeer'] },
+    { icon: 'missile-launcher', names: ['artillery', 'howitzer', 'mortar'] },
+  ],
+  inspector: [
+    { icon: 'police-badge', names: ['inspector', 'marshal'] },
+    { icon: 'checklist', names: ['auditor', 'assessor', 'checker'] },
+    { icon: 'magnifying-glass', names: ['examiner', 'investigator'] },
+    { icon: 'stamper', names: ['controller', 'verifier'] },
+  ],
+  sentry: [
+    { icon: 'guards', names: ['sentry', 'watchman', 'guard'] },
+    { icon: 'visored-helm', names: ['warden', 'custodian', 'keeper'] },
+    { icon: 'closed-doors', names: ['doorkeeper', 'porter', 'concierge'] },
+    { icon: 'padlock', names: ['lockkeeper', 'gatekeeper'] },
+  ],
+  worker: [
+    { icon: 'cardboard-box', names: ['courier', 'packer'] },
+    { icon: 'papers', names: ['clerk', 'dispatcher'] },
+    { icon: 'envelope', names: ['messenger', 'runner'] },
+    { icon: 'cargo-crate', names: ['carrier', 'loader'] },
+  ],
 };
 
-/** Names for the agent types a system uses: distinct, and the same every time for the same seed. */
-export function typeNames(seedText: string, types: WarriorType[]): Map<WarriorType, string> {
+/** The kind (name and icon) of each agent type a system uses: distinct, and the same every time for the same seed. */
+export function typeKinds(seedText: string, types: WarriorType[]): Map<WarriorType, { name: string; icon: string }> {
   let s = 7;
   for (const ch of seedText) s = (s * 31 + ch.charCodeAt(0)) >>> 0;
-  const pools: Record<AgentRole, string[]> = { fighter: [...WARRIOR_NAMES], inspector: [...ROLE_NAMES.inspector], sentry: [...ROLE_NAMES.sentry], worker: [...ROLE_NAMES.worker] };
-  const out = new Map<WarriorType, string>();
+  const next = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 2 ** 32;
+  };
+  const pools: Record<AgentRole, KindPick[]> = { fighter: [...KINDS.fighter], inspector: [...KINDS.inspector], sentry: [...KINDS.sentry], worker: [...KINDS.worker] };
+  const out = new Map<WarriorType, { name: string; icon: string }>();
   for (const t of types) {
     if (out.has(t)) continue;
     const pool = pools[WARRIORS[t].role];
-    s = (s * 1664525 + 1013904223) >>> 0;
-    out.set(t, pool.splice(Math.floor((s / 2 ** 32) * pool.length), 1)[0]);
+    const pick = pool.splice(Math.floor(next() * pool.length), 1)[0];
+    out.set(t, { icon: pick.icon, name: pick.names[Math.floor(next() * pick.names.length)] });
   }
   return out;
 }
@@ -137,6 +175,8 @@ export interface Agent {
   id: string;
   /** Its type's name in this system (e.g. knight). */
   typeName: string;
+  /** Its type's icon in this system (matches the name). */
+  typeIcon: string;
   /** Short name used in the console: W1, W2... */
   name: string;
   stats: AgentStats;

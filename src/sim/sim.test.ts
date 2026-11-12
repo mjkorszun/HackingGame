@@ -3,7 +3,7 @@ import { MAPPER_COOLDOWN, MAPPER_NOISE, mapperChances } from './programs';
 import { describe, expect, it } from 'vitest';
 import { testSystem } from '../data/testSystem';
 import { FixedClock } from './clock';
-import { CHASE_HOP_TICKS, LEAVE_TICKS } from './agents';
+import { CHASE_HOP_TICKS, KINDS, LEAVE_TICKS, typeKinds, WARRIORS } from './agents';
 import { Game, MOVE_TICKS, shieldHp, warriorDamage } from './game';
 import { Network } from './network';
 import { mergeIntel } from './intel';
@@ -869,6 +869,16 @@ describe('agents', () => {
     // core > cams > orch > ai > orch > cams > core ... (cams lies between core and orch)
     expect(seq).toContain('ai');
     expect(seq).toContain('orch');
+  });
+
+  it("an agent kind's name fits its icon, and kinds in one system differ", () => {
+    const kinds = typeKinds('some-system', ['balanced', 'watchful', 'heavy', 'sentry']);
+    const icons = [...kinds.values()].map((k) => k.icon);
+    expect(new Set(icons).size).toBe(icons.length);
+    for (const [type, k] of kinds) {
+      const pick = KINDS[WARRIORS[type].role].find((p) => p.icon === k.icon)!;
+      expect(pick.names).toContain(k.name);
+    }
   });
 
   it('your agent can stay, follow you, and unload back into memory', () => {

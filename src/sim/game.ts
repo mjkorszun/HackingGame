@@ -1,6 +1,6 @@
 import { sats } from './money';
 import { RANK, type AgentSighting, type NetIntel } from './intel';
-import { CHASE_HOP_TICKS, codeName, LEAVE_TICKS, typeNames, versus, WARRIORS, type Agent } from './agents';
+import { CHASE_HOP_TICKS, codeName, LEAVE_TICKS, typeKinds, versus, WARRIORS, type Agent } from './agents';
 import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
@@ -265,11 +265,11 @@ export class Game {
     const target = job && this.files.get(job.node);
     if (job && target) target.push({ id: `f${target.length + 1}`, content: 'contract', scanned: false, need: job.need });
     const defs = system.agents ?? [];
-    const names = typeNames(system.id, defs.map((a) => a.type ?? 'balanced'));
+    const kinds = typeKinds(system.id, defs.map((a) => a.type ?? 'balanced'));
     defs.forEach((a, i) => {
       const stats = WARRIORS[a.type ?? 'balanced'];
       this.agents.push({
-        id: `a${i + 1}`, typeName: names.get(stats.type)!, name: codeName(`${system.id}/${i}`), stats, route: a.route, hp: stats.hp, node: a.node, hop: null,
+        id: `a${i + 1}`, typeName: kinds.get(stats.type)!.name, typeIcon: kinds.get(stats.type)!.icon, name: codeName(`${system.id}/${i}`), stats, route: a.route, hp: stats.hp, node: a.node, hop: null,
         stayLeft: stats.stay[0], queryLeft: stats.queryEvery, attackLeft: stats.attackEvery,
         mood: 'patrol', strikes: 0, silenced: false, known: 'none',
       });
@@ -1249,7 +1249,7 @@ export class Game {
         const a = this.agentById(id) ?? this.seenAgents.get(id);
         if (!a) continue;
         const had = list.find((x) => x.type === a.stats.type);
-        if (!had) list.push({ type: a.stats.type, typeName: a.typeName, role: a.stats.role, known: a.known });
+        if (!had) list.push({ type: a.stats.type, typeName: a.typeName, icon: a.typeIcon, role: a.stats.role, known: a.known });
         else if (RANK[a.known] > RANK[had.known]) had.known = a.known;
       }
       if (list.length) agents[node] = list;

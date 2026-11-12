@@ -5,6 +5,8 @@ export interface AgentSighting {
   type: WarriorType;
   /** Its type's name in that system (e.g. knight). */
   typeName: string;
+  /** Its type's icon in that system. */
+  icon?: string;
   role: AgentRole;
   /** How much your Analyze read of this kind: nothing, part, or all. */
   known: Knowledge;

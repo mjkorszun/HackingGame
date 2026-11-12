@@ -1,5 +1,5 @@
 import { sats } from '../sim/money';
-import { agentInfo, LEAVE_TICKS, oddsWord, versus, WARRIORS, type Agent, type WarriorType } from '../sim/agents';
+import { agentInfo, LEAVE_TICKS, oddsWord, versus, type Agent, type WarriorType } from '../sim/agents';
 import { apparentContent, clickAction, isEmpty, CONTENT_LABEL, fileActions, PROTECTION_LABEL, type Protection, type DataFile, type FileAction } from '../sim/files';
 import { Tooltip, type TipLine } from './tooltip';
 import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
@@ -9,9 +9,8 @@ import type { FxTarget, NodeDef, NodeKind, SimEvent } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
 import type { Sound } from './sound';
 import { drawNodeShape, halfHeight, hasTag } from './shapes';
-import { agentIcon, iconBody, iconName } from './icons';
+import { iconBody, iconName } from './icons';
 
-const WARRIOR_TYPES = Object.keys(WARRIORS) as WarriorType[];
 import { ALLY_HOP_TICKS, type Ally, type AllyOrder } from '../sim/game';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -806,7 +805,7 @@ export class NetworkView {
       svg('circle', { r: 11, class: 'agent-body' }, grp);
     }
     const icon = svg('svg', { x: -7, y: -7, width: 14, height: 14, viewBox: '0 0 512 512', class: 'agent-icon' }, grp);
-    icon.innerHTML = iconBody(agentIcon(this.game.network.def.id, WARRIOR_TYPES.indexOf(a.stats.type), a.stats.role)) ?? '';
+    icon.innerHTML = iconBody(a.typeIcon) ?? '';
     // Integrity bar over its head, shown once it has taken damage.
     svg('rect', { x: -12, y: -24, width: 24, height: 3, class: 'agent-hp-bg' }, grp);
     svg('rect', { x: -12, y: -24, width: 24, height: 3, class: 'agent-hp' }, grp);
