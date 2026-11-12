@@ -1,7 +1,7 @@
 /**
  * Hardware is wired into your head: you jack into the net through your spinal cord, and every
  * piece of hardware is a chip in a socket somewhere in the brain. A socket takes any chip that
- * fits there. For now only memory is installed; the other sockets are empty and nothing has effects yet.
+ * fits there. You start with the bare minimum: a basic jack and memory; the other sockets are empty and nothing has effects yet.
  */
 
 export type SocketId =
@@ -59,5 +59,7 @@ export const SOCKETS: readonly Socket[] = [
 /** The chip in a socket (with its size or level), or undefined when the socket is empty. */
 export function installedChip(id: SocketId, memoryGB: number): { chip: Chip; label: string } | undefined {
   if (id === 'hippocampus') return { chip: MEMORY, label: `Memory ${memoryGB} GB` };
+  // The bare minimum to go online at all: a basic jack (bandwidth x1) and memory.
+  if (id === 'spine1') return { chip: JACK, label: 'Neural Jack 1.0' };
   return undefined;
 }

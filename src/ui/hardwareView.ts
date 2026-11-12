@@ -5,19 +5,19 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 /** Centre of each socket on the brain cross-section. */
 const SOCKET_XY: Record<SocketId, { x: number; y: number }> = {
-  frontal: { x: 172, y: 210 },
-  motor: { x: 300, y: 104 },
-  parietal: { x: 424, y: 124 },
-  visual1: { x: 506, y: 206 },
-  visual2: { x: 500, y: 278 },
-  thalamus: { x: 331, y: 267 },
-  hippocampus: { x: 414, y: 296 },
-  cerebellum: { x: 452, y: 376 },
-  brainstem: { x: 318, y: 384 },
-  spine1: { x: 332, y: 452 },
-  spine2: { x: 332, y: 494 },
+  frontal: { x: 176, y: 214 },
+  motor: { x: 298, y: 114 },
+  parietal: { x: 418, y: 128 },
+  visual1: { x: 504, y: 204 },
+  visual2: { x: 494, y: 292 },
+  thalamus: { x: 334, y: 266 },
+  hippocampus: { x: 436, y: 292 },
+  cerebellum: { x: 456, y: 378 },
+  brainstem: { x: 316, y: 390 },
+  spine1: { x: 333, y: 482 },
+  spine2: { x: 333, y: 528 },
 };
-const SIZE = 30;
+const SIZE = 40;
 
 /**
  * Hardware tab: a cross-section of your brain with a square socket for every chip. The list names the
@@ -30,8 +30,8 @@ export function renderHardware(el: HTMLElement, memoryGB: number, selected: { id
     const h = SIZE / 2;
     // An installed chip shows as a small die with pins inside the socket.
     const chip = inst
-      ? `<rect class="hw-die" x="${x - 8}" y="${y - 8}" width="16" height="16" rx="1.5"/>
-         <path class="hw-pins" d="M${x - 4} ${y - 12}v4M${x} ${y - 12}v4M${x + 4} ${y - 12}v4M${x - 4} ${y + 8}v4M${x} ${y + 8}v4M${x + 4} ${y + 8}v4M${x - 12} ${y - 4}h4M${x - 12} ${y}h4M${x - 12} ${y + 4}h4M${x + 8} ${y - 4}h4M${x + 8} ${y}h4M${x + 8} ${y + 4}h4"/>`
+      ? `<rect class="hw-die" x="${x - 11}" y="${y - 11}" width="22" height="22" rx="2"/>
+         <path class="hw-pins" d="${[-6, 0, 6].map((o) => `M${x + o} ${y - 16}v5M${x + o} ${y + 11}v5M${x - 16} ${y + o}h5M${x + 11} ${y + o}h5`).join('')}"/>`
       : '';
     return `<g class="hw-socket${inst ? ' is-installed' : ''}${selected.id === s.id ? ' is-selected' : ''}" data-slot="${s.id}" tabindex="0">
       <rect class="hw-box" x="${x - h}" y="${y - h}" width="${SIZE}" height="${SIZE}" rx="3"/>${chip}
@@ -47,7 +47,7 @@ export function renderHardware(el: HTMLElement, memoryGB: number, selected: { id
   el.innerHTML = `
     <h2 class="sw-head">hardware <span class="home-dim">chips wired into your brain</span></h2>
     <div class="hw-layout">
-      <svg class="hw-brain" viewBox="95 55 465 470" role="img" aria-label="Brain cross-section with chip sockets">${BRAIN_ART}${sockets}</svg>
+      <svg class="hw-brain" viewBox="95 55 475 500" role="img" aria-label="Brain cross-section with chip sockets">${BRAIN_ART}${sockets}</svg>
       <div class="hw-side">
         <div class="hw-list">${rows}</div>
         <div class="hw-detail">
