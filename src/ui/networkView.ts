@@ -236,7 +236,9 @@ export class NetworkView {
   private readonly allyEls = new Map<string, { main: SVGGElement; mini: SVGGElement; hp: SVGRectElement }>();
   private allyPos = new Map<string, { x: number; y: number }>();
   private alarmEl!: HTMLDivElement;
-  private sigEl!: HTMLDivElement;
+  /** The detection bar under the node's name: rebuilt with the room, filled every frame. */
+  private sigBar: { root: SVGGElement; segs: SVGRectElement[]; label: SVGTextElement; tip: SVGTitleElement } | null = null;
+  private sigShown = -1;
   private integrityEl!: HTMLDivElement;
   private queryBox!: HTMLDivElement;
   private queryKey = '';
@@ -264,9 +266,6 @@ export class NetworkView {
     alarm.className = 'alarm alarm-0';
     alarm.textContent = 'ALARM: GREEN';
     this.alarmEl = alarm;
-    this.sigEl = document.createElement('div');
-    this.sigEl.className = 'alarm signature alarm-0';
-    this.sigEl.textContent = 'SIGNATURE: UNKNOWN';
     this.integrityEl = document.createElement('div');
     this.integrityEl.className = 'integrity';
     this.integrityEl.innerHTML = '<span class="integrity-label">INTEGRITY</span><span class="integrity-bar"><span class="integrity-fill"></span></span>';
@@ -303,7 +302,7 @@ export class NetworkView {
     vol.addEventListener('input', () => actions.sound.setVolume(Number(vol.value) / 100));
     vol.addEventListener('change', () => actions.sound.play('hop'));
     soundBox.append(this.muteBtn, vol);
-    this.header.append(title, alarm, this.sigEl, this.integrityEl, soundBox, this.clock, this.autoBtn, this.pauseBtn);
+    this.header.append(title, alarm, this.integrityEl, soundBox, this.clock, this.autoBtn, this.pauseBtn);
 
     this.stage = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stage', role: 'img' });
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -321,6 +320,25 @@ export class NetworkView {
     this.queryBox.hidden = true;
     root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox);
     this.render();
+  }
+
+  /** Detection: a shadow icon over a vertical bar of three segments, under the node's name. */
+  private drawSignatureBar(parent: SVGGElement): void {
+    const root = svg('g', { class: 'sig-bar' }, parent);
+    const tip = svg('title', {}, root);
+    const icon = svg('svg', { x: 12, y: 54, width: 20, height: 20, viewBox: '0 0 512 512', class: 'sig-icon' }, root);
+    icon.innerHTML = iconBody('shadow-follower') ?? '';
+    const label = svg('text', { x: 40, y: 69, class: 'sig-label' }, root);
+    const segs: SVGRectElement[] = [];
+    const SEG_H = 22;
+    const GAP = 3;
+    // One segment per level above anonymous, so burned fills the whole bar. Segment 0 is the bottom one.
+    for (let i = 0; i < 3; i++) {
+      const y = 80 + (2 - i) * (SEG_H + GAP);
+      segs.push(svg('rect', { x: 15, y, width: 14, height: SEG_H, class: `sig-seg sig-seg-${i + 1}` }, root));
+    }
+    this.sigBar = { root, segs, label, tip };
+    this.sigShown = -1;
   }
 
   /** The loading bar over the file being worked on, updated every frame. */
@@ -427,16 +445,19 @@ export class NetworkView {
       this.alarmEl.textContent = `ALARM: ${['GREEN', 'YELLOW', 'ORANGE', 'RED'][lvl]}`;
     }
     const sig = this.game.signature;
-    if (this.sigEl.dataset.level !== String(sig)) {
-      this.sigEl.dataset.level = String(sig);
-      this.sigEl.className = `alarm signature alarm-${sig}`;
-      this.sigEl.textContent = `SIGNATURE: ${SIGNATURE_NAMES[sig].toUpperCase()}`;
-      this.sigEl.title = [
-        'how well agents know you. unknown: nobody suspects you',
-        'noticed: agents are a bit wary',
-        'suspected: agents are on guard',
-        'burned: every agent that sees you attacks at once',
-      ][sig] + '. it cools down while no agent sees you; Mask resets it';
+    if (this.sigBar && this.sigShown !== sig) {
+      this.sigShown = sig;
+      const b = this.sigBar;
+      b.root.dataset.level = String(sig);
+      // Filled from the bottom: anonymous = empty, burned = full.
+      b.segs.forEach((r, i) => r.classList.toggle('is-on', i < sig));
+      b.label.textContent = SIGNATURE_NAMES[sig].toUpperCase();
+      b.tip.textContent = `Detection: ${SIGNATURE_NAMES[sig]}. ` + [
+        'nobody knows your signature',
+        'agents are a bit wary of you',
+        'agents are on guard',
+        'every agent that sees you attacks at once',
+      ][sig] + '. it drops while no agent sees you; Mask resets it';
     }
     const integ = `Integrity ${this.game.integrity}/${this.game.maxIntegrity}: at 0 you are thrown out of the net`;
     if (this.integrityEl.title !== integ) {
@@ -894,6 +915,7 @@ export class NetworkView {
     title.textContent = name;
     const sub = svg('text', { x: 44, y: 40, class: 'room-kind' }, hud);
     sub.textContent = KIND_LABEL[kind];
+    this.drawSignatureBar(hud);
 
     const tip = svg('title', {}, grp);
     tip.textContent = `${name} (you are here). Right-click for actions.`;

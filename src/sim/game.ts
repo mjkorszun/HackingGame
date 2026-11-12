@@ -149,7 +149,7 @@ interface MoveTask {
 
 /** Ticks out of every agent's sight for your signature to drop one level (placeholder: 20 s). */
 export const SIGNATURE_COOL = 200;
-export const SIGNATURE_NAMES = ['unknown', 'noticed', 'suspected', 'burned'] as const;
+export const SIGNATURE_NAMES = ['anonymous', 'noticed', 'suspected', 'burned'] as const;
 
 /**
  * The pure game simulation. No DOM here: the UI calls step() once per tick
@@ -199,7 +199,7 @@ export class Game {
   /** Ticks since the last thing that raised the alarm (yellow fades after a quiet minute). */
   private calm = 0;
   /**
-   * How well agents know your signature (like wanted stars): 0 unknown, 1 noticed, 2 suspected, 3 burned.
+   * How well agents know your signature (like wanted stars): 0 anonymous, 1 noticed, 2 suspected, 3 burned.
    * Burned: every agent that sees you is hostile at once. It drops by itself only while no agent sees you,
    * and not below 1; a mask program clears it.
    */
