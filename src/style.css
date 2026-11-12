@@ -844,8 +844,9 @@ body {
 .hw-socket { cursor: pointer; }
 .hw-socket .hw-box { fill: rgba(0, 0, 0, 0.7); stroke: #b8c4bc; stroke-width: 1.8; stroke-dasharray: 5 3; }
 .hw-socket.is-installed .hw-box { stroke: var(--blue); stroke-dasharray: none; fill: #071a24; }
-.hw-die { fill: var(--blue); }
-.hw-pins { stroke: var(--blue); stroke-width: 1.5; }
+.hw-die { fill: #04121a; stroke: currentColor; stroke-width: 1.4; }
+.hw-die-icon { fill: currentColor; }
+.hw-pins { stroke: currentColor; stroke-width: 1.5; }
 .hw-socket:hover .hw-box, .hw-socket.is-selected .hw-box { stroke: var(--yellow); stroke-width: 2.6; }
 .hw-list { display: flex; flex-direction: column; gap: 3px; }
 .hw-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 8px; border: 1px solid transparent; background: none; color: var(--green); font: inherit; text-align: left; cursor: pointer; }
@@ -878,3 +879,8 @@ body {
 .hw-chip-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
 .hw-surgery { color: #9fd0ff; }
 .hw-chip .home-btn { white-space: nowrap; padding: 3px 10px; font-size: 13px; letter-spacing: 0; text-transform: none; }
+
+.hw-chip { border-left: 3px solid var(--maker, var(--green-faint)); }
+.hw-chip-head { align-items: center; }
+.hw-chip-icon { width: 22px; height: 22px; fill: currentColor; flex: none; }
+.hw-chip-name { margin-right: auto; }

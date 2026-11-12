@@ -1,6 +1,7 @@
-import { chipById, chipValue, KINDS, marketOffers, REMOVE_DAYS, sellPrice, SOCKETS, type ChipModel, type SocketId } from '../sim/implants';
+import { chipById, chipValue, KINDS, makerColor, marketOffers, REMOVE_DAYS, sellPrice, SOCKETS, type ChipModel, type SocketId } from '../sim/implants';
 import { sats } from '../sim/money';
 import { BRAIN_ART } from './brainArt';
+import { iconBody, iconSvg } from './icons';
 
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -65,9 +66,10 @@ function sidesHtml(c: ChipModel): string {
 
 /** A chip as a card: name in its rarity colour, maker, main number, side numbers, recovery days. */
 function chipCard(c: ChipModel, extra = ''): string {
-  return `<div class="hw-chip">
-    <div class="hw-chip-head"><span class="hw-chip-name rarity-${c.rarity}">${esc(c.name)}</span><span class="hw-chip-value">${esc(chipValue(c))}</span></div>
-    <div class="hw-chip-sub">${esc(KINDS[c.kind].name)} · ${esc(c.maker)} · <span class="rarity-${c.rarity}">${c.rarity}</span></div>
+  const col = makerColor(c.maker);
+  return `<div class="hw-chip" style="--maker:${col}">
+    <div class="hw-chip-head">${iconSvg(KINDS[c.kind].icon, 'hw-chip-icon', col)}<span class="hw-chip-name rarity-${c.rarity}">${esc(c.name)}</span><span class="hw-chip-value">${esc(chipValue(c))}</span></div>
+    <div class="hw-chip-sub">${esc(KINDS[c.kind].name)} · <span class="hw-maker" style="color:${col}">${esc(c.maker)}</span> · <span class="rarity-${c.rarity}">${c.rarity}</span></div>
     <div class="hw-chip-sides">${sidesHtml(c)}</div>
     <div class="hw-chip-foot"><span class="hw-surgery">surgery: ${c.surgery} day${c.surgery === 1 ? '' : 's'} to recover</span>${extra}</div>
   </div>`;
@@ -119,10 +121,12 @@ export function renderHardware(el: HTMLElement, act: HardwareActions, view: Hard
       const { x, y } = SOCKET_XY[s.id];
       const inst = chipIn(s.id);
       const h = SIZE / 2;
-      // An installed chip shows as a small die with pins inside the socket.
+      // An installed chip shows as a die with pins in its maker's colour, with the icon of its kind.
+      const col = inst ? makerColor(inst.maker) : '';
       const chip = inst
-        ? `<rect class="hw-die" x="${x - 11}" y="${y - 11}" width="22" height="22" rx="2"/>
-           <path class="hw-pins" d="${[-6, 0, 6].map((o) => `M${x + o} ${y - 16}v5M${x + o} ${y + 11}v5M${x - 16} ${y + o}h5M${x + 11} ${y + o}h5`).join('')}"/>`
+        ? `<g style="color:${col}"><rect class="hw-die" x="${x - 12}" y="${y - 12}" width="24" height="24" rx="2"/>
+           <svg x="${x - 9}" y="${y - 9}" width="18" height="18" viewBox="0 0 512 512" class="hw-die-icon">${iconBody(KINDS[inst.kind].icon) ?? ''}</svg>
+           <path class="hw-pins" d="${[-6, 0, 6].map((o) => `M${x + o} ${y - 16}v5M${x + o} ${y + 11}v5M${x - 16} ${y + o}h5M${x + 11} ${y + o}h5`).join('')}"/></g>`
         : '';
       return `<g class="hw-socket${inst ? ' is-installed' : ''}${view.sel === s.id ? ' is-selected' : ''}" data-slot="${s.id}" tabindex="0">
         <rect class="hw-box" x="${x - h}" y="${y - h}" width="${SIZE}" height="${SIZE}" rx="3"/>${chip}
