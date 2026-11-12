@@ -283,19 +283,24 @@ function updateDeck(): void {
 
 const offers: ContractOffer[] = testSystem.contract ? [{ contract: testSystem.contract, system: testSystem }] : [];
 const homeState = { day: account.day, reputation: account.reputation, networks: account.networks, offers, skimmers: account.skimmers, news: account.news };
+// The browser's own right-click menu never shows: right-click belongs to the game's menus.
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
 const home = new HomeScreen(document.getElementById('home')!, homeState, {
   enter: (choice) => enterNetwork(choice),
   click: () => sfx.play('menuItem'),
   character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks, code: account.code, health: account.health }),
   rest: (days) => {
+    const before = account.day;
     rest(account, days);
     saveAccount(account);
-    homeState.day = account.day;
+    showDaysPassing(before);
     homeState.news = account.news;
     renderHomeGear();
   },
   contract: () => account.contract,
   day: () => account.day,
+  money: () => account.sats,
   setCode: (code) => {
     account.code = code;
     saveAccount(account);
@@ -340,9 +345,10 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       const bug = p.bugs[index].split(':')[0];
       fixBug(p, index);
       // Fixing takes days like any other work: skimmers pay out, and may be found.
+      const before = account.day;
       passDay(account, Math.random, days);
       saveAccount(account);
-      homeState.day = account.day;
+      showDaysPassing(before);
       homeState.news = account.news;
       renderHomeGear();
       return `${days} days fixing ${p.name}: the ${bug} bug is gone`;
@@ -391,6 +397,7 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       const days = mode === 'day' ? 1 : mode === 'week' ? 7 : p.daysLeft;
       const r = work(p, days);
       // Days spent writing code pass like any other: skimmers pay out, and may be found.
+      const before = account.day;
       passDay(account, Math.random, r.days);
       const lines = [`${r.days} day${r.days === 1 ? '' : 's'} of work on ${p.name}`];
       let program: Program | undefined;
@@ -402,21 +409,47 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
         account.project = undefined;
         lines.push(`${p.name} is done`);
         if (program.bugs?.length) lines.push(`it has ${program.bugs.length} bug${program.bugs.length === 1 ? '' : 's'}: use it as it is, or fix ${program.bugs.length === 1 ? 'it' : 'them'} in Software (${bugFixDays(program)} days a bug)`);
-        sfx.play('linkUp');
       }
       saveAccount(account);
-      homeState.day = account.day;
+      showDaysPassing(before);
       homeState.news = account.news;
       renderHomeGear();
       return { lines, program };
     },
   },
 });
+/**
+ * Days spent at the base tick by one at a time, a second apart: a short tick for each day and a longer
+ * tone on the last one. The account has already moved on; only the day shown catches up. The main
+ * screen ignores clicks meanwhile.
+ */
+function showDaysPassing(from: number): void {
+  const to = account.day;
+  const root = document.getElementById('home')!;
+  homeState.day = from;
+  if (to <= from) {
+    homeState.day = to;
+    return;
+  }
+  root.classList.add('is-days');
+  let day = from;
+  const step = () => {
+    day++;
+    homeState.day = day;
+    home.refresh();
+    sfx.play(day === to ? 'dayDone' : 'dayTick');
+    if (day < to) window.setTimeout(step, 1000);
+    else root.classList.remove('is-days');
+  };
+  window.setTimeout(step, 400);
+}
+
 /** Recovering from surgery takes days like any other work: skimmers pay out, and may be found. */
 function afterSurgery(days: number, line: string): string {
+  const before = account.day;
   passDay(account, Math.random, days);
   saveAccount(account);
-  homeState.day = account.day;
+  showDaysPassing(before);
   homeState.news = account.news;
   renderHomeGear();
   return line;
