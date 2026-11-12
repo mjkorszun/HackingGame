@@ -322,12 +322,12 @@ export class NetworkView {
     this.render();
   }
 
-  /** Detection: a shadow icon over a vertical bar of three segments, under the node's name. */
+  /** Detection: a crossed-out eye icon over a vertical bar of three segments, under the node's name. */
   private drawSignatureBar(parent: SVGGElement): void {
     const root = svg('g', { class: 'sig-bar' }, parent);
     const tip = svg('title', {}, root);
     const icon = svg('svg', { x: 12, y: 54, width: 20, height: 20, viewBox: '0 0 512 512', class: 'sig-icon' }, root);
-    icon.innerHTML = iconBody('shadow-follower') ?? '';
+    icon.innerHTML = iconBody('sight-disabled') ?? '';
     const label = svg('text', { x: 40, y: 69, class: 'sig-label' }, root);
     const segs: SVGRectElement[] = [];
     const SEG_H = 22;
