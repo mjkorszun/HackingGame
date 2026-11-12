@@ -992,7 +992,6 @@ describe('software tab', () => {
 
 describe('signature', () => {
   it('a failed query raises it; a fight burns it; burned agents are hostile on sight', async () => {
-    const { SIGNATURE_COOL } = await import('./game');
     const g = new Game(testSystem);
     g.autoPause = false;
     g.setPaused(false);
@@ -1002,9 +1001,9 @@ describe('signature', () => {
     expect(g.signature).toBe(1);
     g.exposeSignature(3, 'fight');
     expect(g.signature).toBe(3);
-    // Out of sight it cools to 2, then to 1, and stays there.
-    run(g, SIGNATURE_COOL * 5);
-    expect(g.signature).toBe(1);
+    // It never drops by itself: only a mask program out of sight clears it.
+    run(g, 2000);
+    expect(g.signature).toBe(3);
   });
 
   it('mask clears it only when no agent sees you', () => {

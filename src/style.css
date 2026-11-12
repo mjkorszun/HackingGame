@@ -790,7 +790,6 @@ body {
 /* Main screen buttons: an icon before the label. */
 .home-menu .home-btn { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .menu-icon { width: 22px; height: 22px; fill: currentColor; flex: none; }
-.cc-btn .menu-icon { width: 18px; height: 18px; margin-left: 10px; vertical-align: -3px; }
 
 /* Moving things are drawn every frame, so no transition while they travel. */
 .agent.is-hopping, .ally.is-hopping { transition: none; }

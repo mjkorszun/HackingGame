@@ -156,8 +156,6 @@ const GATE_POINT = 0.62;
 
 const gateKey = (a: string, b: string) => [a, b].sort().join('|');
 
-/** Ticks out of every agent's sight for your signature to drop one level (placeholder: 20 s). */
-export const SIGNATURE_COOL = 200;
 export const SIGNATURE_NAMES = ['anonymous', 'noticed', 'suspected', 'burned'] as const;
 
 /**
@@ -213,7 +211,6 @@ export class Game {
    * and not below 1; a mask program clears it.
    */
   signature = 0;
-  private unseen = 0;
   readonly maxIntegrity = 20;
   /** The player's integrity: at 0 you are thrown out of the net. */
   integrity = 20;
@@ -375,9 +372,10 @@ export class Game {
       const together = a.node === playerHere;
       const role = a.stats.role;
       if (a.mood === 'hostile' && a.stats.damage > 0) {
-        // Your agents in its node draw its fire first: the one fighting it, or any.
+        // It hits whoever fights it. Otherwise it goes for you, but a shield around you takes the hit;
+        // your other agents only get hit when you are not here.
         const near = this.allies.filter((x) => x.node === a.node && !x.hop && !x.resident);
-        const foe = near.find((x) => x.id === this.foes.get(a.id)) ?? near[0];
+        const foe = near.find((x) => x.id === this.foes.get(a.id)) ?? (together ? near.find((x) => x.program.type === 'shield') : near[0]);
         if (foe) {
           if (--a.attackLeft <= 0) {
             a.attackLeft = a.stats.attackEvery;
@@ -445,26 +443,11 @@ export class Game {
     }
   }
 
-  /** Your signature cools down while no agent sees you: one level every SIGNATURE_COOL ticks, not below 1. */
-  private updateSignature(): void {
-    if (!this.signature) return;
-    const seen = !this.move && this.agents.some((a) => a.node === this.currentNode && !a.hop && a.stats.role !== 'worker');
-    if (seen) {
-      this.unseen = 0;
-      return;
-    }
-    if (this.signature > 1 && ++this.unseen >= SIGNATURE_COOL) {
-      this.unseen = 0;
-      this.setSignature(this.signature - 1, 'out of sight: agents are losing your trail');
-    }
-  }
-
   private setSignature(level: number, why: string): void {
     level = Math.max(0, Math.min(3, level));
     if (level === this.signature) return;
     const up = level > this.signature;
     this.signature = level;
-    this.unseen = 0;
     const name = SIGNATURE_NAMES[level];
     this.log(`SIGNATURE ${name.toUpperCase()}: ${why}`, !up ? 'info' : level >= 3 ? 'alarm3' : level === 2 ? 'alarm2' : 'alarm1');
   }
@@ -1056,7 +1039,6 @@ export class Game {
     this.updateAgents();
     this.updateAllies();
     this.updateAlarm();
-    this.updateSignature();
   }
 
   setPaused(paused: boolean, auto = false): void {
