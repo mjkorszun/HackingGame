@@ -3,6 +3,7 @@ import { programSize, usedMemory, type Program } from '../sim/programs';
 import { newPizzeria, type NetworkSeed } from '../sim/generate';
 import type { DevProject } from '../sim/development';
 import { newGameCode } from '../sim/progression';
+import { chipById, KINDS, REMOVE_DAYS, sellPrice, SOCKETS, STARTER_CHIPS, type SocketId } from '../sim/implants';
 
 /** What the player keeps between runs: sats and software. Saved in the browser. */
 export interface Account {
@@ -36,6 +37,8 @@ export interface Account {
   avatar: { icon: string; color: string };
   /** Icons picked from the full set (name to SVG body), so they show without loading the whole set. */
   customIcons: Record<string, string>;
+  /** Chips wired into your brain (socket to chip model id), spare chips you own, and market offers bought today. */
+  hardware: { installed: Partial<Record<SocketId, string>>; spare: string[]; bought: { day: number; ids: string[] } };
   /** Save format: 2 = the scout is the agent, the old scout is the mapper. */
   version?: number;
 }
@@ -67,12 +70,80 @@ export function passDay(a: Account, roll: () => number = Math.random, days = 1):
   a.news = news;
 }
 
+/** The bare minimum to go online: a basic jack in the spinal cord and memory in the hippocampus. */
+function newHardware(): Account['hardware'] {
+  return { installed: { spine1: STARTER_CHIPS.jack.id, hippocampus: STARTER_CHIPS.memory.id }, spare: [], bought: { day: 0, ids: [] } };
+}
+
+/** Memory size comes from the memory chip in the hippocampus. Unloads programs from the end until they fit. */
+function syncMemory(a: Account): void {
+  const mem = chipById(a.hardware.installed.hippocampus ?? '');
+  a.memory = mem ? mem.value : 0;
+  while (a.loaded.length && usedMemory(loadedPrograms(a)) > a.memory) a.loaded.pop();
+}
+
+/** Buys a chip from today's market into your spare chips. */
+export function buyChip(a: Account, chipId: string, price: number): string {
+  const c = chipById(chipId);
+  if (!c) return 'no such chip';
+  if (a.hardware.bought.day !== a.day) a.hardware.bought = { day: a.day, ids: [] };
+  if (a.hardware.bought.ids.includes(chipId)) return `${c.name} is sold out today`;
+  if (a.sats < price) return `${c.name} costs ${price} §: not enough sats`;
+  a.sats = Math.round((a.sats - price) * 100) / 100;
+  a.hardware.spare.push(chipId);
+  a.hardware.bought.ids.push(chipId);
+  return `bought ${c.name} for ${price} §. put it in from the Hardware screen`;
+}
+
+/** Sells one spare chip to a dealer. */
+export function sellChip(a: Account, chipId: string): string {
+  const i = a.hardware.spare.indexOf(chipId);
+  const c = chipById(chipId);
+  if (i < 0 || !c) return 'you have no such chip';
+  a.hardware.spare.splice(i, 1);
+  const p = sellPrice(c);
+  a.sats = Math.round((a.sats + p) * 100) / 100;
+  return `sold ${c.name} for ${p} §`;
+}
+
+/**
+ * Puts a spare chip into a socket (the chip that was there goes back to your spares).
+ * Returns the days of recovery, or a reason it cannot be done.
+ */
+export function installChip(a: Account, chipId: string, socket: SocketId): { days: number } | string {
+  const c = chipById(chipId);
+  const s = SOCKETS.find((x) => x.id === socket);
+  const i = a.hardware.spare.indexOf(chipId);
+  if (!c || !s || i < 0) return 'you have no such chip';
+  if (!s.fits.includes(c.kind)) return `a ${KINDS[c.kind].name} does not fit the ${s.name}`;
+  a.hardware.spare.splice(i, 1);
+  const old = a.hardware.installed[socket];
+  if (old) a.hardware.spare.push(old);
+  a.hardware.installed[socket] = chipId;
+  syncMemory(a);
+  return { days: c.surgery };
+}
+
+/** Takes a chip out into your spares. You cannot take out your memory or your only jack: you could not go online. */
+export function removeChip(a: Account, socket: SocketId): { days: number } | string {
+  const id = a.hardware.installed[socket];
+  const c = id ? chipById(id) : undefined;
+  if (!id || !c) return 'the socket is empty';
+  if (c.kind === 'memory') return 'without memory you cannot go online: swap it for another memory chip instead';
+  const jacks = Object.values(a.hardware.installed).filter((x) => x && chipById(x)?.kind === 'jack').length;
+  if (c.kind === 'jack' && jacks <= 1) return 'without a jack you cannot go online: swap it for another jack instead';
+  delete a.hardware.installed[socket];
+  a.hardware.spare.push(id);
+  return { days: REMOVE_DAYS };
+}
+
 /** Starting programs that do not fit in the starting memory: they wait in storage. */
 const START_STORED = ['Sparrow 1.0', 'Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mimic 1.0', 'Skimmer 1.0'];
 
-function fresh(): Account {
+/** A new game's account. */
+export function fresh(): Account {
   const programs = STARTING_PROGRAMS.map((p) => ({ ...p }));
-  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {}, version: SAVE_VERSION };
+  return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {}, hardware: newHardware(), version: SAVE_VERSION };
 }
 
 const SAVE_VERSION = 2;
@@ -181,6 +252,8 @@ function migrate(a: Account): Account {
   if (typeof a.code !== 'string' || !a.code) a.code = newGameCode();
   if (!a.avatar || typeof a.avatar.icon !== 'string') a.avatar = { ...DEFAULT_AVATAR };
   if (!a.customIcons || typeof a.customIcons !== 'object') a.customIcons = {};
+  if (!a.hardware || typeof a.hardware !== 'object') a.hardware = newHardware();
+  if (!a.hardware.bought) a.hardware.bought = { day: 0, ids: [] };
   if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id);
   // Unload from the end until what is loaded fits.
   while (a.loaded.length && usedMemory(loadedPrograms(a)) > a.memory) a.loaded.pop();

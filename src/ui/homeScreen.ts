@@ -3,6 +3,7 @@ import type { NetworkSeed } from '../sim/generate';
 import { sats } from '../sim/money';
 import { bugFixDays, devDays, MAX_BUGS, MAX_DEV_RATING, RARITY_TRAITS, type DevProject } from '../sim/development';
 import { cleanGameCode, SKILLS, xpToNext } from '../sim/progression';
+import { renderHardware, type HardwareActions, type HardwareView } from './hardwareView';
 import { AVATAR_ICONS, ICON_POOLS, MENU_ICONS, iconSvg, programIcon, randomIcon } from './icons';
 import { showIconPicker } from './iconPicker';
 import { showProgramInfo } from './programInfo';
@@ -45,6 +46,8 @@ export interface HomeActions {
   setAvatar(icon: string, color: string, body: string): void;
   /** Opens the skill choice for the level ups not picked yet; `done` runs after. */
   pickSkills(done: () => void): void;
+  /** Hardware tab and market (click and changed are filled in by the screen). */
+  hardware: Omit<HardwareActions, 'click' | 'changed'>;
   /** Software tab: the programs in memory (in order) and in storage, and moving them by drag and drop. */
   software: {
     list(): { loaded: Program[]; stored: Program[]; used: number; memory: number };
@@ -75,7 +78,9 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
  */
 export class HomeScreen {
   private chosen: Choice | undefined;
-  private open: 'networks' | 'contracts' | 'software' | 'character' | null = null;
+  private open: 'networks' | 'contracts' | 'software' | 'hardware' | 'character' | null = null;
+  /** The Hardware tab's socket, market toggle and last message. */
+  private hwView: HardwareView = { sel: 'hippocampus', market: false, line: '' };
   /** What the last stretch of development did, shown under the project. */
   private devLines: string[] = [];
   private devDone: Program | undefined;
@@ -86,6 +91,8 @@ export class HomeScreen {
   private readonly main: HTMLElement;
   /** The Software tab takes the whole left side while it is open. */
   private readonly soft: HTMLElement;
+  /** The Hardware tab (your brain and its implants) also takes the whole left side. */
+  private readonly hard: HTMLElement;
   readonly gear: HTMLElement;
 
   constructor(
@@ -96,9 +103,11 @@ export class HomeScreen {
     root.innerHTML = `
       <section class="home-gear" aria-label="Your gear"></section>
       <section class="home-soft" aria-label="Software" hidden></section>
+      <section class="home-soft home-hard" aria-label="Hardware" hidden></section>
       <section class="home-main"></section>`;
     this.gear = root.querySelector('.home-gear')!;
-    this.soft = root.querySelector('.home-soft')!;
+    this.soft = root.querySelector('.home-soft:not(.home-hard)')!;
+    this.hard = root.querySelector('.home-hard')!;
     this.main = root.querySelector('.home-main')!;
     this.render();
   }
@@ -130,18 +139,20 @@ export class HomeScreen {
         <button type="button" class="home-btn${this.open === 'networks' ? ' is-open' : ''}" data-act="networks">Known networks${iconSvg(MENU_ICONS.networks, 'menu-icon')}</button>
         <button type="button" class="home-btn${this.open === 'contracts' ? ' is-open' : ''}" data-act="contracts"${locked ? ` disabled title="Needs reputation ${CONTRACT_REPUTATION}"` : ''}>Choose contract${iconSvg(MENU_ICONS.contracts, 'menu-icon')}${locked ? ` <span class="home-lock">(rep. ${CONTRACT_REPUTATION})</span>` : ''}</button>
         <button type="button" class="home-btn${this.open === 'software' ? ' is-open' : ''}" data-act="software">Software${iconSvg(MENU_ICONS.software, 'menu-icon')}</button>
+        <button type="button" class="home-btn${this.open === 'hardware' ? ' is-open' : ''}" data-act="hardware">Hardware${iconSvg(MENU_ICONS.hardware, 'menu-icon is-flipped')}</button>
         <button type="button" class="home-btn${this.open === 'character' ? ' is-open' : ''}" data-act="character">Character${iconSvg(this.actions.avatar().icon, 'menu-icon')}${this.actions.character().picks ? ' <span class="home-lock">(skill to pick)</span>' : ''}</button>
         <button type="button" class="home-btn" data-act="enter"${this.chosen ? '' : ' disabled title="Pick a network or a contract first"'}>Enter the network${iconSvg(MENU_ICONS.enter, 'menu-icon')}</button>
       </nav>
       <div class="home-active">chosen network: ${this.label()}</div>
       <div class="home-list"></div>`;
-    for (const which of ['networks', 'contracts', 'software', 'character'] as const) {
+    for (const which of ['networks', 'contracts', 'software', 'hardware', 'character'] as const) {
       this.main.querySelector(`[data-act="${which}"]`)!.addEventListener('click', () => {
         this.actions.click();
         this.open = this.open === which ? null : which;
         this.devLines = [];
         this.devDone = undefined;
         this.fixLine = '';
+        this.hwView.line = '';
         this.render();
       });
     }
@@ -153,10 +164,13 @@ export class HomeScreen {
     });
     const list = this.main.querySelector('.home-list')!;
     const software = this.open === 'software';
-    this.root.classList.toggle('is-software', software);
-    this.gear.hidden = software;
+    const hardware = this.open === 'hardware';
+    this.root.classList.toggle('is-software', software || hardware);
+    this.gear.hidden = software || hardware;
     this.soft.hidden = !software;
+    this.hard.hidden = !hardware;
     if (software) this.renderSoftware();
+    if (hardware) renderHardware(this.hard, { ...this.actions.hardware, click: () => this.actions.click(), changed: () => this.render() }, this.hwView);
     const card = (taken: boolean, html: string, pick: () => Choice) => {
       const el = document.createElement('div');
       el.className = `contract-card${taken ? ' is-taken' : ''}`;

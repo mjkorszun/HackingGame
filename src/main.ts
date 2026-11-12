@@ -9,7 +9,8 @@ import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
 import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, usedMemory, type Program, type ProgramType } from './sim/programs';
-import { loadAccount, loadedPrograms, nextProgramId, passDay, placeProgram, saveAccount, toggleLoaded } from './ui/account';
+import { buyChip, installChip, loadAccount, loadedPrograms, nextProgramId, passDay, placeProgram, removeChip, saveAccount, sellChip, toggleLoaded } from './ui/account';
+import { chipById } from './sim/implants';
 import { showRunSummary } from './ui/runSummary';
 import { showSkillPick } from './ui/skillPick';
 import { addXp, xpToNext } from './sim/progression';
@@ -304,6 +305,36 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       return `${days} days fixing ${p.name}: the ${bug} bug is gone`;
     },
   },
+  hardware: {
+    state: () => {
+      const h = account.hardware;
+      return { installed: h.installed, spare: h.spare, sats: account.sats, day: account.day, code: account.code, bought: h.bought.day === account.day ? h.bought.ids : [] };
+    },
+    buy: (id, price) => {
+      const line = buyChip(account, id, price);
+      saveAccount(account);
+      renderHomeGear();
+      return line;
+    },
+    sell: (id) => {
+      const line = sellChip(account, id);
+      saveAccount(account);
+      renderHomeGear();
+      return line;
+    },
+    install: (id, socket) => {
+      const name = chipById(id)?.name ?? id;
+      const r = installChip(account, id, socket);
+      if (typeof r === 'string') return r;
+      return afterSurgery(r.days, `${name} is in. you spent ${r.days} day${r.days === 1 ? '' : 's'} recovering from the surgery`);
+    },
+    remove: (socket) => {
+      const name = chipById(account.hardware.installed[socket] ?? '')?.name ?? 'the chip';
+      const r = removeChip(account, socket);
+      if (typeof r === 'string') return r;
+      return afterSurgery(r.days, `${name} is out and waits in your spare chips. ${r.days} day${r.days === 1 ? '' : 's'} to recover`);
+    },
+  },
   dev: {
     project: () => account.project,
     start: (type, rating, name, icon, color, body) => {
@@ -338,6 +369,16 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
     },
   },
 });
+/** Recovering from surgery takes days like any other work: skimmers pay out, and may be found. */
+function afterSurgery(days: number, line: string): string {
+  passDay(account, Math.random, days);
+  saveAccount(account);
+  homeState.day = account.day;
+  homeState.news = account.news;
+  renderHomeGear();
+  return line;
+}
+
 function renderHomeGear(): void {
   const loaded = loadedPrograms(account);
   renderDeck(home.gear, { programs: loaded, memorySlots: account.memory, loot: [], privileges: new Set(), keysFound: false }, account.sats, {
