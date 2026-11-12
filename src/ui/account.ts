@@ -77,8 +77,32 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
 }
 
+/** The programs in memory, in the order the player set. */
 export function loadedPrograms(a: Account): Program[] {
-  return a.programs.filter((p) => a.loaded.includes(p.id));
+  return a.loaded.map((id) => a.programs.find((p) => p.id === id)).filter((p) => p !== undefined);
+}
+
+/**
+ * Drag and drop in the Software tab: puts a program into memory at a place in the order
+ * (or moves it there if it is already loaded), or takes it out of memory when `index` is null.
+ * Returns false when it does not fit in memory.
+ */
+export function placeProgram(a: Account, id: string, index: number | null): boolean {
+  const p = a.programs.find((x) => x.id === id);
+  if (!p) return false;
+  const was = a.loaded.indexOf(id);
+  if (index === null) {
+    if (was >= 0) a.loaded.splice(was, 1);
+    return true;
+  }
+  if (was < 0 && usedMemory(loadedPrograms(a)) + programSize(p) > a.memory) return false;
+  let at = Math.max(0, Math.min(index, a.loaded.length));
+  if (was >= 0) {
+    a.loaded.splice(was, 1);
+    if (was < at) at--;
+  }
+  a.loaded.splice(at, 0, id);
+  return true;
 }
 
 /** First free program id number across everything the player owns. */

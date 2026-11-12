@@ -965,3 +965,25 @@ describe('game code', () => {
     expect(cleanGameCode('ab')).toBe('');
   });
 });
+
+describe('software tab', () => {
+  it('drag and drop loads at a place, reorders, unloads, and refuses what does not fit', async () => {
+    const { placeProgram, loadedPrograms } = await import('../ui/account');
+    const programs = [
+      { id: 'a', type: 'hide', name: 'A', rating: 1 },
+      { id: 'b', type: 'scan', name: 'B', rating: 1 },
+      { id: 'c', type: 'decrypt', name: 'C', rating: 1 },
+      { id: 'd', type: 'mapper', name: 'D', rating: 3 },
+    ] as const;
+    const a = { programs: programs.map((p) => ({ ...p })), loaded: ['a', 'b'], memory: 130 } as unknown as Parameters<typeof placeProgram>[0];
+    expect(placeProgram(a, 'c', 0)).toBe(true); // c (50) in front: 40 + 30 + 50 = 120
+    expect(loadedPrograms(a).map((p) => p.id)).toEqual(['c', 'a', 'b']);
+    expect(placeProgram(a, 'c', 3)).toBe(true); // moved to the end
+    expect(a.loaded).toEqual(['a', 'b', 'c']);
+    expect(placeProgram(a, 'b', 0)).toBe(true);
+    expect(a.loaded).toEqual(['b', 'a', 'c']);
+    expect(placeProgram(a, 'd', 1)).toBe(false); // does not fit
+    expect(placeProgram(a, 'a', null)).toBe(true);
+    expect(a.loaded).toEqual(['b', 'c']);
+  });
+});

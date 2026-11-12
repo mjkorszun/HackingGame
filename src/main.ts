@@ -8,8 +8,8 @@ import { ContextMenu } from './ui/contextMenu';
 import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
 import { fileActions } from './sim/files';
-import { FILE_PROGRAMS, PROGRAM_TYPES, type Program, type ProgramType } from './sim/programs';
-import { loadAccount, loadedPrograms, nextProgramId, passDay, saveAccount, toggleLoaded } from './ui/account';
+import { FILE_PROGRAMS, PROGRAM_TYPES, usedMemory, type Program, type ProgramType } from './sim/programs';
+import { loadAccount, loadedPrograms, nextProgramId, passDay, placeProgram, saveAccount, toggleLoaded } from './ui/account';
 import { showRunSummary } from './ui/runSummary';
 import { showSkillPick } from './ui/skillPick';
 import { addXp, xpToNext } from './sim/progression';
@@ -269,6 +269,19 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
     saveAccount(account);
   },
   pickSkills: (done) => pickSkills(done),
+  software: {
+    list: () => {
+      const loaded = loadedPrograms(account);
+      return { loaded, stored: account.programs.filter((p) => !account.loaded.includes(p.id)), used: usedMemory(loaded), memory: account.memory };
+    },
+    place: (id, index) => {
+      if (!placeProgram(account, id, index)) return false;
+      saveAccount(account);
+      renderHomeGear();
+      return true;
+    },
+    refused: () => sfx.play('error'),
+  },
   dev: {
     project: () => account.project,
     start: (type, rating, name, icon, color, body) => {
