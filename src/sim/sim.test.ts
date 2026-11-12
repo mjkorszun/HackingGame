@@ -987,3 +987,51 @@ describe('software tab', () => {
     expect(a.loaded).toEqual(['b', 'c']);
   });
 });
+
+describe('signature', () => {
+  it('a failed query raises it; a fight burns it; burned agents are hostile on sight', async () => {
+    const { SIGNATURE_COOL } = await import('./game');
+    const g = new Game(testSystem);
+    g.autoPause = false;
+    g.setPaused(false);
+    g.agents.splice(0);
+    expect(g.signature).toBe(0);
+    g.exposeSignature(1, 'test');
+    expect(g.signature).toBe(1);
+    g.exposeSignature(3, 'fight');
+    expect(g.signature).toBe(3);
+    // Out of sight it cools to 2, then to 1, and stays there.
+    run(g, SIGNATURE_COOL * 5);
+    expect(g.signature).toBe(1);
+  });
+
+  it('mask clears it only when no agent sees you', () => {
+    const g = new Game(testSystem, () => 0.5, [{ id: 'm1', type: 'mask', name: 'Chameleon 1.0', rating: 1 }]);
+    g.exposeSignature(3, 'fight');
+    const watcher = g.agents[0];
+    if (watcher) {
+      watcher.node = g.currentNode;
+      watcher.hop = null;
+      expect(g.runProgram('mask')).toBe(false);
+      expect(g.signature).toBe(3);
+    }
+    g.agents.splice(0);
+    expect(g.runProgram('mask')).toBe(true);
+    expect(g.signature).toBe(0);
+  });
+
+  it('with a burned signature an agent that meets you turns hostile at once', () => {
+    const g = new Game(testSystem);
+    g.autoPause = false;
+    g.setPaused(false);
+    const a = g.agents[0];
+    expect(a).toBeDefined();
+    g.agents.splice(1);
+    g.exposeSignature(3, 'fight');
+    a.node = g.currentNode;
+    a.hop = null;
+    a.mood = 'trusting';
+    run(g, 1);
+    expect(a.mood).toBe('hostile');
+  });
+});

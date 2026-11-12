@@ -4,7 +4,7 @@ import { apparentContent, clickAction, isEmpty, CONTENT_LABEL, fileActions, PROT
 import { Tooltip, type TipLine } from './tooltip';
 import { FILE_PROGRAMS, type FileProgram, type Program } from '../sim/programs';
 import type { Game } from '../sim/game';
-import { TICKS_PER_SECOND } from '../sim/game';
+import { SIGNATURE_NAMES, TICKS_PER_SECOND } from '../sim/game';
 import type { FxTarget, NodeDef, NodeKind, SimEvent } from '../sim/types';
 import type { ContextMenu } from './contextMenu';
 import type { Sound } from './sound';
@@ -236,6 +236,7 @@ export class NetworkView {
   private readonly allyEls = new Map<string, { main: SVGGElement; mini: SVGGElement; hp: SVGRectElement }>();
   private allyPos = new Map<string, { x: number; y: number }>();
   private alarmEl!: HTMLDivElement;
+  private sigEl!: HTMLDivElement;
   private integrityEl!: HTMLDivElement;
   private queryBox!: HTMLDivElement;
   private queryKey = '';
@@ -263,6 +264,9 @@ export class NetworkView {
     alarm.className = 'alarm alarm-0';
     alarm.textContent = 'ALARM: GREEN';
     this.alarmEl = alarm;
+    this.sigEl = document.createElement('div');
+    this.sigEl.className = 'alarm signature alarm-0';
+    this.sigEl.textContent = 'SIGNATURE: UNKNOWN';
     this.integrityEl = document.createElement('div');
     this.integrityEl.className = 'integrity';
     this.integrityEl.innerHTML = '<span class="integrity-label">INTEGRITY</span><span class="integrity-bar"><span class="integrity-fill"></span></span>';
@@ -299,7 +303,7 @@ export class NetworkView {
     vol.addEventListener('input', () => actions.sound.setVolume(Number(vol.value) / 100));
     vol.addEventListener('change', () => actions.sound.play('hop'));
     soundBox.append(this.muteBtn, vol);
-    this.header.append(title, alarm, this.integrityEl, soundBox, this.clock, this.autoBtn, this.pauseBtn);
+    this.header.append(title, alarm, this.sigEl, this.integrityEl, soundBox, this.clock, this.autoBtn, this.pauseBtn);
 
     this.stage = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stage', role: 'img' });
     this.stage.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -422,6 +426,18 @@ export class NetworkView {
       this.root.dataset.alarm = String(lvl);
       this.alarmEl.textContent = `ALARM: ${['GREEN', 'YELLOW', 'ORANGE', 'RED'][lvl]}`;
     }
+    const sig = this.game.signature;
+    if (this.sigEl.dataset.level !== String(sig)) {
+      this.sigEl.dataset.level = String(sig);
+      this.sigEl.className = `alarm signature alarm-${sig}`;
+      this.sigEl.textContent = `SIGNATURE: ${SIGNATURE_NAMES[sig].toUpperCase()}`;
+      this.sigEl.title = [
+        'how well agents know you. unknown: nobody suspects you',
+        'noticed: agents are a bit wary',
+        'suspected: agents are on guard',
+        'burned: every agent that sees you attacks at once',
+      ][sig] + '. it cools down while no agent sees you; Mask resets it';
+    }
     const integ = `Integrity ${this.game.integrity}/${this.game.maxIntegrity}: at 0 you are thrown out of the net`;
     if (this.integrityEl.title !== integ) {
       this.integrityEl.title = integ;
@@ -531,7 +547,10 @@ export class NetworkView {
       els.main.classList.toggle('is-querying', g.query?.agentId === a.id);
       els.main.classList.toggle('is-hostile', a.mood === 'hostile');
       // Calm (patrol), unsure (asking you, or you failed it once), alert (system alarm orange or red), hostile.
-      const attitude = a.mood === 'hostile' ? 'hostile' : g.query?.agentId === a.id || a.strikes > 0 ? 'unsure' : g.alarm >= 2 && a.mood !== 'trusting' ? 'alert' : 'calm';
+      // The ring shows the warier of: what the agent itself is doing, and how known your signature is.
+      const own = a.mood === 'hostile' ? 3 : g.query?.agentId === a.id || a.strikes > 0 ? 1 : 0;
+      const sigLevel = a.mood === 'trusting' ? 0 : g.signature;
+      const attitude = (['calm', 'unsure', 'alert', 'hostile'] as const)[Math.max(own, sigLevel)];
       if (els.main.dataset.attitude !== attitude) els.main.dataset.attitude = attitude;
       els.main.classList.toggle('is-trusting', a.mood === 'trusting');
       els.main.classList.toggle('is-silenced', a.silenced);

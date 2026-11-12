@@ -187,6 +187,7 @@ function runCommand(raw: string): void {
     case 'skimmer':
     case 'mapper':
     case 'scan':
+    case 'mask':
       if (!game.runProgram(cmd.name, arg)) sfx.play('error');
       break;
     case 'map':
