@@ -42,7 +42,7 @@ export function showRunSummary(report: RunReport, balance: number, before: XpBef
         </div>
       </div>
       <div class="rs-account"><span>YOUR ACCOUNT</span><span class="rs-num">${sats(balance)}</span></div>
-      ${health ? `<div class="rs-health${health.loss ? ' is-hurt' : ''}"><span>${health.loss ? `${health.kicked ? 'thrown out of the net' : 'you left badly hurt'}: brain damage -${health.loss}% health` : 'no brain damage'}</span><span class="rs-num">health ${health.now}%</span></div>` : ''}
+      ${health ? `<div class="rs-health${health.loss ? ' is-hurt' : ''}"><span>${health.loss ? `${health.kicked ? 'thrown out of the net: ' : ''}-${health.loss}%` : 'unhurt'}</span><span class="rs-num">health ${health.now}%</span></div>` : ''}
       <h3>experience</h3>
       <table>${report.xpLines.length ? report.xpLines.map((l) => `<tr><td>${esc(l.what)}</td><td class="rs-num">+${l.xp} XP</td></tr>`).join('') : '<tr><td class="rs-dim">nothing this time</td></tr>'}</table>
       <div class="xp-row"><span class="xp-level">level ${before.level}</span><span class="xp-text">${before.xp} / ${xpToNext(before.level)} XP</span></div>

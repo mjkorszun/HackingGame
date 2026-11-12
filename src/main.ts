@@ -136,6 +136,9 @@ function pickSkills(done: () => void): void {
     saveAccount(account);
     sfx.play('menuItem');
     pickSkills(done);
+  }, () => {
+    sfx.play('menuItem');
+    done();
   });
 }
 
@@ -287,20 +290,24 @@ const homeState = { day: account.day, reputation: account.reputation, networks: 
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 const home = new HomeScreen(document.getElementById('home')!, homeState, {
-  enter: (choice) => enterNetwork(choice),
+  enter: (choice) => {
+    if (!dayJob) enterNetwork(choice);
+  },
   click: () => sfx.play('menuItem'),
   character: () => ({ level: account.level, xp: account.xp, skills: account.skills, picks: account.skillPicks, code: account.code, health: account.health }),
   rest: (days) => {
+    if (dayJob) return;
     const before = account.day;
     rest(account, days);
     saveAccount(account);
-    showDaysPassing(before);
+    showDaysPassing(before, `resting ${days} day${days === 1 ? '' : 's'}`);
     homeState.news = account.news;
     renderHomeGear();
   },
   contract: () => account.contract,
   day: () => account.day,
   money: () => account.sats,
+  dayJob: () => dayJob,
   setCode: (code) => {
     account.code = code;
     saveAccount(account);
@@ -340,7 +347,7 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
     },
     fix: (id, index) => {
       const p = account.programs.find((x) => x.id === id);
-      if (!p?.bugs?.[index]) return undefined;
+      if (!p?.bugs?.[index] || dayJob) return undefined;
       const days = bugFixDays(p);
       const bug = p.bugs[index].split(':')[0];
       fixBug(p, index);
@@ -348,7 +355,7 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       const before = account.day;
       passDay(account, Math.random, days);
       saveAccount(account);
-      showDaysPassing(before);
+      showDaysPassing(before, `fixing ${p.name}`);
       homeState.news = account.news;
       renderHomeGear();
       return `${days} days fixing ${p.name}: the ${bug} bug is gone`;
@@ -372,16 +379,18 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       return line;
     },
     install: (id, socket) => {
+      if (dayJob) return 'wait: you are still recovering';
       const name = chipById(id)?.name ?? id;
       const r = installChip(account, id, socket);
       if (typeof r === 'string') return r;
-      return afterSurgery(r.days, `${name} is in. you spent ${r.days} day${r.days === 1 ? '' : 's'} recovering from the surgery`);
+      return afterSurgery(r.days, `${name} is in. you spent ${r.days} day${r.days === 1 ? '' : 's'} recovering from the surgery`, `surgery: putting in ${name}`);
     },
     remove: (socket) => {
+      if (dayJob) return 'wait: you are still recovering';
       const name = chipById(account.hardware.installed[socket] ?? '')?.name ?? 'the chip';
       const r = removeChip(account, socket);
       if (typeof r === 'string') return r;
-      return afterSurgery(r.days, `${name} is out and waits in your spare chips. ${r.days} day${r.days === 1 ? '' : 's'} to recover`);
+      return afterSurgery(r.days, `${name} is out and waits in your spare chips. ${r.days} day${r.days === 1 ? '' : 's'} to recover`, `surgery: taking out ${name}`);
     },
   },
   dev: {
@@ -391,9 +400,16 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       account.project = { ...newProject(type, rating, name), icon, color };
       saveAccount(account);
     },
+    cancel: () => {
+      if (dayJob || !account.project) return;
+      account.news.unshift(`you abandoned ${account.project.name}: the ${account.project.daysSpent} days spent on it are lost`);
+      account.project = undefined;
+      saveAccount(account);
+      homeState.news = account.news;
+    },
     work: (mode) => {
       const p = account.project;
-      if (!p) return { lines: [] };
+      if (!p || dayJob) return { lines: [] };
       const days = mode === 'day' ? 1 : mode === 'week' ? 7 : p.daysLeft;
       const r = work(p, days);
       // Days spent writing code pass like any other: skimmers pay out, and may be found.
@@ -405,51 +421,67 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
         program = finishProgram(p, `p${nextProgramId(account)}`, 'you');
         program.icon = p.icon ?? randomIcon(program.type);
         if (p.color) program.color = p.color;
-        account.programs.push(program);
         account.project = undefined;
         lines.push(`${p.name} is done`);
         if (program.bugs?.length) lines.push(`it has ${program.bugs.length} bug${program.bugs.length === 1 ? '' : 's'}: use it as it is, or fix ${program.bugs.length === 1 ? 'it' : 'them'} in Software (${bugFixDays(program)} days a bug)`);
       }
       saveAccount(account);
-      showDaysPassing(before);
+      // The finished program reaches storage (and the news) only when the last day has gone by.
+      const finished = program;
+      showDaysPassing(before, `developing ${p.name}`, finished && (() => {
+        account.programs.push(finished);
+        account.news.unshift(`${finished.name} is done (${finished.rarity}${finished.bugs?.length ? `, ${finished.bugs.length} bug${finished.bugs.length === 1 ? '' : 's'}` : ''}): it waits in your storage`);
+        saveAccount(account);
+        homeState.news = account.news;
+        renderHomeGear();
+      }));
       homeState.news = account.news;
       renderHomeGear();
       return { lines, program };
     },
   },
 });
+/** Days passing at the base right now, shown as a progress bar: what is going on and how far it is. */
+let dayJob: { label: string; total: number; done: number } | null = null;
+
 /**
  * Days spent at the base tick by one at a time, a second apart: a short tick for each day and a longer
- * tone on the last one. The account has already moved on; only the day shown catches up. The main
- * screen ignores clicks meanwhile.
+ * tone on the last one. The account has already moved on; only the day shown catches up. Meanwhile the
+ * screen still scrolls and works, but nothing else that costs days can start.
  */
-function showDaysPassing(from: number): void {
+function showDaysPassing(from: number, label: string, onDone?: () => void): void {
   const to = account.day;
-  const root = document.getElementById('home')!;
   homeState.day = from;
   if (to <= from) {
     homeState.day = to;
+    onDone?.();
     return;
   }
-  root.classList.add('is-days');
-  let day = from;
+  dayJob = { label, total: to - from, done: 0 };
   const step = () => {
-    day++;
-    homeState.day = day;
-    home.refresh();
-    sfx.play(day === to ? 'dayDone' : 'dayTick');
-    if (day < to) window.setTimeout(step, 1000);
-    else root.classList.remove('is-days');
+    if (!dayJob) return;
+    dayJob.done++;
+    homeState.day = from + dayJob.done;
+    const last = dayJob.done >= dayJob.total;
+    sfx.play(last ? 'dayDone' : 'dayTick');
+    if (last) {
+      dayJob = null;
+      onDone?.();
+      home.refresh();
+    } else {
+      home.tickDays();
+      window.setTimeout(step, 1000);
+    }
   };
   window.setTimeout(step, 400);
 }
 
 /** Recovering from surgery takes days like any other work: skimmers pay out, and may be found. */
-function afterSurgery(days: number, line: string): string {
+function afterSurgery(days: number, line: string, label = 'surgery'): string {
   const before = account.day;
   passDay(account, Math.random, days);
   saveAccount(account);
-  showDaysPassing(before);
+  showDaysPassing(before, label);
   homeState.news = account.news;
   renderHomeGear();
   return line;

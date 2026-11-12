@@ -100,6 +100,10 @@ export interface Ally {
   dest?: string | null;
   /** Scout: nodes it has been to. */
   visited?: Set<string>;
+  /** Scout: what it has read so far (node and the agents there). You learn it only when it gets back to you. */
+  findings?: { node: string; agents: string[] }[];
+  /** Scout: it has read the node it went for and flies back to you once it is done reading. */
+  homeward?: boolean;
   /** Stays in this system between runs (a planted skimmer): not from your memory, takes no orders. */
   resident?: boolean;
 }
@@ -786,6 +790,7 @@ export class Game {
   private tryUnload(ally: Ally): boolean {
     if (ally.hop || this.move || ally.node !== this.currentNode) return false;
     this.allies.splice(this.allies.indexOf(ally), 1);
+    if (ally.findings?.length) this.scoutReports(ally);
     this.released.delete(ally.program.id);
     this.deckVersion++;
     this.events.push({ type: 'shot', from: { kind: 'ally', id: ally.id }, to: { kind: 'player' }, hit: false, hostile: false, recall: true });
@@ -819,7 +824,7 @@ export class Game {
           continue;
         }
       }
-      if (ally.program.type === 'shield') continue;
+      if (ally.program.type === 'shield' || ally.program.type === 'scout') continue;
       const here = this.agentsIn(ally.node);
       const enemy = here.find((x) => x.id === ally.target) ?? (this.query ? here.find((x) => x.id === this.query!.agentId) : undefined) ?? here.find((x) => x.mood === 'hostile');
       if (!enemy || --ally.attackLeft > 0) continue;
@@ -853,21 +858,28 @@ export class Game {
       }
       dest = node.id === this.currentNode ? null : node.id;
     }
-    const ally: Ally = { id: `y${this.nextAllyId++}`, program, hp: 10 + 5 * program.rating, maxHp: 10 + 5 * program.rating, node: this.currentNode, hop: null, order: 'explore', attackLeft: 0, target: null, dest, visited: new Set([this.currentNode]) };
+    const ally: Ally = { id: `y${this.nextAllyId++}`, program, hp: 10 + 5 * program.rating, maxHp: 10 + 5 * program.rating, node: this.currentNode, hop: null, order: 'explore', attackLeft: 0, target: null, dest, visited: new Set([this.currentNode]), findings: [] };
     this.allies.push(ally);
     this.released.add(program.id);
     this.deckVersion++;
     this.events.push({ type: 'program', programType: 'scout' });
     this.outcome({ kind: 'ally', id: ally.id }, true, 'SCOUT OUT');
-    this.log(`${program.name} sent${dest ? ` to ${this.nameOf(dest)}` : ' to explore'}. it flies on until an agent catches it`, 'info');
+    this.log(`${program.name} sent${dest ? ` to ${this.nameOf(dest)}` : ' to the nearest unknown node'}. it reports when it is back with you`, 'info');
     this.actionStarted();
     return true;
   }
 
-  /** A scout reads its node for a moment, then flies on: to where it was sent, then to the nearest node not yet identified. */
+  /**
+   * A scout reads its node for a moment, then flies on: to where it was sent, or to the nearest node not yet identified.
+   * Once it has read that node it flies back to you, reports, and goes back into your memory.
+   */
   private scoutStep(ally: Ally): void {
     if (ally.attackLeft > 0) {
       ally.attackLeft--;
+      return;
+    }
+    if (ally.homeward) {
+      this.scoutHome(ally);
       return;
     }
     let next: string | undefined;
@@ -894,11 +906,34 @@ export class Game {
       }
     }
     if (!next) {
-      ally.order = 'stay';
-      this.log(`${ally.program.name}: nothing left to find around here. it waits (follow / unload)`, 'system');
+      if (!ally.findings?.length) this.log(`${ally.program.name}: nothing left to find around here. it comes back`, 'system');
+      this.scoutHome(ally);
       return;
     }
     ally.hop = { to: next, elapsed: 0 };
+  }
+
+  /** The scout is done: it flies back to you (like unload) and reports when it gets there. */
+  private scoutHome(ally: Ally): void {
+    ally.order = 'unload';
+    ally.homeward = false;
+    ally.dest = null;
+    this.tryUnload(ally);
+  }
+
+  /** A scout back with you: you learn what it read on the way. */
+  private scoutReports(ally: Ally): void {
+    let found = 0;
+    for (const f of ally.findings!) {
+      if (!this.isIdentified(f.node)) found++;
+      this.identified.add(f.node);
+      this.discoverAround(f.node);
+      const agents = this.agents.filter((a) => f.agents.includes(a.id));
+      for (const a of agents) if (a.known === 'none') a.known = 'partial';
+      this.log(`${ally.program.name}: ${this.nameOf(f.node)} (${this.kindOf(f.node)})${f.agents.length ? `, agents seen: ${agents.map((a) => `${a.name} (${a.typeName})`).join(', ') || 'gone since'}` : ', no agents'}`, 'info');
+    }
+    if (found) this.outcome({ kind: 'player' }, true, found > 1 ? `FOUND ${found}` : 'FOUND');
+    ally.findings = [];
   }
 
   /** A scout reaches a node: an agent may catch it; otherwise it identifies the node and reads the agents there. */
@@ -920,12 +955,9 @@ export class Game {
       return;
     }
     const isNew = !this.isIdentified(id);
-    this.identified.add(id);
-    this.discoverAround(id);
-    const agents = this.agentsIn(id);
-    for (const a of agents) if (a.known === 'none') a.known = 'partial';
-    if (isNew) this.outcome({ kind: 'ally', id: ally.id }, true, 'FOUND');
-    this.log(`${ally.program.name}: ${this.nameOf(id)} (${this.kindOf(id)})${agents.length ? `, agents: ${agents.map((a) => `${a.name} (${a.typeName})`).join(', ')}` : ', no agents'}`, 'info');
+    ally.findings!.push({ node: id, agents: this.agentsIn(id).map((a) => a.id) });
+    // The node it went for: read it, then fly back.
+    if (ally.dest ? ally.dest === id : isNew) ally.homeward = true;
   }
 
   private allyHits(ally: Ally, a: Agent): void {

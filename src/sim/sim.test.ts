@@ -769,22 +769,30 @@ describe('agents', () => {
     expect(g.integrity).toBeLessThan(g.maxIntegrity);
   });
 
-  it('a scout flies out, identifies nodes and reads agents until one catches it', () => {
+  it('a scout flies to a node, comes back to report, and goes back into memory; an agent may catch it', () => {
     const g = new Game({ ...testSystem, agents: [{ kind: 'warrior', node: 'orders' }] });
     g.autoPause = false;
     g.setPaused(false);
     (g as unknown as { d100: () => number }).d100 = () => 100; // never caught
     g.agents[0].stayLeft = 100_000;
     g.programs.push({ id: 'sc', type: 'scout', name: 'Kite 9', rating: 9 });
-    expect(g.scoutCommand('')).toBe(true);
-    expect(g.programState('sc')).toBe('out');
-    tick(g, 2000);
+    // Sweep out and back until it has read the Orders DB.
+    for (let trip = 0; trip < 6 && !g.isIdentified('orders'); trip++) {
+      expect(g.scoutCommand('')).toBe(true);
+      expect(g.programState('sc')).toBe('out');
+      let guard = 0;
+      while (!g.allies[0]?.homeward && guard++ < 500) tick(g, 1);
+      const read = g.allies[0].node;
+      // It has read the node, but you learn it only when it is back.
+      expect(g.isIdentified(read)).toBe(false);
+      tick(g, 500);
+      expect(g.allies.length).toBe(0);
+      expect(g.programState('sc')).not.toBe('out');
+      expect(g.isIdentified(read)).toBe(true);
+    }
     expect(g.isIdentified('orders')).toBe(true);
     expect(g.agents[0].known).not.toBe('none');
     (g as unknown as { d100: () => number }).d100 = () => 1; // caught on the next node with an agent
-    g.orderAlly('Kite 9', 'unload');
-    tick(g, 2000);
-    expect(g.allies.length).toBe(0);
     g.agents[0].node = 'edge';
     g.travelTo('gw');
     tick(g, 100);
