@@ -866,7 +866,7 @@ describe('skimmer and days', () => {
     expect(g.planted?.name).toBe('Skimmer 1.0');
     expect(g.allies.some((a) => a.resident && a.node === 'payments')).toBe(true);
     expect(g.runProgram('skimmer')).toBe(false); // one skimmer per gateway
-    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {} };
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: g.planted! }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } } };
     passDay(account, () => 0.99);
     expect(account.sats).toBeCloseTo(0.08);
     passDay(account, () => 0);
@@ -916,7 +916,7 @@ describe('software development', () => {
     const { newPizzeria } = await import('./generate');
     const { passDay } = await import('../ui/account');
     const net = newPizzeria(7);
-    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {} };
+    const account = { sats: 0, programs: [], loaded: [], memory: 500, day: 1, reputation: 0, networks: [net], skimmers: [{ netId: net.id, program: { id: 'p1', type: 'skimmer' as const, name: 'S', rating: 1, efficiency: 1, detection: 2 } }], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: 'TEST', avatar: { icon: 'hood', color: '#3dff7a' }, customIcons: {}, hardware: { installed: {}, spare: [], bought: { day: 0, ids: [] } } };
     passDay(account, () => 0.99, 7);
     expect(account.day).toBe(8);
     expect(account.sats).toBeCloseTo(0.56);
@@ -1033,5 +1033,38 @@ describe('signature', () => {
     a.mood = 'trusting';
     run(g, 1);
     expect(a.mood).toBe('hostile');
+  });
+});
+
+describe('hardware', () => {
+  it('has a long catalogue where same-size chips from different makers differ', async () => {
+    const { CATALOGUE } = await import('./implants');
+    expect(CATALOGUE.length).toBeGreaterThan(40);
+    const mem500 = CATALOGUE.filter((c) => c.kind === 'memory' && c.value === 500 && c.maker !== 'clinic issue');
+    expect(mem500.length).toBeGreaterThan(1);
+    expect(new Set(mem500.map((c) => JSON.stringify(c.sides))).size).toBeGreaterThan(1);
+  });
+
+  it('offers the same stock all day, and new stock the next day', async () => {
+    const { marketOffers } = await import('./implants');
+    expect(marketOffers('ABC', 3)).toEqual(marketOffers('ABC', 3));
+    expect(marketOffers('ABC', 3).map((o) => o.chip.id)).not.toEqual(marketOffers('ABC', 4).map((o) => o.chip.id));
+  });
+
+  it('buys, swaps memory in and sells the old chip', async () => {
+    const { CATALOGUE } = await import('./implants');
+    const { buyChip, installChip, sellChip, removeChip, fresh: newAccount } = await import('../ui/account');
+    const a = newAccount();
+    a.sats = 10000;
+    const big = CATALOGUE.find((c) => c.kind === 'memory' && c.value === 1000)!;
+    expect(buyChip(a, big.id, 100)).toMatch(/bought/);
+    expect(a.sats).toBe(9900);
+    expect(installChip(a, big.id, 'hippocampus')).toEqual({ days: big.surgery });
+    expect(a.memory).toBe(1000);
+    expect(a.hardware.spare).toEqual(['stock-memory']);
+    expect(typeof removeChip(a, 'hippocampus')).toBe('string');
+    expect(typeof removeChip(a, 'spine1')).toBe('string');
+    expect(sellChip(a, 'stock-memory')).toMatch(/sold/);
+    expect(a.hardware.spare).toEqual([]);
   });
 });

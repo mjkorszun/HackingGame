@@ -825,11 +825,11 @@ body {
 
 .brain .br-fine { stroke:#5fd889; stroke-width:1.3 }
 
-.brain .br-callosum { stroke:#3dff7a; stroke-width:1.6; fill:#9ff0bd }
+.brain .br-callosum { stroke:#3dff7a; stroke-width:1.6; fill:#2d7448 }
 
 .brain .br-septum { stroke:none; fill:#020c05 }
 
-.brain .br-fornix { stroke:#9ff0bd; stroke-width:4 }
+.brain .br-fornix { stroke:#3f9460; stroke-width:4 }
 
 .brain .br-thalamus,.brain .br-pituitary { stroke:#3dff7a; stroke-width:1.5; fill:#1b5a33 }
 
@@ -860,3 +860,21 @@ body {
 .hw-fit { margin: 4px 0 0 10px; }
 .hw-fit-name { color: var(--green); }
 .hw-fit-about { color: var(--grey); }
+
+.menu-icon.is-flipped { transform: scaleX(-1); }
+.hw-market-btn { margin-left: auto; padding: 4px 12px; font-size: 13px; letter-spacing: 1px; text-transform: none; }
+.hw-line { color: var(--yellow); margin: 0 0 8px; }
+.hw-note { margin: -4px 0 8px; }
+.hw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; align-items: start; }
+.hw-chip { padding: 8px 10px; border: 1px solid var(--green-faint); background: #020a05; display: flex; flex-direction: column; gap: 4px; }
+.hw-detail .hw-chip { margin: 6px 0; }
+.hw-chip-head { display: flex; justify-content: space-between; gap: 8px; font-weight: bold; }
+.hw-chip-value { color: var(--yellow); }
+.hw-chip-sub { color: var(--grey); font-size: 13px; }
+.hw-chip-sides { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+.hw-side-stat { color: #c8d4cc; }
+.hw-side-stat.is-good { color: #5dff8a; }
+.hw-side-stat.is-bad { color: var(--orange); }
+.hw-chip-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+.hw-surgery { color: #9fd0ff; }
+.hw-chip .home-btn { white-space: nowrap; padding: 3px 10px; font-size: 13px; letter-spacing: 0; text-transform: none; }
