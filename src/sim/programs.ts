@@ -1,6 +1,6 @@
 import type { Rarity } from './development';
 /** A program in the player's deck. */
-export const PROGRAM_TYPES = ['warrior', 'shield', 'scout', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'mapper', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge', 'mask'] as const;
+export const PROGRAM_TYPES = ['warrior', 'shield', 'scout', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge', 'mask'] as const;
 
 /** Programs used on one data file: evaluate f3, defuse f3, ... */
 export const FILE_PROGRAMS = ['evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge'] as const;
@@ -44,7 +44,7 @@ export interface Program {
 
 /** Base size in GB of a rating-1 program of each type (placeholder numbers). */
 const BASE_SIZE: Record<ProgramType, number> = {
-  warrior: 60, shield: 40, scout: 30, silence: 40, deceive: 50, hide: 40, analyze: 30, skimmer: 30, mapper: 50, scan: 30,
+  warrior: 60, shield: 40, scout: 30, silence: 40, deceive: 50, hide: 40, analyze: 30, skimmer: 30, scan: 30,
   evaluate: 20, identify: 20, defuse: 30, decrypt: 50, scrub: 30, forge: 40, mask: 40,
 };
 
@@ -58,28 +58,19 @@ export function usedMemory(list: Pick<Program, 'type' | 'rating'>[]): number {
   return list.reduce((sum, p) => sum + programSize(p), 0);
 }
 
-/** How long the mapper's eyes take to reach the next ring of nodes. */
-export const MAPPER_HOP_TICKS = 15;
+/** Scout: seconds before it can fly again, for one instance (placeholder). Better scouts will trade a longer wait for more skill. */
+export const SCOUT_COOLDOWN_S = 30;
+/** Scout: each instance after the first adds this share of the cooldown (placeholder: +45%). */
+export const SCOUT_EXTRA_PER_INSTANCE = 0.45;
+/** Placeholder: noise a scout launch makes in your node. Nothing reacts to noise yet. */
+export const SCOUT_NOISE = 30;
 
-/** Ticks before the mapper can run again (placeholder: 60 s), so it is used once at the start and rarely after. */
-export const MAPPER_COOLDOWN = 600;
-
-/** Placeholder: noise Mapper makes in the node it runs from. Nothing reacts to noise yet. */
-export const MAPPER_NOISE = 40;
-
-/**
- * Mapper's d100 chances against a system's encryption.
- * identify: chance to identify each hidden node it reaches.
- * extend: chance to look one more link further after each hop. Only a strong
- * program gets this: a very high rating in a weakly encrypted system can see the whole map.
- */
-export function mapperChances(rating: number, encryption: number): { identify: number; extend: number } {
-  const e = Math.max(1, encryption);
-  // Identifying a node next to you is easy; looking further is hard.
-  const identify = (100 * rating) / (rating + e / MAPPER_EASE);
-  const extend = (100 * rating) / (rating + e * MAPPER_EASE);
-  return { identify, extend };
+/** Ticks of cooldown after sending `instances` scouts at once. */
+export function scoutCooldown(instances: number): number {
+  return Math.round(SCOUT_COOLDOWN_S * 10 * (1 + SCOUT_EXTRA_PER_INSTANCE * Math.max(0, instances - 1)));
 }
 
-/** Mapper 3 vs encryption 2: 90% to identify, 20% to look one link further. */
-const MAPPER_EASE = 6;
+/** A scout's d100 chance to tell what a node is (placeholder: rating 1 = 50%, +15 per rating). */
+export function scoutChance(rating: number): number {
+  return Math.min(100, 35 + 15 * rating);
+}

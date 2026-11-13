@@ -18,6 +18,8 @@ export interface GearSource {
   keysFound: boolean;
   /** In a run: a program out as your agent, or destroyed for this run. */
   programState?(id: string): 'out' | 'lost' | null;
+  /** In a run: a program recharging, in ticks left of the whole wait. */
+  cooldownOf?(id: string): { left: number; total: number } | null;
 }
 
 export interface GearOptions {
@@ -86,6 +88,8 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
     const state = game.programState?.(p.id) ?? null;
     li.innerHTML = `${programIcon(p)}${esc(`${p.name.padEnd(18)} ${`${p.type} ${p.rating}`.padEnd(11)} ${String(programSize(p)).padStart(3)} GB`)}${state ? ` <span class="deck-state is-${state}">${state === 'out' ? 'OUT' : 'LOST'}</span>` : ''}`;
     if (state) li.classList.add(`is-${state}`);
+    // A program that recharges (the scout) shows how long it still needs as a draining bar.
+    if (opts.run && p.type === 'scout') li.insertAdjacentHTML('beforeend', ` <span class="deck-cd" data-cd="${esc(p.id)}" hidden><span class="deck-cd-fill"></span></span>`);
     if (opts.toggle) {
       // Main screen: left or right click opens the program's info, with Load / Unload in it.
       li.classList.add(stored ? 'is-stored' : 'is-loaded');
@@ -124,4 +128,16 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
     list.appendChild(head);
     for (const p of opts.stored) row(p, true);
   }
+}
+
+/** Moves the recharge bars of the gear panel (called every frame in a run). */
+export function updateCooldowns(root: HTMLElement, game: GearSource): void {
+  root.querySelectorAll<HTMLElement>('.deck-cd').forEach((bar) => {
+    const cd = game.cooldownOf?.(bar.dataset.cd!) ?? null;
+    bar.hidden = !cd;
+    if (cd) {
+      (bar.firstElementChild as HTMLElement).style.width = `${(100 * cd.left) / cd.total}%`;
+      bar.title = `recharging: ${Math.ceil(cd.left / 10)} s`;
+    }
+  });
 }

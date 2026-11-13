@@ -4,14 +4,13 @@ import { programIcon } from './icons';
 /** What each type of program does (short, for the info window). */
 const TYPE_INFO: Record<ProgramType, string> = {
   warrior: 'released as your own agent: it fights enemy agents where it stands. stay, follow or unload it. if it dies, it is lost for this run',
-  scout: 'an agent you send to a node: it identifies what it reaches, reads the agents there and flies on to the next unknown node, until an agent catches it',
+  scout: 'sends an instance to every neighbour you have not explored: each may tell what its node is and sees the agents there, then flies back. loud, with a long recharge that grows with every extra instance',
   shield: 'jumps out of you when you are attacked and circles you, taking the hits. unload it to have it ready again. if it breaks, it is lost for this run',
   silence: 'cuts an agent off: its messages cannot leave the node, so it raises no alarm',
   deceive: 'answers an agent\'s query with a lie. it trusts you until you leave the node',
   hide: 'works on its own: agents roll their detection against it when they query you',
   analyze: 'right-click an agent in your node to analyze it: its type and stats. also works on its own on every agent that deals with you',
   skimmer: 'planted in the payment gateway of a local business, it stays there as your agent and takes a small cut every day',
-  mapper: 'maps the network around you: finds and identifies nearby nodes. loud, and needs a long time to recharge',
   scan: 'reads archives: shows what each file holds and how it is protected',
   evaluate: 'tells what a valuable file is worth',
   identify: 'tells what program an archive holds',

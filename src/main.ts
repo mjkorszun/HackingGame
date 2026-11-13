@@ -3,7 +3,7 @@ import { testSystem } from './data/testSystem';
 import { FixedClock } from './sim/clock';
 import { Game, TICKS_PER_SECOND } from './sim/game';
 import { Console } from './ui/console';
-import { renderDeck } from './ui/deckPanel';
+import { renderDeck, updateCooldowns } from './ui/deckPanel';
 import { ContextMenu } from './ui/contextMenu';
 import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
@@ -241,7 +241,6 @@ function runCommand(raw: string): void {
     case 'hide':
     case 'analyze':
     case 'skimmer':
-    case 'mapper':
     case 'scan':
     case 'mask':
       if (!game.runProgram(cmd.name, arg)) sfx.play('error');
@@ -261,7 +260,7 @@ function runCommand(raw: string): void {
       game.setPaused(false);
       break;
     case 'stop':
-      if (game.cancelMapper() || game.cancelScan() || game.cancelFileJob()) break;
+      if (game.cancelScan() || game.cancelFileJob()) break;
       game.cancelTravel();
       game.log('travel will stop after this hop', 'system');
       break;
@@ -687,7 +686,7 @@ function flush(): void {
     else if (ev.type === 'kicked') setTimeout(leaveNet, 600);
     else if (ev.type === 'blocked') sfx.play('error');
     else if (ev.type === 'shot' || ev.type === 'outcome') view.fx(ev);
-    else if (ev.type === 'program' && (ev.programType === 'mapper' || ev.programType === 'scan')) sfx.play(ev.programType);
+    else if (ev.type === 'program' && (ev.programType === 'scout' || ev.programType === 'scan')) sfx.play(ev.programType);
   }
 }
 
@@ -701,5 +700,6 @@ function frame(now: number): void {
   // Between ticks, moving things are drawn part way along, so motion is smooth at any frame rate.
   view.update(game.paused ? 0 : clock.alpha);
   updateDeck();
+  updateCooldowns(deckEl, game);
   requestAnimationFrame(frame);
 }

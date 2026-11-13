@@ -111,7 +111,6 @@ const SOFTWARE_NAMES: Record<string, string[]> = {
   shield: ['Aegis 2', 'Bulwark 1.3'],
   warrior: ['Mace 15', 'Charge 2.1', 'Rocket Launcher V007'],
   hide: ['Shade 3.0', 'Mirage V2'],
-  mapper: ['Kestrel 1.4', 'Periscope V5'],
   scan: ['Glimpse 2', 'X-Ray 1.9'],
   decrypt: ['Skeleton Key 3', 'Crowbar 1.9'],
 };

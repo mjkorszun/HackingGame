@@ -37,7 +37,6 @@ export function showEntryScreen(system: SystemDef, intel: NetIntel | undefined, 
   const entries = entryPoints(system, intel);
   const known = new Set([...(intel?.known ?? []), ...entries]);
   const identified = new Set([...(intel?.identified ?? []), ...entries]);
-  for (const n of system.nodes) if (!n.hidden && known.has(n.id)) identified.add(n.id);
   const kindOf = (id: string): NodeKind => {
     if (!identified.has(id)) return 'hidden';
     const n = system.nodes.find((x) => x.id === id)!;
@@ -64,7 +63,8 @@ export function showEntryScreen(system: SystemDef, intel: NetIntel | undefined, 
   };
   const map = box.querySelector('svg')!;
   const info = box.querySelector<HTMLElement>('.entry-info')!;
-  const shown = system.nodes.filter((n) => known.has(n.id));
+  // Fog: only nodes you can tell apart are drawn; a link to any other node fades out halfway.
+  const shown = system.nodes.filter((n) => identified.has(n.id));
   const xs = shown.map((n) => n.x);
   const ys = shown.map((n) => n.y);
   const minX = Math.min(...xs);
@@ -75,11 +75,26 @@ export function showEntryScreen(system: SystemDef, intel: NetIntel | undefined, 
   const sx = (x: number) => (maxX === minX ? 320 : pad + ((x - minX) / (maxX - minX)) * (640 - 2 * pad));
   const sy = (y: number) => (maxY === minY ? 170 : pad + ((y - minY) / (maxY - minY)) * (340 - 2 * pad));
   const g = svg('g', { class: 'minimap' }, map);
+  const defs = svg('defs', {}, g);
+  let fog = 0;
   for (const [a, b] of system.links) {
-    if (!known.has(a) || !known.has(b)) continue;
+    const ia = identified.has(a);
+    const ib = identified.has(b);
+    if (!ia && !ib) continue;
     const na = system.nodes.find((n) => n.id === a)!;
     const nb = system.nodes.find((n) => n.id === b)!;
-    svg('line', { x1: sx(na.x), y1: sy(na.y), x2: sx(nb.x), y2: sy(nb.y), class: 'mini-link' }, g);
+    if (ia && ib) {
+      svg('line', { x1: sx(na.x), y1: sy(na.y), x2: sx(nb.x), y2: sy(nb.y), class: 'mini-link' }, g);
+      continue;
+    }
+    const [from, to] = ia ? [na, nb] : [nb, na];
+    const x1 = sx(from.x), y1 = sy(from.y);
+    const x2 = (x1 + sx(to.x)) / 2, y2 = (y1 + sy(to.y)) / 2;
+    const id = `efog-${fog++}`;
+    const grad = svg('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1, y1, x2, y2 }, defs);
+    svg('stop', { offset: '0', 'stop-color': '#2a8a45', 'stop-opacity': 1 }, grad);
+    svg('stop', { offset: '1', 'stop-color': '#2a8a45', 'stop-opacity': 0 }, grad);
+    svg('line', { x1, y1, x2, y2, class: 'mini-link-fog', stroke: `url(#${id})` }, g);
   }
   const describe = (id: string) => {
     const kind = kindOf(id);
@@ -118,7 +133,7 @@ export function showEntryScreen(system: SystemDef, intel: NetIntel | undefined, 
       onEnter(n.id);
     });
     const label = svg('text', { x: sx(n.x), y: sy(n.y) + 26, class: 'entry-label' }, g);
-    label.textContent = identified.has(n.id) ? n.name : '?';
+    label.textContent = n.name;
   }
   box.querySelector('.entry-cancel')!.addEventListener('click', () => {
     close();

@@ -50,7 +50,7 @@ export interface Account {
   intel: Record<string, NetIntel>;
   /** When it was last saved (ms since 1970), shown in the load list. */
   savedAt?: number;
-  /** Save format: 2 = the scout is the agent, the old scout is the mapper. */
+  /** Save format: 2 = the scout is the agent, the old scout is the mapper; 3 = no mapper. */
   version?: number;
 }
 
@@ -160,7 +160,7 @@ export function removeChip(a: Account, socket: SocketId): { days: number } | str
 }
 
 /** Starting programs that do not fit in the starting memory: they wait in storage. */
-const START_STORED = ['Sparrow 1.0', 'Owl 1.0', 'Sapper 1.0', 'Bleach 1.1', 'Mimic 1.0', 'Skimmer 1.0'];
+const START_STORED = ['Sapper 1.0', 'Bleach 1.1', 'Mimic 1.0', 'Skimmer 1.0'];
 
 /** A new game's account. */
 export function fresh(): Account {
@@ -168,7 +168,7 @@ export function fresh(): Account {
   return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {}, hardware: newHardware(), health: MAX_HEALTH, intel: {}, version: SAVE_VERSION };
 }
 
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -257,7 +257,14 @@ export function migrate(a: Account): Account {
       a.programs = a.programs.filter((p) => p !== extra);
       if (Array.isArray(a.loaded)) a.loaded = a.loaded.filter((id) => id !== extra.id);
     }
-    if ((a.project?.type as string) === 'scout') a.project!.type = 'mapper';
+    if ((a.project?.type as string) === 'scout') (a.project as { type: string }).type = 'mapper';
+  }
+  if ((a.version ?? 0) < 3) {
+    // Version 3: the mapper is gone (fog like Decker; the scout explores your neighbours).
+    const gone = new Set(a.programs.filter((p) => (p.type as string) === 'mapper').map((p) => p.id));
+    a.programs = a.programs.filter((p) => !gone.has(p.id));
+    if (Array.isArray(a.loaded)) a.loaded = a.loaded.filter((id) => !gone.has(id));
+    if ((a.project?.type as string) === 'mapper') a.project = undefined;
   }
   a.version = SAVE_VERSION;
   renameOld(a.programs as { type: string; name: string }[]);
