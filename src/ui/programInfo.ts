@@ -1,4 +1,5 @@
-import { programSize, type Program, type ProgramType } from '../sim/programs';
+import { programSize, tb, type Program, type ProgramType } from '../sim/programs';
+import { formatStat, programStats } from '../sim/training';
 import { programIcon } from './icons';
 
 /** What each type of program does (short, for the info window). */
@@ -38,15 +39,24 @@ export function closeProgramInfo(): void {
 }
 
 /** A window with everything about one program. Closes on Esc, a click outside, or Close. */
+/** A trained program's stats: the base value, and in brackets what its traits make of it, in its rarity's colour. */
+export function statHtml(p: Program): { label: string; html: string }[] {
+  return programStats(p).map((s) => ({
+    label: s.def.label,
+    html: `${formatStat(s.def, s.base)}${s.value !== s.base ? ` <span class="rarity-${p.rarity ?? 'common'}">(${formatStat(s.def, s.value)})</span>` : ''}`,
+  }));
+}
+
 export function showProgramInfo(p: Program, opts: InfoOptions = {}): void {
   closeProgramInfo();
   const rarity = p.rarity ?? 'common';
   const lines: string[] = [
     `<tr><td>type</td><td>${p.type}</td></tr>`,
     `<tr><td>rating</td><td>${p.rating}</td></tr>`,
-    `<tr><td>size</td><td>${programSize(p)} GB</td></tr>`,
+    `<tr><td>size</td><td>${tb(programSize(p))}</td></tr>`,
     `<tr><td>rarity</td><td class="rarity-${rarity}">${rarity}</td></tr>`,
   ];
+  for (const st of statHtml(p)) lines.push(`<tr><td>${st.label}</td><td>${st.html}</td></tr>`);
   if (p.author) lines.push(`<tr><td>author</td><td>${esc(p.author)}</td></tr>`);
   if (p.efficiency !== undefined) lines.push(`<tr><td>efficiency</td><td>x${p.efficiency}</td></tr>`);
   if (p.detection !== undefined) lines.push(`<tr><td>detection</td><td>${p.detection}% a day</td></tr>`);

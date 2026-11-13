@@ -1,6 +1,6 @@
 import type { LootItem } from '../sim/game';
 import type { Privilege } from '../sim/actions';
-import { programSize, usedMemory, type Program } from '../sim/programs';
+import { programSize, tb, usedMemory, type Program } from '../sim/programs';
 import { SATS, sats } from '../sim/money';
 import { showProgramInfo } from './programInfo';
 import { programIcon } from './icons';
@@ -11,7 +11,7 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 export interface GearSource {
   /** Programs loaded in memory. */
   programs: Program[];
-  /** Memory size in GB. */
+  /** Memory size in hundredths of a TB. */
   memorySlots: number;
   loot: LootItem[];
   privileges: Set<Privilege>;
@@ -41,7 +41,7 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
     <div class="deck-cols">
       <div>
         <h3>hardware</h3>
-        <ul class="deck-hw"><li>memory</li><li class="deck-mem${used >= game.memorySlots * 0.9 ? ' is-full' : ''}">${used}/${game.memorySlots} GB</li><li><span class="mem-bar" title="${used} GB used, ${game.memorySlots - used} GB free"><span class="mem-fill" style="width:${Math.min(100, (100 * used) / game.memorySlots)}%"></span></span></li></ul>
+        <ul class="deck-hw"><li>memory</li><li class="deck-mem${used >= game.memorySlots * 0.9 ? ' is-full' : ''}">${tb(used)}/${tb(game.memorySlots)}</li><li><span class="mem-bar" title="${tb(used)} used, ${tb(game.memorySlots - used)} free"><span class="mem-fill" style="width:${Math.min(100, (100 * used) / game.memorySlots)}%"></span></span></li></ul>
       </div>
       <div>
         <h3>software</h3>
@@ -73,7 +73,7 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
       if (!d.loaded && opts.load) {
         const full = !fits(d.software);
         li.classList.add(full ? 'is-blocked' : 'is-loadable');
-        li.title = full ? `not enough memory (${programSize(d.software)} GB)` : `click to load it into memory (${programSize(d.software)} GB)`;
+        li.title = full ? `not enough memory (${tb(programSize(d.software))})` : `click to load it into memory (${tb(programSize(d.software))})`;
         if (!full) li.addEventListener('click', () => opts.load!(d.software!));
       }
     } else {
@@ -86,7 +86,7 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
     const li = document.createElement('li');
     li.className = `deck-program${p.rarity && p.rarity !== 'common' ? ` rarity-${p.rarity}` : ''}`;
     const state = game.programState?.(p.id) ?? null;
-    li.innerHTML = `${programIcon(p)}${esc(`${p.name.padEnd(18)} ${`${p.type} ${p.rating}`.padEnd(11)} ${String(programSize(p)).padStart(3)} GB`)}${state ? ` <span class="deck-state is-${state}">${state === 'out' ? 'OUT' : 'LOST'}</span>` : ''}`;
+    li.innerHTML = `${programIcon(p)}${esc(`${p.name.padEnd(18)} ${`${p.type} ${p.rating}`.padEnd(11)} ${tb(programSize(p)).padStart(7)}`)}${state ? ` <span class="deck-state is-${state}">${state === 'out' ? 'OUT' : 'LOST'}</span>` : ''}`;
     if (state) li.classList.add(`is-${state}`);
     // A program that recharges (the scout) shows how long it still needs as a draining bar.
     if (opts.run && p.type === 'scout') li.insertAdjacentHTML('beforeend', ` <span class="deck-cd" data-cd="${esc(p.id)}" hidden><span class="deck-cd-fill"></span></span>`);
@@ -100,7 +100,7 @@ export function renderDeck(root: HTMLElement, game: GearSource, balance: number,
         e.preventDefault();
         showProgramInfo(p, {
           status: stored ? 'in storage' : 'loaded in memory',
-          action: { label: stored ? 'Load into memory' : 'Unload', run: () => opts.toggle!(p), disabled: full ? `not enough memory: needs ${programSize(p)} GB, ${game.memorySlots - used} GB free` : undefined },
+          action: { label: stored ? 'Load into memory' : 'Unload', run: () => opts.toggle!(p), disabled: full ? `not enough memory: needs ${tb(programSize(p))}, ${tb(game.memorySlots - used)} free` : undefined },
         });
       };
       li.addEventListener('click', info);

@@ -258,9 +258,13 @@ describe('scout', () => {
   });
 
   it('recharges for a long time, longer for every extra instance', () => {
-    expect(scoutCooldown(1)).toBe(300);
-    expect(scoutCooldown(3)).toBe(570);
-    expect(scoutChance(1)).toBe(50);
+    const crow = { type: 'scout' as const, rating: 1, stats: { speed: 1, accuracy: 50, cooldown: 30, noise: 30 } };
+    expect(scoutCooldown(crow, 1)).toBe(300);
+    expect(scoutCooldown(crow, 3)).toBe(570);
+    expect(scoutCooldown({ ...crow, traits: ['swarm: x'] }, 3)).toBe(450);
+    expect(scoutChance(crow)).toBe(50);
+    expect(scoutChance({ ...crow, traits: ['data hound: x'] }, 'database')).toBe(100);
+    expect(scoutChance({ ...crow, traits: ['keen: x'] })).toBe(65);
     const g = scoutGame(() => 0);
     g.scoutCommand('');
     expect(g.cooldownOf('p1')).not.toBeNull();
@@ -852,7 +856,7 @@ describe('agents', () => {
 
 describe('memory', () => {
   it('a downloaded program can be loaded into free memory and used at once', () => {
-    const g = new Game(quiet, Math.random, [], { memory: 150 }); // Mace 15 (attack 3) takes 120 GB
+    const g = new Game(quiet, Math.random, [], { memory: 100 }); // Mace 15 (warrior 3) takes 90 GB, Owl 2 (decrypt 1) 25 GB
     g.loot.push({ name: 'x f1', label: 'Mace 15', price: 0, evaluated: true, software: { id: 'p500', type: 'warrior', name: 'Mace 15', rating: 3 } });
     g.loot.push({ name: 'x f2', label: 'Owl', price: 0, evaluated: true, software: { id: 'p501', type: 'decrypt', name: 'Owl 2', rating: 1 } });
     expect(g.loadProgram('Mace 15')).toBe(true);
@@ -1289,5 +1293,60 @@ describe('agent roles', () => {
     expect(g.query).toBeNull(); // it does not ask on its own
     expect(g.scanCommand('')).toBe(false);
     expect(g.query?.agentId).toBe(g.agents[0].id);
+  });
+});
+
+describe('train model and refine', () => {
+  it('leans the base stats where the Compute goes, partly at random', async () => {
+    const { rollStats } = await import('./training');
+    const mid = () => 0.5;
+    const s = rollStats('scout', { speed: 2, accuracy: 6, cooldown: 10, noise: 2 }, 1, mid);
+    expect(s.cooldown).toBe(15);
+    expect(s.speed).toBeCloseTo(0.84);
+    expect(s.noise).toBe(42);
+    const zero = rollStats('scout', { speed: 0, accuracy: 20, cooldown: 0, noise: 0 }, 1, mid);
+    expect(zero.speed).toBe(0.6);
+    expect(rollStats('scout', { speed: 5, accuracy: 5, cooldown: 5, noise: 5 }, 1, () => 0).speed).not.toBe(rollStats('scout', { speed: 5, accuracy: 5, cooldown: 5, noise: 5 }, 1, () => 0.99).speed);
+  });
+
+  it('makes variants of a base for a day, saves one for a fee, and loses the rest when a day passes', async () => {
+    const { fresh, refineDay, saveVariant, currentRefine, passDay } = await import('../ui/account');
+    const a = fresh();
+    a.sats = 100;
+    const base = a.programs.find((p) => p.type === 'scout')!;
+    base.stats = { speed: 1, accuracy: 60, cooldown: 25, noise: 20 };
+    const made = refineDay(a, base.id, () => 0.3) as import('./programs').Program[];
+    expect(made).toHaveLength(2);
+    expect(made[0].name).toMatch(/#001$/);
+    expect(made[0].stats).toEqual(base.stats);
+    refineDay(a, base.id, () => 0.3);
+    expect(currentRefine(a)!.variants).toHaveLength(4);
+    const saved = saveVariant(a, made[1].id, 'Raven');
+    expect(typeof saved).toBe('object');
+    expect(a.programs.some((p) => p.name === 'Raven')).toBe(true);
+    expect(a.sats).toBe(85);
+    passDay(a);
+    expect(currentRefine(a)).toBeUndefined();
+  });
+
+  it('trains a scout from Compute into a program with stats', async () => {
+    const { finishProgram, newProject } = await import('./development');
+    const p = { ...newProject('scout', 1, 'Crow'), compute: { speed: 5, accuracy: 5, cooldown: 5, noise: 5 } };
+    const prog = finishProgram(p, 'p9', 'you', () => 0.5);
+    expect(prog.stats).toBeDefined();
+    expect(prog.compute).toEqual(p.compute);
+    expect(prog.sizeRoll).toBeGreaterThanOrEqual(0.9);
+    expect(prog.sizeRoll).toBeLessThanOrEqual(1.1);
+  });
+});
+
+describe('program size', () => {
+  it('grows with the rating, and shrinks with Compute put into speed and noise', async () => {
+    const { programSize } = await import('./programs');
+    expect(programSize({ type: 'scout', rating: 1 })).toBe(15);
+    expect(programSize({ type: 'scout', rating: 2 })).toBe(30);
+    expect(programSize({ type: 'scout', rating: 2, compute: { speed: 0, accuracy: 10, cooldown: 10, noise: 0 } })).toBe(45);
+    expect(programSize({ type: 'scout', rating: 2, compute: { speed: 5, accuracy: 5, cooldown: 5, noise: 5 } })).toBe(30);
+    expect(programSize({ type: 'scout', rating: 2, compute: { speed: 10, accuracy: 0, cooldown: 0, noise: 10 } })).toBe(15);
   });
 });

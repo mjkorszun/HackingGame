@@ -1,4 +1,6 @@
 import type { Rarity } from './development';
+import type { NodeKind } from './types';
+import { COMPUTE_POINTS, statOf, traitsOf } from './training';
 /** A program in the player's deck. */
 export const PROGRAM_TYPES = ['warrior', 'shield', 'scout', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge', 'mask'] as const;
 
@@ -40,37 +42,62 @@ export interface Program {
   color?: string;
   /** A legendary program carries its author's name. */
   author?: string;
+  /** Trained models: the Compute put into each category, and the base stats that came out of it. */
+  compute?: Record<string, number>;
+  stats?: Record<string, number>;
+  /** Trained models: how its size came out, times the usual (0.9 to 1.1). */
+  sizeRoll?: number;
 }
 
-/** Base size in GB of a rating-1 program of each type (placeholder numbers). */
+/** Base size (hundredths of a TB) of a rating-2 program of each type (placeholder numbers). */
 const BASE_SIZE: Record<ProgramType, number> = {
   warrior: 60, shield: 40, scout: 30, silence: 40, deceive: 50, hide: 40, analyze: 30, skimmer: 30, scan: 30,
   evaluate: 20, identify: 20, defuse: 30, decrypt: 50, scrub: 30, forge: 40, mask: 40,
 };
 
-/** Size of a program in GB: bigger for higher ratings. */
-export function programSize(p: Pick<Program, 'type' | 'rating'>): number {
-  return Math.round(BASE_SIZE[p.type] * (1 + 0.5 * (p.rating - 1)));
+/**
+ * Size of a program, in hundredths of a TB (shown as 0.30 TB). Mostly the rating: it grows in step with it (rating 1 is half the base, rating 2
+ * the base). Then, for trained models, speed and noise: a lean model is fast and quiet, so the more Compute
+ * goes there, the smaller it is (0% on both is 1.5 times an even split, 100% on both half of it).
+ */
+export function programSize(p: Pick<Program, 'type' | 'rating' | 'compute' | 'sizeRoll'>): number {
+  const lean = p.compute && ('speed' in p.compute || 'noise' in p.compute) ? 1.5 - ((p.compute.speed ?? 0) + (p.compute.noise ?? 0)) / COMPUTE_POINTS : 1;
+  return Math.max(1, Math.round(BASE_SIZE[p.type] * 0.5 * p.rating * lean * (p.sizeRoll ?? 1)));
 }
 
-/** GB taken by a set of programs. */
+/** Memory as shown: hundredths of a TB, e.g. 30 is "0.30 TB". */
+export function tb(units: number): string {
+  return `${(units / 100).toFixed(2)} TB`;
+}
+
+/** Memory taken by a set of programs. */
 export function usedMemory(list: Pick<Program, 'type' | 'rating'>[]): number {
   return list.reduce((sum, p) => sum + programSize(p), 0);
 }
 
-/** Scout: seconds before it can fly again, for one instance (placeholder). Better scouts will trade a longer wait for more skill. */
-export const SCOUT_COOLDOWN_S = 30;
 /** Scout: each instance after the first adds this share of the cooldown (placeholder: +45%). */
 export const SCOUT_EXTRA_PER_INSTANCE = 0.45;
-/** Placeholder: noise a scout launch makes in your node. Nothing reacts to noise yet. */
-export const SCOUT_NOISE = 30;
+
+type Scout = Pick<Program, 'type' | 'rating' | 'stats' | 'traits'>;
 
 /** Ticks of cooldown after sending `instances` scouts at once. */
-export function scoutCooldown(instances: number): number {
-  return Math.round(SCOUT_COOLDOWN_S * 10 * (1 + SCOUT_EXTRA_PER_INSTANCE * Math.max(0, instances - 1)));
+export function scoutCooldown(p: Scout, instances: number): number {
+  const extra = Math.min(SCOUT_EXTRA_PER_INSTANCE, ...traitsOf(p).map((t) => t.extraPerInstance ?? SCOUT_EXTRA_PER_INSTANCE));
+  return Math.round(statOf(p, 'cooldown') * 10 * (1 + extra * Math.max(0, instances - 1)));
 }
 
-/** A scout's d100 chance to tell what a node is (placeholder: rating 1 = 50%, +15 per rating). */
-export function scoutChance(rating: number): number {
-  return Math.min(100, 35 + 15 * rating);
+/** A scout's d100 chance to tell what a node of this kind is. */
+export function scoutChance(p: Scout, kind?: NodeKind): number {
+  if (kind && traitsOf(p).some((t) => t.sure?.includes(kind))) return 100;
+  return Math.min(100, statOf(p, 'accuracy'));
+}
+
+/** Noise a scout launch makes in your node (nothing reacts to noise yet). */
+export function scoutNoise(p: Scout): number {
+  return statOf(p, 'noise');
+}
+
+/** How fast a scout flies, times the usual agent speed. */
+export function scoutSpeed(p: Scout): number {
+  return statOf(p, 'speed') || 1;
 }

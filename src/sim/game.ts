@@ -5,7 +5,7 @@ import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
 import { programSize, usedMemory } from './programs';
-import { FILE_PROGRAMS, PROGRAM_STUBS, SCOUT_NOISE, scoutChance, scoutCooldown, type Program, type ProgramType } from './programs';
+import { FILE_PROGRAMS, PROGRAM_STUBS, scoutChance, scoutCooldown, scoutNoise, scoutSpeed, tb, type Program, type ProgramType } from './programs';
 import type { FxTarget, LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
 /** Unidentified nodes are called ?1, ?2, ... */
@@ -92,6 +92,8 @@ export interface Ally {
   findings?: { node: string; agents: string[]; told: boolean }[];
   /** Scout: it has read the node it went for and flies back to you once it is done reading. */
   homeward?: boolean;
+  /** Ticks one hop takes, if not the usual (scouts fly at their own speed). */
+  hopTicks?: number;
   /** Stays in this system between runs (a planted skimmer): not from your memory, takes no orders. */
   resident?: boolean;
 }
@@ -179,7 +181,7 @@ export class Game {
   readonly privileges = new Set<Privilege>();
   /** Programs loaded in the player's memory: the ones usable in this run. */
   readonly programs: Program[];
-  /** Memory size in GB: loaded programs must fit in it. */
+  /** Memory size in hundredths of a TB: loaded programs must fit in it. */
   readonly memorySlots: number;
   /** What the player took in this run: paid out (sats, programs) only when the run ends. */
   readonly loot: LootItem[] = [];
@@ -318,13 +320,13 @@ export class Game {
     }
     const size = programSize(item.software!);
     if (usedMemory(this.programs) + size > this.memorySlots) {
-      this.log(`not enough memory: ${item.software!.name} needs ${size} GB, ${this.memorySlots - usedMemory(this.programs)} GB free. it waits in your data until you leave the net`, 'alarm1');
+      this.log(`not enough memory: ${item.software!.name} needs ${tb(size)}, ${tb(this.memorySlots - usedMemory(this.programs))} free. it waits in your data until you leave the net`, 'alarm1');
       return false;
     }
     item.loaded = true;
     this.programs.push(item.software!);
     this.deckVersion++;
-    this.log(`${item.software!.name} loaded into memory (${usedMemory(this.programs)}/${this.memorySlots} GB)`, 'info');
+    this.log(`${item.software!.name} loaded into memory (${tb(usedMemory(this.programs))}/${tb(this.memorySlots)})`, 'info');
     return true;
   }
 
@@ -812,7 +814,7 @@ export class Game {
       if (this.ended) return;
       if (ally.resident) continue;
       if (ally.hop) {
-        if (++ally.hop.elapsed >= ALLY_HOP_TICKS) {
+        if (++ally.hop.elapsed >= (ally.hopTicks ?? ALLY_HOP_TICKS)) {
           ally.node = ally.hop.to;
           ally.hop = null;
           if (ally.order === 'explore') this.scoutArrives(ally);
@@ -876,18 +878,19 @@ export class Game {
       this.log(`${program.name}: every neighbour is already explored`, 'system');
       return false;
     }
-    const total = scoutCooldown(targets.length);
+    const total = scoutCooldown(program, targets.length);
+    const noise = scoutNoise(program);
     this.scoutReady.set(program.id, { at: this.tick + total, total });
     const here = this.currentNode;
-    this.noise.set(here, (this.noise.get(here) ?? 0) + SCOUT_NOISE);
+    this.noise.set(here, (this.noise.get(here) ?? 0) + noise);
     for (const dest of targets) {
-      const ally: Ally = { id: `y${this.nextAllyId++}`, program, hp: 10 + 5 * program.rating, maxHp: 10 + 5 * program.rating, node: here, hop: null, order: 'explore', attackLeft: 0, target: null, dest, visited: new Set([here]), findings: [] };
+      const ally: Ally = { id: `y${this.nextAllyId++}`, program, hp: 10 + 5 * program.rating, maxHp: 10 + 5 * program.rating, node: here, hop: null, order: 'explore', attackLeft: 0, target: null, dest, visited: new Set([here]), findings: [], hopTicks: Math.max(3, Math.round(ALLY_HOP_TICKS / scoutSpeed(program))) };
       this.allies.push(ally);
       this.outcome({ kind: 'ally', id: ally.id }, true, 'SCOUT OUT');
     }
     this.deckVersion++;
     this.events.push({ type: 'program', programType: 'scout' });
-    this.log(`${program.name} sent to ${targets.length} unexplored node${targets.length > 1 ? 's' : ''} (${scoutChance(program.rating)}% to tell each one). it is loud: noise here +${SCOUT_NOISE}. recharging ${Math.round(total / TICKS_PER_SECOND)} s`, 'info');
+    this.log(`${program.name} sent to ${targets.length} unexplored node${targets.length > 1 ? 's' : ''} (${scoutChance(program)}% to tell each one). it is loud: noise here +${noise}. recharging ${Math.round(total / TICKS_PER_SECOND)} s`, 'info');
     this.actionStarted();
     return true;
   }
@@ -958,7 +961,7 @@ export class Game {
     }
     if (id !== ally.dest) return;
     // Its node: it may tell what it is, then it flies back.
-    ally.findings!.push({ node: id, agents: this.agentsIn(id).map((a) => a.id), told: this.d100() <= scoutChance(r) });
+    ally.findings!.push({ node: id, agents: this.agentsIn(id).map((a) => a.id), told: this.d100() <= scoutChance(ally.program, this.network.node(id).kind) });
     ally.homeward = true;
   }
 
@@ -1892,7 +1895,7 @@ export class Game {
   }
 }
 
-/** Memory of the starting hardware, in GB. */
+/** Memory of the starting hardware, in hundredths of a TB (5.00 TB). */
 export const DEFAULT_MEMORY = 500;
 
 /** The deck a new player starts with. */

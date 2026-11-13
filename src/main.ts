@@ -9,7 +9,7 @@ import { KIND_LABEL, NetworkView } from './ui/networkView';
 import { Sound } from './ui/sound';
 import { fileActions } from './sim/files';
 import { FILE_PROGRAMS, PROGRAM_TYPES, usedMemory, type Program, type ProgramType } from './sim/programs';
-import { buyChip, installChip, loadAccount, rest, loadedPrograms, nextProgramId, passDay, placeProgram, removeChip, saveAccount, sellChip, toggleLoaded } from './ui/account';
+import { buyChip, currentRefine, refineDay, saveVariant, installChip, loadAccount, rest, loadedPrograms, nextProgramId, passDay, placeProgram, removeChip, saveAccount, sellChip, toggleLoaded } from './ui/account';
 import { chipById } from './sim/implants';
 import { exitDamage, REST_PER_DAY } from './sim/health';
 import { showGameOver } from './ui/gameOver';
@@ -18,7 +18,7 @@ import { showSkillPick } from './ui/skillPick';
 import { addXp, xpToNext } from './sim/progression';
 import { HomeScreen, type Choice, type ContractOffer } from './ui/homeScreen';
 import { bugFixDays, finishProgram, fixBug, newProject, work } from './sim/development';
-import { isBuiltInIcon, randomIcon, registerIcon } from './ui/icons';
+import { iconName, isBuiltInIcon, randomIcon, registerIcon } from './ui/icons';
 import { generate } from './sim/generate';
 import { mergeIntel } from './sim/intel';
 import { needsEntryScreen, showEntryScreen } from './ui/entryScreen';
@@ -420,9 +420,10 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
   },
   dev: {
     project: () => account.project,
-    start: (type, rating, name, icon, color, body) => {
+    start: (type, rating, name, icon, color, body, compute) => {
       keepIcon(icon, body);
       account.project = { ...newProject(type, rating, name), icon, color };
+      if (compute) account.project.compute = compute;
       saveAccount(account);
     },
     cancel: () => {
@@ -463,6 +464,39 @@ const home = new HomeScreen(document.getElementById('home')!, homeState, {
       homeState.news = account.news;
       renderHomeGear();
       return { lines, program };
+    },
+  },
+  refine: {
+    state: () => {
+      const r = currentRefine(account);
+      const base = r && account.programs.find((p) => p.id === r.baseId);
+      return r && base ? { base, variants: r.variants } : undefined;
+    },
+    day: (id) => {
+      if (dayJob) return [];
+      const base = account.programs.find((p) => p.id === id);
+      // Variants keep the base's look: an icon picked by the name would change with the #001 names.
+      if (base && !base.icon) base.icon = iconName(base);
+      const before = account.day;
+      const made = refineDay(account, id);
+      if (typeof made === 'string') return [made];
+      saveAccount(account);
+      // Refining takes a day like any other work: skimmers pay out, and may be found.
+      showDaysPassing(before, `refining ${base?.name ?? ''}`);
+      homeState.news = account.news;
+      renderHomeGear();
+      return [`a day refining ${base?.name}: ${made.map((v) => `${v.name} (${v.rarity})`).join(', ')}`];
+    },
+    save: (id, name) => {
+      const r = saveVariant(account, id, name);
+      if (typeof r === 'string') {
+        sfx.play('error');
+        return r;
+      }
+      sfx.play('menuItem');
+      saveAccount(account);
+      renderHomeGear();
+      return `${r.name} saved in your storage`;
     },
   },
 });

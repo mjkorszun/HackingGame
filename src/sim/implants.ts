@@ -56,7 +56,7 @@ export const KINDS: Record<ChipKind, KindInfo> = {
   surge: { name: 'Surge Suppressor', about: 'blocks surges coming down the cable, so attacks damage your implants less', stat: 'surge block', unit: '%', tiers: [10, 20, 30, 45, 60], surgery: 1, price: 25, icon: 'lightning-shield' },
   damper: { name: 'Neural Damper', about: 'filters pain and neural shocks before they reach the cortex: less damage to your brain', stat: 'shock filter', unit: '%', tiers: [10, 20, 30, 45, 60], surgery: 2, price: 35, icon: 'brain-freeze' },
   bio: { name: 'Bio Monitor', about: 'watches your body and brain, and pulls you out of the net before your integrity hits zero', stat: 'dump at integrity', unit: '%', tiers: [5, 10, 15, 20, 25], surgery: 1, price: 20, icon: 'heart-beats' },
-  memory: { name: 'Memory', about: 'holds the programs you take into the net', stat: 'capacity', unit: 'GB', tiers: [500, 750, 1000, 1500, 2000], surgery: 2, price: 30, icon: 'save' },
+  memory: { name: 'Memory', about: 'holds the programs you take into the net', stat: 'capacity', unit: 'TB', tiers: [500, 750, 1000, 1500, 2000], surgery: 2, price: 30, icon: 'save' },
   processor: { name: 'Neural Processor', about: 'thinking power: how many program instances (agents) you run at once without slowing down', stat: 'agents', unit: '', tiers: [2, 3, 4, 6, 8], surgery: 3, price: 50, icon: 'cpu' },
   attack: { name: 'Attack Module', about: 'boosts all attack programs', stat: 'attack', unit: '+', tiers: [1, 2, 3, 4, 5], surgery: 2, price: 35, icon: 'fist' },
   stealth: { name: 'Stealth Module', about: 'boosts all stealth programs', stat: 'stealth', unit: '+', tiers: [1, 2, 3, 4, 5], surgery: 2, price: 35, icon: 'invisible' },
@@ -217,12 +217,13 @@ export function chipById(id: string): ChipModel | undefined {
   return CATALOGUE.find((c) => c.id === id);
 }
 
-/** A chip's main number with its unit, e.g. "500 GB", "×1.5", "+2", "30%". */
+/** A chip's main number with its unit, e.g. "5.00 TB", "×1.5", "+2", "30%". */
 export function chipValue(c: ChipModel): string {
   const u = KINDS[c.kind].unit;
   if (u === '×') return `×${c.value}`;
   if (u === '+') return `+${c.value}`;
   if (u === '%') return `${c.value}%`;
+  if (u === 'TB') return `${(c.value / 100).toFixed(2)} TB`;
   return u ? `${c.value} ${u}` : `${c.value}`;
 }
 

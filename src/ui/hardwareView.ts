@@ -142,7 +142,7 @@ export function renderHardware(el: HTMLElement, act: HardwareActions, view: Hard
     const rows = SOCKETS.map((s) => {
       const inst = chipIn(s.id);
       return `<button type="button" class="hw-row${inst ? ' is-installed' : ''}${shown === s.id ? ' is-selected' : ''}" data-slot="${s.id}">
-        <span class="hw-name">${esc(s.name)}</span><span class="hw-state${inst ? ` rarity-${inst.rarity}` : ''}">${inst ? esc(inst.name.includes(String(inst.value)) && inst.kind === 'memory' ? `${inst.name} GB` : `${inst.name} ${chipValue(inst)}`) : 'empty'}</span></button>`;
+        <span class="hw-name">${esc(s.name)}</span><span class="hw-state${inst ? ` rarity-${inst.rarity}` : ''}">${inst ? esc(`${inst.name} ${chipValue(inst)}`) : 'empty'}</span></button>`;
     }).join('');
     const sel = SOCKETS.find((s) => s.id === shown);
     const inst = sel ? chipIn(sel.id) : undefined;

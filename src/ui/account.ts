@@ -2,7 +2,8 @@ import { activeSlot, markLast, slotKey } from './saves';
 import { DEFAULT_MEMORY, STARTING_PROGRAMS } from '../sim/game';
 import { programSize, usedMemory, type Program } from '../sim/programs';
 import { newPizzeria, type NetworkSeed } from '../sim/generate';
-import type { DevProject } from '../sim/development';
+import { TRAIT_POOL, type DevProject } from '../sim/development';
+import { makeVariant, variantCost, VARIANTS_PER_DAY, type Refining } from '../sim/training';
 import type { NetIntel } from '../sim/intel';
 import { newGameCode } from '../sim/progression';
 import { MAX_HEALTH, REST_PER_DAY } from '../sim/health';
@@ -28,6 +29,8 @@ export interface Account {
   news: string[];
   /** The program you are writing, if any. */
   project?: DevProject;
+  /** Refine: variants of one base waiting to be saved (lost once another day passes). */
+  refine?: Refining;
   /** Character level, XP into the current level, and the skills learned. */
   level: number;
   xp: number;
@@ -83,6 +86,41 @@ export function passDay(a: Account, roll: () => number = Math.random, days = 1):
     a.contract = undefined;
   }
   a.news = news;
+}
+
+/** Refining in progress, if its variants are still there: they are lost once another day has passed. */
+export function currentRefine(a: Account): Refining | undefined {
+  if (a.refine && a.refine.day !== a.day) a.refine = undefined;
+  return a.refine;
+}
+
+/** Refines a base for one day: the day passes and new variants of it wait to be saved. Refining another base drops the variants of the last one. */
+export function refineDay(a: Account, baseId: string, roll: () => number = Math.random): Program[] | string {
+  const base = a.programs.find((p) => p.id === baseId);
+  if (!base) return 'no such program';
+  const r = currentRefine(a);
+  const keep = r && r.baseId === baseId ? r : { baseId, variants: [], day: a.day, made: 0 };
+  passDay(a, roll, 1);
+  const made: Program[] = [];
+  for (let i = 0; i < VARIANTS_PER_DAY; i++) made.push(makeVariant(base, ++keep.made, TRAIT_POOL, roll));
+  keep.variants.push(...made);
+  keep.day = a.day;
+  a.refine = keep;
+  return made;
+}
+
+/** Saves a variant as a program of its own, for a small fee. */
+export function saveVariant(a: Account, variantId: string, name: string): Program | string {
+  const r = currentRefine(a);
+  const v = r?.variants.find((x) => x.id === variantId);
+  if (!r || !v) return 'that variant is gone';
+  const cost = variantCost(v);
+  if (a.sats < cost) return `saving it costs ${cost} §, you have ${a.sats} §`;
+  a.sats = Math.round((a.sats - cost) * 100) / 100;
+  const program: Program = { ...v, id: `p${nextProgramId(a)}`, name: name.trim().slice(0, 20) || v.name };
+  a.programs.push(program);
+  r.variants = r.variants.filter((x) => x !== v);
+  return program;
 }
 
 /** Rests at your base: days pass and you heal. */
@@ -268,7 +306,7 @@ export function migrate(a: Account): Account {
   }
   a.version = SAVE_VERSION;
   renameOld(a.programs as { type: string; name: string }[]);
-  // Memory used to count programs; now it is GB.
+  // Memory used to count programs; now it is hundredths of a TB.
   if (typeof a.memory !== 'number' || a.memory < 100) a.memory = DEFAULT_MEMORY;
   if (typeof a.day !== 'number') a.day = 1;
   if (typeof a.reputation !== 'number') a.reputation = 0;
