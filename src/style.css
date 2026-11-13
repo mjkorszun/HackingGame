@@ -1087,3 +1087,12 @@ body {
 #view.is-paused .paused-tag, #view.is-paused .paused-frame { display: block; }
 .paused-frame { position: absolute; inset: 0; border: 2px solid #7f9cc2; z-index: 4; }
 .paused-tag { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); z-index: 4; padding: 2px 10px; font-family: var(--font); font-size: 13px; letter-spacing: 3px; color: #9db4d4; background: rgba(0, 0, 0, 0.7); border: 1px solid #7f9cc2; }
+
+/* ---------- fog: links to unexplored nodes fade into the dark ---------- */
+.link-fog { stroke-width: 2.5; }
+.link-fog.is-active { stroke-dasharray: 6 6; animation: flow 0.6s linear infinite; }
+.node-fog-hit { fill: transparent; stroke: none; cursor: pointer; }
+.mini-link-fog { stroke-width: 1.5; }
+.deck-cd { display: inline-block; width: 46px; height: 6px; margin-left: 6px; border: 1px solid #7f9cc2; vertical-align: middle; background: #0a0f14; }
+.deck-cd[hidden] { display: none; }
+.deck-cd-fill { display: block; height: 100%; background: #7f9cc2; }

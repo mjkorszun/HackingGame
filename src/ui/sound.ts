@@ -20,7 +20,7 @@ const SOUNDS = {
   error: 'error_005.wav',
   key: 'click1.wav',
   // One sound per program type, played when it starts.
-  mapper: 'zap_three_tone_up.ogg',
+  scout: 'zap_three_tone_up.ogg',
   scan: 'three_tone_1.ogg',
 } as const;
 

@@ -37,7 +37,7 @@ export const SKILLS: Skill[] = [
   { id: 'iron', name: 'Iron Will', text: 'more integrity' },
   { id: 'cracker', name: 'Cracker', text: 'decrypt cracks seals faster' },
   { id: 'appraiser', name: 'Appraiser', text: 'files sell for more' },
-  { id: 'cartographer', name: 'Cartographer', text: 'mapper sees further' },
+  { id: 'cartographer', name: 'Cartographer', text: 'scouts tell nodes apart better' },
   { id: 'speedreader', name: 'Speed Reader', text: 'scanning files is faster' },
   { id: 'analyst', name: 'Analyst', text: 'analyze reads agents more often' },
   { id: 'cool', name: 'Cool Head', text: 'the alarm calms down sooner' },

@@ -18,7 +18,7 @@ describe('complete', () => {
   it('lists all commands that match an ambiguous prefix', () => {
     const r = complete('m', ctx);
     expect(r.value).toBe('m');
-    expect(r.options).toEqual(['mapper', 'mask', 'map', 'mute']);
+    expect(r.options).toEqual(['mask', 'map', 'mute']);
   });
 
   it('completes a unique node name', () => {

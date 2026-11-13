@@ -1,5 +1,5 @@
 import { clickAction, filePrice, type DataFile } from './files';
-import { MAPPER_COOLDOWN, MAPPER_NOISE, mapperChances } from './programs';
+import { scoutChance, scoutCooldown } from './programs';
 import { describe, expect, it } from 'vitest';
 import { testSystem } from '../data/testSystem';
 import { FixedClock } from './clock';
@@ -127,19 +127,16 @@ describe('Game hop state', () => {
   });
 });
 
-describe('hidden nodes', () => {
-  it('show as hidden until the player enters them', () => {
+describe('fog', () => {
+  it('a node shows what it is only once you have been there', () => {
     const game = new Game(quiet);
-    expect(game.kindOf('staff')).toBe('hidden');
-    expect(game.findNode('Staff Records')).toBeUndefined();
-    expect(game.findNode('staff')).toBeUndefined();
+    expect(game.kindOf('gw')).not.toBe('hidden');
+    expect(game.kindOf('edge')).toBe('hidden'); // a neighbour: you see the link, not the node
+    expect(game.findNode('Edge Router')).toBeUndefined();
     game.revealMap();
-    expect(game.nameOf('orders')).toBe('?1');
-    expect(game.nameOf('staff')).toBe('?2');
-    expect(game.findNode('?2')?.id).toBe('staff');
-    expect(game.findNode('?')).toBeUndefined(); // not next to any hidden node yet
+    expect(game.nameOf('staff')).toMatch(/^\?\d+$/);
     game.travelTo('staff');
-    run(game, MOVE_TICKS * 5);
+    run(game, MOVE_TICKS * 6);
     expect(game.currentNode).toBe('staff');
     expect(game.nameOf('staff')).toBe('Staff Records');
     expect(game.kindOf('staff')).toBe('database');
@@ -162,7 +159,7 @@ describe('discovery', () => {
     expect(game.currentNode).toBe('edge');
     expect(game.isKnown('auth')).toBe(true);
     expect(game.isKnown('orders')).toBe(true);
-    expect(game.nameOf('orders')).toBe('?1');
+    expect(game.kindOf('orders')).toBe('hidden');
     expect(game.isKnown('core')).toBe(false);
   });
 });
@@ -237,85 +234,45 @@ describe('discovering the map', () => {
   });
 });
 
-describe('mapper', () => {
-  /** Rolls in order, as d100 results (1..100). */
-  const rolls = (...r: number[]) => {
-    let i = 0;
-    return () => (r[Math.min(i++, r.length - 1)] - 1) / 100;
-  };
+describe('scout', () => {
+  const scoutGame = (rng: () => number) => new Game(quiet, rng, [{ id: 'p1', type: 'scout', name: 'Sparrow 1.0', rating: 1 }]);
   const finish = (g: Game) => {
-    for (let i = 0; i < 1000 && g.isMapping; i++) g.step();
+    for (let i = 0; i < 2000 && g.allies.length; i++) g.step();
   };
 
-  it('chances grow with rating and fall with encryption', () => {
-    expect(mapperChances(3, 2).identify).toBeCloseTo(90);
-    expect(mapperChances(3, 2).extend).toBeCloseTo(20);
-    expect(mapperChances(1000, 1).extend).toBeGreaterThan(99);
-  });
-
-  it('picks the best program, the Nth one, or one by name', () => {
-    const g = new Game(quiet);
-    expect(g.findProgram('mapper')?.name).toBe('Hawkeye V2');
-    expect(g.findProgram('mapper', '2')?.name).toBe('Owl 1.0');
-    expect(g.findProgram('mapper', 'owl 1.0')?.rating).toBe(1);
-    expect(g.findProgram('mapper', '9')).toBeUndefined();
-  });
-
-  it('always finds the neighbours, even when every roll fails', () => {
-    const g = new Game(quiet, rolls(100));
-    g.travelTo('edge');
-    run(g, MOVE_TICKS * 2);
-    g.runProgram('mapper');
-    for (let i = 0; i < 1000 && g.isMapping; i++) g.step();
-    for (const n of g.network.neighbours('edge')) expect(g.isKnown(n.id)).toBe(true);
-  });
-
-  it('needs a long time to recharge after a run', () => {
-    const g = new Game(quiet, rolls(100));
-    g.autoPause = false;
-    g.setPaused(false);
-    expect(g.runProgram('mapper')).toBe(true);
+  it('sends one instance to each unexplored neighbour, and tells what they are on a good roll', () => {
+    const g = scoutGame(() => 0); // every roll 1: nothing catches it, every node told
+    const unexplored = g.network.neighbours(g.currentNode).filter((n) => !g.isIdentified(n.id));
+    expect(g.scoutCommand('')).toBe(true);
+    expect(g.allies.length).toBe(unexplored.length);
     finish(g);
-    expect(g.runProgram('mapper')).toBe(false);
-    expect(g.mapperCooldown).toBeGreaterThan(0);
-    run(g, MAPPER_COOLDOWN);
-    expect(g.mapperCooldown).toBe(0);
-    expect(g.runProgram('mapper')).toBe(true);
+    for (const n of unexplored) expect(g.isIdentified(n.id)).toBe(true);
   });
 
-  it('makes noise in the node it runs from', () => {
-    const g = new Game(quiet, rolls(100));
-    expect(g.runProgram('mapper')).toBe(true);
-    expect(g.noise.get('gw')).toBe(MAPPER_NOISE);
+  it('a bad roll leaves the node unexplored', () => {
+    const g = scoutGame(() => 0.99);
+    const n = g.network.neighbours(g.currentNode).find((x) => !g.isIdentified(x.id))!;
+    g.scoutCommand('');
+    finish(g);
+    expect(g.isIdentified(n.id)).toBe(false);
   });
 
-  it('identifies a hidden neighbour on a good roll and stops on a bad extend roll', () => {
-    const s = new Game(quiet, rolls(1, 100));
-    s.travelTo('edge');
-    run(s, MOVE_TICKS * 2);
-    expect(s.isIdentified('orders')).toBe(false);
-    s.runProgram('mapper');
-    expect(s.travelTo('gw')).toBe(false); // busy mapping
-    finish(s);
-    expect(s.isIdentified('orders')).toBe(true);
-    expect(s.isKnown('core')).toBe(false);
+  it('recharges for a long time, longer for every extra instance', () => {
+    expect(scoutCooldown(1)).toBe(300);
+    expect(scoutCooldown(3)).toBe(570);
+    expect(scoutChance(1)).toBe(50);
+    const g = scoutGame(() => 0);
+    g.scoutCommand('');
+    expect(g.cooldownOf('p1')).not.toBeNull();
+    expect(g.scoutCommand('')).toBe(false);
+    for (let i = 0; i < 2000 && g.cooldownOf('p1'); i++) g.step();
+    expect(g.cooldownOf('p1')).toBeNull();
   });
 
-  it('a hidden neighbour stays hidden on a bad roll', () => {
-    const s = new Game(quiet, rolls(100));
-    s.travelTo('edge');
-    run(s, MOVE_TICKS * 2);
-    s.runProgram('mapper');
-    finish(s);
-    expect(s.isIdentified('orders')).toBe(false);
-  });
-
-  it('strong rolls look further, up to the whole map', () => {
-    const s = new Game(quiet, rolls(1));
-    s.runProgram('mapper');
-    finish(s);
-    expect(s.knownCount).toBe(testSystem.nodes.length);
-    expect(s.isIdentified('staff')).toBe(true);
+  it('has nothing to do when every neighbour is explored', () => {
+    const g = scoutGame(() => 0);
+    for (const n of g.network.neighbours(g.currentNode)) (g as unknown as { identified: Set<string> }).identified.add(n.id);
+    expect(g.scoutCommand('')).toBe(false);
   });
 });
 
@@ -330,7 +287,6 @@ describe('stub programs', () => {
     expect(g.runProgram('warrior')).toBe(true);
     expect(g.allies.length).toBe(1);
     expect(g.runProgram('warrior')).toBe(false); // the only one is already out
-    expect(g.isMapping).toBe(false);
   });
 });
 
@@ -537,9 +493,10 @@ describe('auto-pause', () => {
   it('stops time when a program ends', () => {
     const g = new Game(quiet, () => 0.99);
     g.setAutoPause(true);
-    g.runProgram('mapper');
-    for (let i = 0; i < 100 && !g.paused; i++) g.step();
-    expect(g.isMapping).toBe(false);
+    g.currentNode = 'orders';
+    g.runProgram('scan');
+    expect(g.paused).toBe(false);
+    for (let i = 0; i < 400 && !g.paused; i++) g.step();
     expect(g.paused).toBe(true);
   });
 
@@ -551,7 +508,7 @@ describe('auto-pause', () => {
     expect(g.paused).toBe(false);
     run(g, MOVE_TICKS);
     expect(g.paused).toBe(true);
-    g.runProgram('mapper');
+    g.runProgram('warrior');
     expect(g.paused).toBe(false);
   });
 
@@ -771,37 +728,18 @@ describe('agents', () => {
     expect(g.integrity).toBeLessThan(g.maxIntegrity);
   });
 
-  it('a scout flies to a node, comes back to report, and goes back into memory; an agent may catch it', () => {
-    const g = new Game({ ...testSystem, agents: [{ kind: 'warrior', node: 'orders' }] });
+  it('a scout reports only once it is back, and an agent may catch it', () => {
+    const g = new Game({ ...testSystem, agents: [{ kind: 'warrior', node: 'edge' }] }, Math.random, [{ id: 'sc', type: 'scout', name: 'Kite 9', rating: 9 }]);
     g.autoPause = false;
     g.setPaused(false);
-    (g as unknown as { d100: () => number }).d100 = () => 100; // never caught
     g.agents[0].stayLeft = 100_000;
-    g.programs.push({ id: 'sc', type: 'scout', name: 'Kite 9', rating: 9 });
-    // Sweep out and back until it has read the Orders DB.
-    for (let trip = 0; trip < 6 && !g.isIdentified('orders'); trip++) {
-      expect(g.scoutCommand('')).toBe(true);
-      expect(g.programState('sc')).toBe('out');
-      let guard = 0;
-      while (!g.allies[0]?.homeward && guard++ < 500) tick(g, 1);
-      const read = g.allies[0].node;
-      // It has read the node, but you learn it only when it is back.
-      expect(g.isIdentified(read)).toBe(false);
-      tick(g, 500);
-      expect(g.allies.length).toBe(0);
-      expect(g.programState('sc')).not.toBe('out');
-      expect(g.isIdentified(read)).toBe(true);
-    }
-    expect(g.isIdentified('orders')).toBe(true);
-    expect(g.agents[0].known).not.toBe('none');
-    (g as unknown as { d100: () => number }).d100 = () => 1; // caught on the next node with an agent
-    g.agents[0].node = 'edge';
-    g.travelTo('gw');
-    tick(g, 100);
-    expect(g.scoutCommand('Edge Relay')).toBe(true);
-    tick(g, 100);
+    const d100 = (v: number) => ((g as unknown as { d100: () => number }).d100 = () => v);
+    d100(1); // caught by the agent in the Edge node
+    expect(g.scoutCommand('')).toBe(true);
+    tick(g, 200);
     expect(g.programState('sc')).toBe('lost');
     expect(g.alarm).toBe(1);
+    expect(g.isIdentified('edge')).toBe(false);
   });
 
   it('an agent walks to the link for 0.75 s before crossing; a hostile one chases you a bit slower than you move', () => {
@@ -832,6 +770,7 @@ describe('agents', () => {
     g.setPaused(false);
     for (const a of g.agents) a.stayLeft = 1_000_000;
     g.currentNode = 'ai';
+    (g as unknown as { identified: Set<string> }).identified.add('ai');
     expect(g.runAction('backdoor')).toBe(true);
     g.currentNode = 'gw';
     run(g, 1);
@@ -915,7 +854,7 @@ describe('memory', () => {
   it('a downloaded program can be loaded into free memory and used at once', () => {
     const g = new Game(quiet, Math.random, [], { memory: 150 }); // Mace 15 (attack 3) takes 120 GB
     g.loot.push({ name: 'x f1', label: 'Mace 15', price: 0, evaluated: true, software: { id: 'p500', type: 'warrior', name: 'Mace 15', rating: 3 } });
-    g.loot.push({ name: 'x f2', label: 'Owl', price: 0, evaluated: true, software: { id: 'p501', type: 'mapper', name: 'Owl 2', rating: 1 } });
+    g.loot.push({ name: 'x f2', label: 'Owl', price: 0, evaluated: true, software: { id: 'p501', type: 'decrypt', name: 'Owl 2', rating: 1 } });
     expect(g.loadProgram('Mace 15')).toBe(true);
     expect(g.findProgram('warrior')?.name).toBe('Mace 15');
     expect(g.loadProgram('Owl 2')).toBe(false); // memory full
@@ -1066,7 +1005,7 @@ describe('software tab', () => {
       { id: 'a', type: 'hide', name: 'A', rating: 1 },
       { id: 'b', type: 'scan', name: 'B', rating: 1 },
       { id: 'c', type: 'decrypt', name: 'C', rating: 1 },
-      { id: 'd', type: 'mapper', name: 'D', rating: 3 },
+      { id: 'd', type: 'warrior', name: 'D', rating: 3 },
     ] as const;
     const a = { programs: programs.map((p) => ({ ...p })), loaded: ['a', 'b'], memory: 130 } as unknown as Parameters<typeof placeProgram>[0];
     expect(placeProgram(a, 'c', 0)).toBe(true); // c (50) in front: 40 + 30 + 50 = 120
@@ -1183,6 +1122,19 @@ describe('hardware', () => {
     const a = migrate(old);
     expect(a.hardware.installed.spine2).toBe('tianwei-jack-0-tn');
     expect(a.hardware.installed.spine1).toBeUndefined();
+  });
+
+  it('drops mapper programs from old saves', async () => {
+    const { migrate, fresh } = await import('../ui/account');
+    const old = JSON.parse(JSON.stringify(fresh()));
+    old.version = 2;
+    old.programs.push({ ...old.programs[0], id: 'old-map', type: 'mapper', name: 'Hawkeye 1.0' });
+    old.loaded.push('old-map');
+    old.project = { type: 'mapper', name: 'Eye', rating: 1, daysLeft: 2 };
+    const a = migrate(old);
+    expect(a.programs.some((p) => (p.type as string) === 'mapper')).toBe(false);
+    expect(a.loaded).not.toContain('old-map');
+    expect(a.project).toBeUndefined();
   });
 });
 

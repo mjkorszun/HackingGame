@@ -5,7 +5,7 @@ import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
 import { programSize, usedMemory } from './programs';
-import { FILE_PROGRAMS, PROGRAM_STUBS, MAPPER_COOLDOWN, MAPPER_HOP_TICKS, MAPPER_NOISE, mapperChances, type Program, type ProgramType } from './programs';
+import { FILE_PROGRAMS, PROGRAM_STUBS, SCOUT_NOISE, scoutChance, scoutCooldown, type Program, type ProgramType } from './programs';
 import type { FxTarget, LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
 /** Unidentified nodes are called ?1, ?2, ... */
@@ -59,19 +59,6 @@ const FEAT_LABEL: Record<Feat, string> = {
   honeytoken: 'honeytokens spotted',
 };
 
-interface MapperTask {
-  /** Hop number: 1 = neighbours, 2 = two links away, ... */
-  depth: number;
-  /** Connections the eyes fly along in this hop. */
-  edges: [string, string][];
-  /** Every node the mapper reached so far. */
-  reached: Set<string>;
-  elapsed: number;
-  identify: number;
-  extend: number;
-  progressId: number;
-}
-
 interface ScanTask {
   nodeId: string;
   /** Indexes of the files still to scan, the current one first. */
@@ -102,7 +89,7 @@ export interface Ally {
   /** Scout: nodes it has been to. */
   visited?: Set<string>;
   /** Scout: what it has read so far (node and the agents there). You learn it only when it gets back to you. */
-  findings?: { node: string; agents: string[] }[];
+  findings?: { node: string; agents: string[]; told: boolean }[];
   /** Scout: it has read the node it went for and flies back to you once it is done reading. */
   homeward?: boolean;
   /** Stays in this system between runs (a planted skimmer): not from your memory, takes no orders. */
@@ -233,7 +220,6 @@ export class Game {
   /** Noise the player made in each node. Nothing reacts to it yet. */
   readonly noise = new Map<string, number>();
 
-  private mapper: MapperTask | null = null;
   private scan: ScanTask | null = null;
   /** Data files in each database (a honeypot posing as one has them too). */
   private readonly files = new Map<string, DataFile[]>();
@@ -253,7 +239,8 @@ export class Game {
     this.network = new Network(system);
     const entry = opts.entry && this.network.has(opts.entry) ? opts.entry : system.entry;
     this.currentNode = entry;
-    for (const n of system.nodes) if (!n.hidden || n.id === entry) this.identified.add(n.id);
+    // Like Decker: you see where the links go, but not what is at the other end until you have been there.
+    this.identified.add(entry);
     if (opts.intel) {
       for (const id of opts.intel.identified) if (this.network.has(id)) this.identified.add(id);
       for (const id of opts.intel.known) if (this.network.has(id)) this.learn(id);
@@ -853,9 +840,20 @@ export class Game {
     }
   }
 
+  /** Scouts recharging: program id to the tick it is ready again and the length of that wait. */
+  private scoutReady = new Map<string, { at: number; total: number }>();
+
+  /** A program's cooldown, if it is recharging: ticks left and the whole wait. */
+  cooldownOf(id: string): { left: number; total: number } | null {
+    const c = this.scoutReady.get(id);
+    if (!c || c.at <= this.tick) return null;
+    return { left: c.at - this.tick, total: c.total };
+  }
+
   /**
-   * scout [node]: sends your best free scout from here, to that node or (with no node) to explore.
-   * The argument can also name the scout program.
+   * scout [program]: one instance flies to each neighbour you have not explored. Each may tell what
+   * its node is (its chance depends on the scout), then flies back and reports. Every instance after
+   * the first makes the cooldown longer.
    */
   scoutCommand(arg: string): boolean {
     if (this.move) {
@@ -863,70 +861,49 @@ export class Game {
       return false;
     }
     const q = arg.trim().toLowerCase();
-    const byName = q ? this.findProgram('scout', q) : undefined;
-    const program = byName ?? this.findProgram('scout');
+    const program = (q ? this.findProgram('scout', q) : undefined) ?? this.findProgram('scout');
     if (!program) {
-      this.log(this.programs.some((p) => p.type === 'scout') ? 'every scout is already out' : 'no scout program in your gear', 'alarm1');
+      this.log(this.programs.some((p) => p.type === 'scout') ? 'your scout is lost for this run' : 'no scout program in your gear', 'alarm1');
       return false;
     }
-    let dest: string | null = null;
-    if (q && !byName) {
-      const node = this.network.def.nodes.find((n) => this.isKnown(n.id) && (this.nameOf(n.id).toLowerCase() === q || n.id === q));
-      if (!node) {
-        this.log(`unknown node: ${arg}`, 'alarm1');
-        return false;
-      }
-      dest = node.id === this.currentNode ? null : node.id;
+    const cd = this.cooldownOf(program.id);
+    if (cd) {
+      this.log(`${program.name} is recharging, ready in ${Math.ceil(cd.left / TICKS_PER_SECOND)} s`, 'alarm1');
+      return false;
     }
-    const ally: Ally = { id: `y${this.nextAllyId++}`, program, hp: 10 + 5 * program.rating, maxHp: 10 + 5 * program.rating, node: this.currentNode, hop: null, order: 'explore', attackLeft: 0, target: null, dest, visited: new Set([this.currentNode]), findings: [] };
-    this.allies.push(ally);
-    this.released.add(program.id);
+    const targets = this.network.neighbours(this.currentNode).filter((n) => !this.isIdentified(n.id)).map((n) => n.id);
+    if (!targets.length) {
+      this.log(`${program.name}: every neighbour is already explored`, 'system');
+      return false;
+    }
+    const total = scoutCooldown(targets.length);
+    this.scoutReady.set(program.id, { at: this.tick + total, total });
+    const here = this.currentNode;
+    this.noise.set(here, (this.noise.get(here) ?? 0) + SCOUT_NOISE);
+    for (const dest of targets) {
+      const ally: Ally = { id: `y${this.nextAllyId++}`, program, hp: 10 + 5 * program.rating, maxHp: 10 + 5 * program.rating, node: here, hop: null, order: 'explore', attackLeft: 0, target: null, dest, visited: new Set([here]), findings: [] };
+      this.allies.push(ally);
+      this.outcome({ kind: 'ally', id: ally.id }, true, 'SCOUT OUT');
+    }
     this.deckVersion++;
     this.events.push({ type: 'program', programType: 'scout' });
-    this.outcome({ kind: 'ally', id: ally.id }, true, 'SCOUT OUT');
-    this.log(`${program.name} sent${dest ? ` to ${this.nameOf(dest)}` : ' to the nearest unknown node'}. it reports when it is back with you`, 'info');
+    this.log(`${program.name} sent to ${targets.length} unexplored node${targets.length > 1 ? 's' : ''} (${scoutChance(program.rating)}% to tell each one). it is loud: noise here +${SCOUT_NOISE}. recharging ${Math.round(total / TICKS_PER_SECOND)} s`, 'info');
     this.actionStarted();
     return true;
   }
 
-  /**
-   * A scout reads its node for a moment, then flies on: to where it was sent, or to the nearest node not yet identified.
-   * Once it has read that node it flies back to you, reports, and goes back into your memory.
-   */
+  /** A scout flies to its node, reads it for a moment, then flies back to you, reports, and is gone. */
   private scoutStep(ally: Ally): void {
     if (ally.attackLeft > 0) {
       ally.attackLeft--;
       return;
     }
-    if (ally.homeward) {
+    if (ally.homeward || !ally.dest || ally.dest === ally.node) {
       this.scoutHome(ally);
       return;
     }
-    let next: string | undefined;
-    if (ally.dest && ally.dest !== ally.node) next = this.network.path(ally.node, ally.dest)[0];
+    const next = this.network.path(ally.node, ally.dest)[0];
     if (!next) {
-      ally.dest = null;
-      // Breadth-first to the nearest node it has not been to and you have not identified.
-      const seen = new Set([ally.node]);
-      let ring = [ally.node];
-      const first = new Map<string, string>();
-      while (ring.length && !next) {
-        const out: string[] = [];
-        for (const id of ring) for (const n of this.network.neighbours(id)) {
-          if (seen.has(n.id) || n.kind === 'honeypot' && this.isIdentified(n.id)) continue;
-          seen.add(n.id);
-          first.set(n.id, first.get(id) ?? n.id);
-          if (!this.isIdentified(n.id) && !ally.visited!.has(n.id)) {
-            next = first.get(n.id);
-            break;
-          }
-          out.push(n.id);
-        }
-        ring = out;
-      }
-    }
-    if (!next) {
-      if (!ally.findings?.length) this.log(`${ally.program.name}: nothing left to find around here. it comes back`, 'system');
       this.scoutHome(ally);
       return;
     }
@@ -941,18 +918,23 @@ export class Game {
     this.tryUnload(ally);
   }
 
-  /** A scout back with you: you learn what it read on the way. */
+  /** A scout back with you: what it could tell about its node, and the agents it saw there. */
   private scoutReports(ally: Ally): void {
     let found = 0;
     for (const f of ally.findings!) {
-      if (!this.isIdentified(f.node)) found++;
-      this.identified.add(f.node);
-      this.discoverAround(f.node);
+      const name = this.nameOf(f.node);
       const agents = this.agents.filter((a) => f.agents.includes(a.id));
       for (const a of agents) if (a.known === 'none') a.known = 'partial';
-      this.log(`${ally.program.name}: ${this.nameOf(f.node)} (${this.kindOf(f.node)})${f.agents.length ? `, agents seen: ${agents.map((a) => `${a.name} (${a.typeName})`).join(', ') || 'gone since'}` : ', no agents'}`, 'info');
+      const seen = f.agents.length ? `, agents seen: ${agents.map((a) => `${a.name} (${a.typeName})`).join(', ') || 'gone since'}` : ', no agents';
+      if (f.told && !this.isIdentified(f.node)) {
+        this.identified.add(f.node);
+        found++;
+        this.log(`${ally.program.name}: ${name} is ${this.nameOf(f.node)} (${this.kindOf(f.node)})${seen}`, 'info');
+      } else if (!f.told) {
+        this.log(`${ally.program.name}: could not tell what ${name} is${seen}`, 'system');
+      }
     }
-    if (found) this.outcome({ kind: 'player' }, true, found > 1 ? `FOUND ${found}` : 'FOUND');
+    if (found) this.outcome({ kind: 'player' }, true, 'FOUND');
     ally.findings = [];
   }
 
@@ -974,10 +956,10 @@ export class Game {
       this.raiseAlarm(1);
       return;
     }
-    const isNew = !this.isIdentified(id);
-    ally.findings!.push({ node: id, agents: this.agentsIn(id).map((a) => a.id) });
-    // The node it went for: read it, then fly back.
-    if (ally.dest ? ally.dest === id : isNew) ally.homeward = true;
+    if (id !== ally.dest) return;
+    // Its node: it may tell what it is, then it flies back.
+    ally.findings!.push({ node: id, agents: this.agentsIn(id).map((a) => a.id), told: this.d100() <= scoutChance(r) });
+    ally.homeward = true;
   }
 
   private allyHits(ally: Ally, a: Agent): void {
@@ -1051,7 +1033,6 @@ export class Game {
     this.ended = true;
     this.move = null;
     this.route = [];
-    this.mapper = null;
     this.scan = null;
     this.analysis = null;
     this.gateQuery = null;
@@ -1084,7 +1065,6 @@ export class Game {
     if (this.paused || this.ended) return;
     this.tick++;
     this.updateMove();
-    this.updateMapper();
     this.updateScan();
     this.updateAnalysis();
     this.updateFileJob();
@@ -1226,7 +1206,7 @@ export class Game {
       this.revealMap();
       for (const n of this.network.def.nodes) this.identified.add(n.id);
       this.outcome({ kind: 'player' }, true, 'MAP DOWNLOADED');
-      this.log(`map downloaded: ${this.identified.size - before} hidden nodes identified`, 'info');
+      this.log(`map downloaded: ${this.identified.size - before} nodes identified`, 'info');
       return true;
     }
     if (action.id === 'backdoor') {
@@ -1485,26 +1465,14 @@ export class Game {
       this.currentNode = move.to;
       this.move = null;
       this.events.push({ type: 'moved', nodeId: this.currentNode });
+      this.identified.add(this.currentNode);
       this.log(`arrived: ${this.nameOf(this.currentNode)}`, 'info');
       this.discoverAround(this.currentNode);
-      if (!this.isIdentified(this.currentNode)) {
-        this.identified.add(this.currentNode);
-        this.log(`node identified: ${this.nameOf(this.currentNode)}`, 'info');
-      }
       this.startNextHop();
       if (!this.move) this.actionEnded();
     }
   }
 
-
-  /** The mapper hop in progress, for drawing the eyes. */
-  get mapperState(): { edges: [string, string][]; progress: number } | null {
-    return this.mapper ? { edges: this.mapper.edges, progress: this.mapper.elapsed / MAPPER_HOP_TICKS } : null;
-  }
-
-  get isMapping(): boolean {
-    return this.mapper !== null;
-  }
 
   /** Runs a program from the deck. Returns false if it could not start. */
   /** The player's programs of one type, in deck order. */
@@ -1582,52 +1550,18 @@ export class Game {
     if (program.type === 'silence' || program.type === 'deceive') {
       return this.agentCommand(program.type, '', program);
     }
-    if (this.isBusy) {
-      this.log(`${this.busyName} is already running`, 'alarm1');
-      return false;
-    }
-    const wait = this.mapperReadyAt - this.tick;
-    if (wait > 0) {
-      this.log(`${program.name}: mapper is recharging, ready in ${Math.ceil(wait / TICKS_PER_SECOND)} s`, 'alarm1');
-      return false;
-    }
-    this.mapperReadyAt = this.tick + MAPPER_COOLDOWN;
-    const here = this.currentNode;
-    const { identify, extend } = mapperChances(program.rating, this.network.def.encryption ?? 1);
-    this.events.push({ type: 'program', programType: program.type });
-    this.noise.set(here, (this.noise.get(here) ?? 0) + MAPPER_NOISE);
-    this.log(`${program.name} (mapper ${program.rating}) launched. it is loud: noise in ${this.nameOf(here)} +${MAPPER_NOISE}`, 'system');
-    const neighbours = this.network.neighbours(here).map((n) => n.id);
-    this.mapper = {
-      depth: 1,
-      edges: neighbours.map((n) => [here, n]),
-      reached: new Set([here, ...neighbours]),
-      elapsed: 0,
-      identify,
-      extend,
-      progressId: this.nextProgressId++,
-    };
-    this.mapperProgress(false);
-    this.actionStarted();
-    return true;
-  }
-
-  /** Tick when the mapper can run again. */
-  private mapperReadyAt = 0;
-
-  /** Seconds until the mapper can run again (0 = ready). */
-  get mapperCooldown(): number {
-    return Math.max(0, Math.ceil((this.mapperReadyAt - this.tick) / TICKS_PER_SECOND));
+    this.log(`${program.name}: nothing to run here`, 'system');
+    return false;
   }
 
   /** A program is running (the player can't travel meanwhile). */
   get isBusy(): boolean {
-    return this.mapper !== null || this.scan !== null || this.fileJob !== null;
+    return this.scan !== null || this.fileJob !== null;
   }
 
   /** What keeps the player busy, for messages. */
   private get busyName(): string {
-    return this.mapper ? 'mapper' : this.scan ? 'scan' : this.fileJob?.action ?? 'nothing';
+    return this.scan ? 'scan' : this.fileJob?.action ?? 'nothing';
   }
 
   private fileJob: FileJob | null = null;
@@ -1953,70 +1887,6 @@ export class Game {
     return true;
   }
 
-  /** Stops a running mapper; what it already found stays found. */
-  cancelMapper(): boolean {
-    if (!this.mapper) return false;
-    this.mapperProgress(true);
-    this.mapper = null;
-    this.log('mapper stopped', 'system');
-    return true;
-  }
-
-  private mapperProgress(done: boolean): void {
-    const s = this.mapper!;
-    this.events.push({
-      type: 'progress',
-      line: { id: s.progressId, label: `mapper hop ${s.depth}`, progress: s.elapsed / MAPPER_HOP_TICKS, done },
-    });
-  }
-
-  private updateMapper(): void {
-    const s = this.mapper;
-    if (!s) return;
-    s.elapsed++;
-    this.mapperProgress(s.elapsed >= MAPPER_HOP_TICKS);
-    if (s.elapsed < MAPPER_HOP_TICKS) return;
-
-    // The eyes arrived: what they reached becomes known; hidden nodes may be identified.
-    for (const [, to] of s.edges) {
-      const isNew = !this.known.has(to);
-      this.learn(to);
-      if (isNew) this.log(`mapper: found ${this.nameOf(to)}`, 'info');
-      if (this.identified.has(to)) continue;
-      const name = this.nameOf(to);
-      if (this.d100() <= s.identify) {
-        this.identified.add(to);
-        this.log(`mapper: ${name} identified: ${this.nameOf(to)} (${this.kindOf(to)})`, 'info');
-      } else {
-        this.log(`mapper: ${name} stays hidden`, 'system');
-      }
-    }
-
-    // A good roll sends the eyes one link further.
-    const frontier = [...new Set(s.edges.map(([, to]) => to))];
-    const next: [string, string][] = [];
-    for (const from of frontier) {
-      for (const n of this.network.neighbours(from)) {
-        if (s.reached.has(n.id)) continue;
-        s.reached.add(n.id);
-        next.push([from, n.id]);
-      }
-    }
-    if (next.length && this.d100() <= s.extend) {
-      this.log(`mapper: strong signal, looking ${s.depth + 1} links away`, 'info');
-      s.depth++;
-      s.edges = next;
-      s.elapsed = 0;
-      s.progressId = this.nextProgressId++;
-      this.mapperProgress(false);
-      return;
-    }
-    this.mapper = null;
-    this.outcome({ kind: 'player' }, true, 'MAPPED');
-    this.log('mapper finished', 'info');
-    this.actionEnded();
-  }
-
   log(text: string, color: LogColor = 'normal'): void {
     this.events.push({ type: 'log', line: { text, color } });
   }
@@ -2027,8 +1897,6 @@ export const DEFAULT_MEMORY = 500;
 
 /** The deck a new player starts with. */
 export const STARTING_PROGRAMS: Program[] = [
-  { id: 'p1', type: 'mapper', name: 'Hawkeye V2', rating: 3 },
-  { id: 'p2', type: 'mapper', name: 'Owl 1.0', rating: 1 },
   { id: 'p3', type: 'warrior', name: 'Shooter V3', rating: 1 },
   { id: 'p4', type: 'hide', name: 'Ghost 1.2', rating: 1 },
   { id: 'p6', type: 'scan', name: 'Probe 1.0', rating: 1 },

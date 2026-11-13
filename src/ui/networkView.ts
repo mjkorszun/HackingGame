@@ -75,7 +75,7 @@ const KIND_LABEL: Record<NodeKind, string> = {
   vehicle: 'external vehicle control',
   security: 'security systems',
   honeypot: 'database',
-  hidden: 'hidden node',
+  hidden: 'unexplored node',
 };
 
 /** How long an agent takes to walk from the link's end to its spot after arriving (a look only). */
@@ -107,12 +107,6 @@ function svg<K extends keyof SVGElementTagNameMap>(
   return el;
 }
 
-/** The mapper's eye: an almond with a pupil, centred on (x, y). */
-function drawEye(x: number, y: number, scale: number, opacity: number, parent: Element): void {
-  const g = svg('g', { class: 'mapper-eye', transform: `translate(${x} ${y}) scale(${scale})`, opacity: Math.max(0, opacity) }, parent);
-  svg('path', { d: 'M -9 0 Q 0 -8 9 0 Q 0 8 -9 0 Z', class: 'mapper-eye-white' }, g);
-  svg('circle', { cx: 0, cy: 0, r: 3, class: 'mapper-eye-pupil' }, g);
-}
 
 /** How fast animations run while the game is paused. */
 const PAUSE_PACE = 0.25;
@@ -266,8 +260,6 @@ export class NetworkView {
   private readonly tip = new Tooltip();
   /** Agents you have seen in this run: they stay on the map after they leave your node. */
   private readonly metAgents = new Set<string>();
-  /** Layers redrawn every frame with the mapper's eyes. */
-  private mapperLayer: SVGGElement | null = null;
   private agentLayer: SVGGElement | null = null;
   private miniAgentLayer: SVGGElement | null = null;
   private readonly agentEls = new Map<string, { main: SVGGElement; mini: SVGGElement }>();
@@ -280,7 +272,6 @@ export class NetworkView {
   private integrityEl!: HTMLDivElement;
   private queryBox!: HTMLDivElement;
   private queryKey = '';
-  private miniMapperLayer: SVGGElement | null = null;
   /** How far the time is into the next tick: moving things are drawn that much further along. */
   private alpha = 0;
   private miniXY: (id: string) => { x: number; y: number } = () => ({ x: 0, y: 0 });
@@ -528,7 +519,6 @@ export class NetworkView {
     const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}|${this.game.knownCount}|${this.game.filesKey}`;
     if (key !== this.lastKey) this.render();
     this.updateAvatar();
-    this.updateMapper();
     this.updateAgents();
     this.updateQuery();
     const lvl = this.game.alarm;
@@ -574,6 +564,7 @@ export class NetworkView {
     this.fxStack.clear();
     this.lastKey = `${g.currentNode}|${g.moveTarget}|${g.paused}|${g.identifiedCount}|${g.knownCount}|${g.filesKey}`;
     this.stage.innerHTML = '';
+    this.fogLinks = 0;
     const current = g.network.node(g.currentNode);
     const neighbours = g.network.neighbours(current.id);
     const positions = this.layoutNeighbours(current, neighbours);
@@ -587,7 +578,8 @@ export class NetworkView {
     for (const p of positions) {
       const active = target !== null && (p.node.id === target || g.network.path(current.id, target)[0] === p.node.id);
       const door = this.doorTowards(p.x, p.y);
-      svg('line', { x1: door.x, y1: door.y, x2: p.x, y2: p.y, class: active ? 'link link-active' : 'link' }, links);
+      if (g.isIdentified(p.node.id)) svg('line', { x1: door.x, y1: door.y, x2: p.x, y2: p.y, class: active ? 'link link-active' : 'link' }, links);
+      else this.drawFogLink(door, p, active, links);
       if (g.network.hasGate(current.id, p.node.id)) this.drawGate((door.x + p.x) / 2, (door.y + p.y) / 2, Math.atan2(p.y - door.y, p.x - door.x), links);
     }
 
@@ -624,14 +616,12 @@ export class NetworkView {
     this.avatar = this.drawAvatar();
     this.updateAvatar(true);
     this.agentLayer = svg('g', { class: 'agent-layer' }, this.stage);
-    this.mapperLayer = svg('g', { class: 'mapper-layer' }, this.stage);
     this.drawMinimap();
     this.agentEls.clear();
     this.allyEls.clear();
     // Effects outlive a redraw (a finished download redraws the files), so the layer is kept and put back on top.
     if (this.fxLayer) this.stage.appendChild(this.fxLayer);
     else this.fxLayer = svg('g', { class: 'fx-layer' }, this.stage);
-    this.updateMapper();
     this.updateAgents();
   }
 
@@ -996,59 +986,38 @@ export class NetworkView {
     }
   }
 
-  /** Draws the mapper's eyes flying along the links of the hop in progress. */
-  private updateMapper(): void {
-    const layer = this.mapperLayer;
-    const miniLayer = this.miniMapperLayer;
-    if (!layer || !miniLayer) return;
-    layer.replaceChildren();
-    miniLayer.replaceChildren();
-    const mapper = this.game.mapperState;
-    if (!mapper) return;
-    const t = Math.min(1, mapper.progress);
-    const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, k: number) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
-    const current = this.game.currentNode;
-    for (const [from, to] of mapper.edges) {
-      // Main view: from the room out to each neighbour, or from a neighbour out along its stub.
-      const end = this.positions.get(to);
-      if (from === current && end) {
-        const centre = { x: CX, y: CY };
-        const door = this.doorTowards(end.x, end.y);
-        const split = 0.3;
-        const p = t < split ? lerp(centre, door, t / split) : lerp(door, end, (t - split) / (1 - split));
-        drawEye(p.x, p.y, 1, 1, layer);
-      } else {
-        const start = this.positions.get(from);
-        if (start) {
-          const a = this.game.network.node(from);
-          const b = this.game.network.node(to);
-          const ang = Math.atan2(b.y - a.y, b.x - a.x);
-          const d = NEIGHBOUR_R + t * 70;
-          drawEye(start.x + Math.cos(ang) * d, start.y + Math.sin(ang) * d, 1, 1 - t, layer);
-        }
-      }
-      // Minimap: every eye, wherever it goes.
-      const p = lerp(this.miniXY(from), this.miniXY(to), t);
-      drawEye(p.x, p.y, 0.45, 1, miniLayer);
-    }
-  }
+
 
   /**
    * Short fading lines from each neighbour towards the nodes beyond it, so it is
    * clear the network goes on. Two visible neighbours linked together get a full line.
    */
+  private fogLinks = 0;
+
+  /** A link to a node you have not been to: it fades into the dark before it gets there. */
+  private drawFogLink(from: { x: number; y: number }, to: { x: number; y: number }, active: boolean, parent: Element): void {
+    const id = `fog-${this.fogLinks++}`;
+    const end = lerpXY(from, to, 0.85);
+    const grad = svg('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1: from.x, y1: from.y, x2: end.x, y2: end.y }, svg('defs', {}, parent));
+    svg('stop', { offset: '0', 'stop-color': active ? '#5ab4ff' : '#2a8a45', 'stop-opacity': 1 }, grad);
+    svg('stop', { offset: '1', 'stop-color': active ? '#5ab4ff' : '#2a8a45', 'stop-opacity': 0 }, grad);
+    svg('line', { x1: from.x, y1: from.y, x2: end.x, y2: end.y, class: `link-fog${active ? ' is-active' : ''}`, stroke: `url(#${id})` }, parent);
+  }
+
   private drawStubs(current: NodeDef, positions: { node: NodeDef; x: number; y: number }[], parent: Element): void {
     const g = this.game;
     const shown = new Map(positions.map((p) => [p.node.id, p]));
     const defs = svg('defs', {}, parent);
     let n = 0;
     for (const p of positions) {
+      // An unexplored neighbour is only a fading link: nothing shows beyond it.
+      if (!g.isIdentified(p.node.id)) continue;
       for (const far of g.network.neighbours(p.node.id)) {
         // Only links to nodes the player knows about: no hints of what is still unseen.
         if (far.id === current.id || !g.isKnown(far.id)) continue;
         const other = shown.get(far.id);
         if (other) {
-          if (p.node.id < far.id) svg('line', { x1: p.x, y1: p.y, x2: other.x, y2: other.y, class: 'link' }, parent);
+          if (p.node.id < far.id && g.isIdentified(far.id)) svg('line', { x1: p.x, y1: p.y, x2: other.x, y2: other.y, class: 'link' }, parent);
           continue;
         }
         const a = Math.atan2(far.y - p.node.y, far.x - p.node.x);
@@ -1403,14 +1372,12 @@ export class NetworkView {
     else cls.push('node-neighbour');
     if (opts.targeted) cls.push('node-targeted');
     const grp = svg('g', { class: cls.join(' '), 'data-node': node.id, tabindex: 0 }, this.stage);
-    const body = drawNodeShape(kind, x, y, r, 'node-body', grp);
+    // A node you have not been to is not drawn: an invisible spot at the end of its link takes the click.
+    const body = kind === 'hidden' && !opts.current ? svg('circle', { cx: x, cy: y, r: r * 0.9, class: 'node-fog-hit' }, grp) : drawNodeShape(kind, x, y, r, 'node-body', grp);
     // Hover sound only on the node shape itself, not on its labels.
     if (!opts.current) body.addEventListener('mouseenter', () => this.actions.hover());
     if (kind === 'hidden') {
-      // An unrecognised node shows nothing but its ?N name.
-      const size = opts.current ? 34 : 26;
-      const tag = svg('text', { x, y: opts.current ? y - 12 : y + size * 0.35, class: 'node-tag', 'font-size': size }, grp);
-      tag.textContent = nodeName;
+      // Nothing to show: you do not know what is there.
     } else if (hasTag(kind)) {
       const tag = svg('text', { x, y: y + (opts.current ? -14 : 5), class: 'node-tag', 'font-size': opts.current ? 22 : 13 }, grp);
       tag.textContent = KIND_TAG[kind];
@@ -1430,7 +1397,7 @@ export class NetworkView {
         const gated = this.game.network.hasGate(this.game.currentNode, node.id);
         return [
           { text: `click: connect${gated ? ' (through a gate)' : ''}`, cls: 'tip-act' },
-          { text: nodeName, cls: 'tip-title' },
+          { text: kind === 'hidden' ? 'unexplored: you do not know what is there' : nodeName, cls: 'tip-title' },
           ...(kind !== 'hidden' ? [{ text: KIND_LABEL[kind] }] : []),
           ...(gated ? [{ text: `the gate: ${oddsWord(this.game.gateBlockChance())} chance it stops you`, cls: 'tip-protection' }] : []),
           { text: 'right-click: all actions', cls: 'c-system' },
@@ -1500,16 +1467,32 @@ export class NetworkView {
     svg('rect', { x: ox, y: oy, width: mw, height: mh, class: 'minimap-frame' }, mini);
     const label = svg('text', { x: ox + 6, y: oy - 5, class: 'minimap-label' }, mini);
     label.textContent = 'MAP';
+    const miniDefs = svg('defs', {}, mini);
+    let fog = 0;
     for (const [a, b] of g.network.def.links) {
       if (!g.isKnown(a) || !g.isKnown(b)) continue;
+      const [ia, ib] = [g.isIdentified(a), g.isIdentified(b)];
+      if (!ia && !ib) continue;
       const na = g.network.node(a);
       const nb = g.network.node(b);
+      if (!ia || !ib) {
+        // A link to an unexplored node fades out half way.
+        const [from, to] = ia ? [na, nb] : [nb, na];
+        const x1 = sx(from.x), y1 = sy(from.y);
+        const x2 = (x1 + sx(to.x)) / 2, y2 = (y1 + sy(to.y)) / 2;
+        const id = `mfog-${fog++}`;
+        const grad = svg('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1, y1, x2, y2 }, miniDefs);
+        svg('stop', { offset: '0', 'stop-color': '#2a8a45', 'stop-opacity': 1 }, grad);
+        svg('stop', { offset: '1', 'stop-color': '#2a8a45', 'stop-opacity': 0 }, grad);
+        svg('line', { x1, y1, x2, y2, class: 'mini-link-fog', stroke: `url(#${id})` }, mini);
+        continue;
+      }
       svg('line', { x1: sx(na.x), y1: sy(na.y), x2: sx(nb.x), y2: sy(nb.y), class: 'mini-link' }, mini);
       if (g.network.hasGate(a, b)) svg('rect', { x: (sx(na.x) + sx(nb.x)) / 2 - 2, y: (sy(na.y) + sy(nb.y)) / 2 - 2, width: 4, height: 4, class: 'mini-gate' }, mini);
     }
     const target = g.moveTarget;
     for (const n of nodes) {
-      if (!g.isKnown(n.id)) continue;
+      if (!g.isKnown(n.id) || !g.isIdentified(n.id)) continue;
       const cls = ['mini-node', `kind-${g.kindOf(n.id)}`];
       if (n.id === g.currentNode) cls.push('mini-current');
       if (n.id === target) cls.push('mini-target');
@@ -1528,7 +1511,6 @@ export class NetworkView {
       });
     }
     this.miniAgentLayer = svg('g', { class: 'agent-layer' }, mini);
-    this.miniMapperLayer = svg('g', { class: 'mapper-layer' }, mini);
   }
 }
 

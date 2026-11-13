@@ -46,7 +46,7 @@ export interface SystemDef {
   links: [string, string][];
   /** Links that have a gate in the middle (gates are not nodes: they sit on the connection). */
   gates?: [string, string][];
-  /** How well the system hides itself; programs like Mapper roll against it. */
+  /** How well the system hides itself; programs may roll against it. */
   encryption?: number;
   /** A local business network (not a contract): a skimmer can be planted here. */
   local?: boolean;
