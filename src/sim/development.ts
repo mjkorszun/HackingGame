@@ -5,6 +5,7 @@
  * All numbers here are placeholders. Traits and bugs have no effect in the net yet.
  */
 import type { Program, ProgramType } from './programs';
+import { rollStats, rollTypeTraits } from './training';
 
 export const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'] as const;
 export type Rarity = (typeof RARITIES)[number];
@@ -84,6 +85,8 @@ export interface DevProject {
   /** Icon and its colour the finished program will have (chosen by the player). */
   icon?: string;
   color?: string;
+  /** Train Model: the Compute spread over the program's categories. */
+  compute?: Record<string, number>;
 }
 
 /** Days of work a new program needs (placeholder: 3 a rating point). */
@@ -133,7 +136,11 @@ export function rollTraits(count: number, roll: () => number = Math.random): str
 /** Turns a finished project into a program with a rolled rarity and traits. */
 export function finishProgram(p: DevProject, id: string, author: string, roll: () => number = Math.random): Program {
   const rarity = rollRarity(roll);
-  const program: Program = { id, type: p.type, name: p.name, rating: p.rating, rarity, traits: rollTraits(RARITY_TRAITS[rarity], roll) };
+  const program: Program = { id, type: p.type, name: p.name, rating: p.rating, rarity, traits: rollTypeTraits(p.type, RARITY_TRAITS[rarity], TRAIT_POOL, roll) };
+  if (p.compute) {
+    program.compute = { ...p.compute };
+    program.stats = rollStats(p.type, p.compute, p.rating, roll);
+  }
   if (rarity === 'legendary') program.author = author;
   const bugs = rollBugs(roll);
   if (bugs.length) program.bugs = bugs;

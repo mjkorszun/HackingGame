@@ -8,7 +8,8 @@ import { showCredits } from './credits';
 import { renderHardware, type HardwareActions, type HardwareView } from './hardwareView';
 import { AVATAR_ICONS, ICON_POOLS, MENU_ICONS, iconSvg, programIcon, randomIcon } from './icons';
 import { showIconPicker } from './iconPicker';
-import { showProgramInfo } from './programInfo';
+import { showProgramInfo, statHtml } from './programInfo';
+import { CATEGORIES, COMPUTE_POINTS, evenCompute, variantCost, VARIANTS_PER_DAY } from '../sim/training';
 import { PROGRAM_TYPES, programSize, type Program, type ProgramType } from '../sim/programs';
 
 /** A contract on offer: the job and the system it is in. */
@@ -76,11 +77,20 @@ export interface HomeActions {
   /** Software development: the project in progress, starting one, and working on it. */
   dev: {
     project(): DevProject | undefined;
-    start(type: ProgramType, rating: number, name: string, icon: string, color: string, body: string): void;
+    start(type: ProgramType, rating: number, name: string, icon: string, color: string, body: string, compute?: Record<string, number>): void;
     /** Works a day, a week, or the days left. Returns what happened, and the program if it got finished. */
     work(mode: 'day' | 'week' | 'finish'): { lines: string[]; program?: Program };
     /** Abandons the project in progress (the days spent are lost). */
     cancel(): void;
+  };
+  /** Refine: rolling the rarity and traits of a base again into variants, and saving the ones you want. */
+  refine: {
+    /** The base being refined and its variants not saved yet, if they are still there. */
+    state(): { base: Program; variants: Program[] } | undefined;
+    /** Refines this base for a day. Returns what happened. */
+    day(baseId: string): string[];
+    /** Saves a variant under this name; returns what happened. */
+    save(variantId: string, name: string): string;
   };
 }
 
@@ -104,7 +114,13 @@ export class HomeScreen {
   /** What the last bug fix did, shown in the Software tab. */
   private fixLine = '';
   /** The new-project form keeps its choices between renders. */
-  private form = { type: 'hide' as ProgramType, rating: 1, name: '', icon: randomIcon('hide'), color: '#3dff7a', picked: false, body: '' };
+  private form = { type: 'hide' as ProgramType, rating: 1, name: '', icon: randomIcon('hide'), color: '#3dff7a', picked: false, body: '', compute: evenCompute('hide') };
+  /** The program whose Refine card is open (from its card's refine button). */
+  private refineTarget: string | null = null;
+  /** What the last refine or save did. */
+  private refineLines: string[] = [];
+  /** Names typed for variants, kept between renders. */
+  private variantNames = new Map<string, string>();
   private readonly main: HTMLElement;
   /** The Software tab takes the whole left side while it is open. */
   private readonly soft: HTMLElement;
@@ -375,9 +391,11 @@ export class HomeScreen {
           <div class="sw-name">${esc(p.name)}</div>
           <div class="sw-meta">${p.type} ${p.rating}</div>
           <div class="sw-rarity">${rarity} · ${programSize(p)} GB${p.author ? ` · by ${esc(p.author)}` : ''}</div>
+          ${statHtml(p).map((st) => `<div class="sw-stat">${st.label} ${st.html}</div>`).join('')}
           ${traits}
           ${bugs}
         </div>
+        ${CATEGORIES[p.type] ? `<button type="button" class="sw-refine" title="Roll its rarity and traits again into variants">refine</button>` : ''}
         ${stored ? `<button type="button" class="sw-del" title="Delete this program for good">delete</button>` : ''}
       </div>`;
     };
@@ -421,6 +439,14 @@ export class HomeScreen {
         this.fixLine = this.actions.software.fix(p.id, Number(b.dataset.fix)) ?? '';
         this.render();
       }));
+      el.querySelector('.sw-refine')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.actions.click();
+        this.refineTarget = p.id;
+        this.refineLines = [];
+        this.render();
+        this.soft.querySelector('.rf-card')?.scrollIntoView({ block: 'nearest' });
+      });
       const del = el.querySelector<HTMLButtonElement>('.sw-del');
       // Two clicks: the first asks, the second deletes for good.
       del?.addEventListener('click', (e) => {
@@ -505,8 +531,9 @@ export class HomeScreen {
         <div class="dev-row">icon <button type="button" class="dev-icon-btn" title="Choose the icon and its colour">${iconSvg(f.icon, 'dev-icon', f.color)} change</button></div>
         <label class="dev-row">rating <select class="dev-rating">${Array.from({ length: MAX_DEV_RATING }, (_, i) => `<option${i + 1 === f.rating ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></label>
         <label class="dev-row">name <input class="dev-name" maxlength="20" value="${esc(name)}"></label>
+        ${this.computeHtml()}
         <div class="cc-line home-dim">size ${programSize(f)} GB. when it is done it may have up to ${MAX_BUGS} bugs: use it as it is, or fix them later (${bugFixDays(f)} days a bug). rarity and traits are rolled when it is done: common ${RARITY_TRAITS.common} traits, uncommon ${RARITY_TRAITS.uncommon}, rare ${RARITY_TRAITS.rare}, epic ${RARITY_TRAITS.epic}, legendary ${RARITY_TRAITS.legendary} and your name</div>
-        <button type="button" class="home-btn cc-btn" data-dev="start">Start project</button>`;
+        <button type="button" class="home-btn cc-btn" data-dev="start"${this.computeLeft() ? ` disabled title="Spend all ${COMPUTE_POINTS} points of Compute first"` : ''}>Train Model</button>`;
       const type = box.querySelector<HTMLSelectElement>('.dev-type')!;
       const rating = box.querySelector<HTMLSelectElement>('.dev-rating')!;
       const nameEl = box.querySelector<HTMLInputElement>('.dev-name')!;
@@ -514,6 +541,7 @@ export class HomeScreen {
       const change = () => {
         // A new type draws a new icon from its pool, unless the player chose one.
         if (!f.picked && f.type !== type.value) f.icon = randomIcon(type.value as ProgramType);
+        if (f.type !== type.value) f.compute = evenCompute(type.value as ProgramType);
         f.type = type.value as ProgramType;
         f.rating = Number(rating.value);
         if (auto) f.name = '';
@@ -522,6 +550,15 @@ export class HomeScreen {
       type.addEventListener('change', change);
       rating.addEventListener('change', change);
       nameEl.addEventListener('input', () => { f.name = nameEl.value; });
+      box.querySelectorAll<HTMLButtonElement>('[data-cat]').forEach((b) => b.addEventListener('click', () => {
+        const key = b.dataset.cat!;
+        const d = Number(b.dataset.d);
+        const v = (f.compute[key] ?? 0) + d;
+        if (v < 0 || (d > 0 && !this.computeLeft())) return;
+        this.actions.click();
+        f.compute[key] = v;
+        this.render();
+      }));
       box.querySelector('.dev-icon-btn')!.addEventListener('click', () => {
         this.actions.click();
         showIconPicker({ title: `icon for ${f.type}`, suggested: ICON_POOLS[f.type], icon: f.icon, color: f.color, onPick: (icon, color, body) => {
@@ -531,8 +568,9 @@ export class HomeScreen {
       });
       box.querySelector('[data-dev="start"]')!.addEventListener('click', () => {
         this.actions.click();
-        this.actions.dev.start(f.type, f.rating, (nameEl.value.trim() || name).slice(0, 20), f.icon, f.color, f.body);
-        Object.assign(f, { name: '', picked: false, icon: randomIcon(f.type), body: '' });
+        if (this.computeLeft()) return;
+        this.actions.dev.start(f.type, f.rating, (nameEl.value.trim() || name).slice(0, 20), f.icon, f.color, f.body, CATEGORIES[f.type] ? { ...f.compute } : undefined);
+        Object.assign(f, { name: '', picked: false, icon: randomIcon(f.type), body: '', compute: evenCompute(f.type) });
         this.devLines = [];
         this.devDone = undefined;
         this.render();
@@ -546,8 +584,8 @@ export class HomeScreen {
         <div class="cc-line dev-bar">[${'#'.repeat(filled)}${'.'.repeat(width - filled)}] ${p.daysSpent}/${total} days</div>
         <div class="cc-line">${p.daysLeft} day${p.daysLeft === 1 ? '' : 's'} of work left</div>
         <div class="dev-btns">
-          <button type="button" class="home-btn cc-btn" data-dev="day">Develop for day</button>
-          <button type="button" class="home-btn cc-btn" data-dev="week"${p.daysLeft < 7 ? ' disabled title="Needs at least 7 days of work left"' : ''}>Develop for week</button>
+          <button type="button" class="home-btn cc-btn" data-dev="day">Train for day</button>
+          <button type="button" class="home-btn cc-btn" data-dev="week"${p.daysLeft < 7 ? ' disabled title="Needs at least 7 days of work left"' : ''}>Train for week</button>
           <button type="button" class="home-btn cc-btn" data-dev="finish" title="Works the ${p.daysLeft} days left">Finish (${p.daysLeft} d)</button>
           <button type="button" class="home-btn cc-btn dev-cancel" data-dev-cancel>${this.cancelArmed ? 'Really abandon it? The days are lost' : 'Abandon project'}</button>
         </div>
@@ -574,6 +612,82 @@ export class HomeScreen {
         });
       }
     }
+    list.appendChild(box);
+    this.renderRefine(list);
+  }
+
+  /** Compute points not spread yet on the new-program form (0 for types that have no categories). */
+  private computeLeft(): number {
+    if (!CATEGORIES[this.form.type]) return 0;
+    return COMPUTE_POINTS - Object.values(this.form.compute).reduce((a, b) => a + b, 0);
+  }
+
+  /** The Compute rows of the new-program form: 20 points, 5% each, spread over the type's categories. */
+  private computeHtml(): string {
+    const defs = CATEGORIES[this.form.type];
+    if (!defs) return '';
+    const left = this.computeLeft();
+    const rows = defs.map((d) => {
+      const pts = this.form.compute[d.key] ?? 0;
+      return `<div class="dev-cat"><span class="dev-cat-name">${d.label}</span><button type="button" class="dev-cat-btn" data-cat="${d.key}" data-d="-1"${pts ? '' : ' disabled'}>-</button><span class="dev-cat-bar"><span style="width:${(100 * pts) / COMPUTE_POINTS}%"></span></span><button type="button" class="dev-cat-btn" data-cat="${d.key}" data-d="1"${left ? '' : ' disabled'}>+</button><span class="dev-cat-pct">${pts * 5}%</span></div>`;
+    }).join('');
+    return `<div class="dev-row">compute <span class="home-dim">${left ? `${left} of ${COMPUTE_POINTS} points left (5% each)` : 'all points spent'}</span></div>${rows}`;
+  }
+
+  /** Refine: the base, a button to refine it for a day, and the variants waiting to be saved. */
+  private renderRefine(list: Element): void {
+    const st = this.actions.refine.state();
+    const all = (() => { const sw = this.actions.software.list(); return [...sw.loaded, ...sw.stored]; })();
+    const base = all.find((p) => p.id === (this.refineTarget ?? st?.base.id));
+    if (!base) return;
+    const variants = st && st.base.id === base.id ? st.variants : [];
+    const dropping = st && st.base.id !== base.id && st.variants.length ? st : undefined;
+    const busy = !!this.actions.dayJob();
+    const cost = variantCost(base);
+    const box = document.createElement('div');
+    box.className = 'contract-card dev-card rf-card';
+    const variant = (v: Program) => {
+      const rarity = v.rarity ?? 'common';
+      const name = this.variantNames.get(v.id) ?? v.name;
+      return `<div class="rf-var rarity-${rarity}" data-v="${esc(v.id)}">
+        <div class="rf-var-head">${programIcon(v, 'dev-icon')}<input class="rf-name" maxlength="20" value="${esc(name)}"><span>${rarity}</span></div>
+        ${statHtml(v).map((s) => `<div class="sw-stat">${s.label} ${s.html}</div>`).join('')}
+        ${(v.traits ?? []).map((t) => `<div class="sw-trait">+ ${esc(t)}</div>`).join('') || '<div class="home-dim">no traits</div>'}
+        ${(v.bugs ?? []).map((b) => `<div class="sw-bug">- ${esc(b)}</div>`).join('')}
+        <button type="button" class="home-btn cc-btn" data-save="${esc(v.id)}">Save (${cost} §)</button>
+      </div>`;
+    };
+    box.innerHTML = `
+      <div class="cc-head"><span class="cc-title">${programIcon(base, 'dev-icon')} refine ${esc(base.name)}</span><span class="home-dim">${VARIANTS_PER_DAY} variants a day</span></div>
+      <div class="cc-line home-dim">rolls the rarity and traits again; the base stays the same. save the variants you want (${cost} § each), the rest are lost when another day passes</div>
+      ${dropping ? `<div class="cc-line sw-bug">refining ${esc(base.name)} drops the ${dropping.variants.length} unsaved variant${dropping.variants.length === 1 ? '' : 's'} of ${esc(dropping.base.name)}</div>` : ''}
+      <div class="dev-btns">
+        <button type="button" class="home-btn cc-btn" data-refine-day${busy ? ' disabled title="Wait for the days to pass"' : ''}>Refine for day</button>
+        ${variants.length ? '' : '<button type="button" class="home-btn cc-btn" data-refine-close>Close</button>'}
+      </div>
+      ${this.refineLines.length ? `<div class="dev-log">${this.refineLines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>` : ''}
+      ${variants.length ? `<div class="rf-variants">${variants.map(variant).join('')}</div>` : ''}`;
+    box.querySelector('[data-refine-day]')!.addEventListener('click', () => {
+      this.actions.click();
+      this.refineTarget = base.id;
+      this.refineLines = this.actions.refine.day(base.id);
+      this.render();
+    });
+    box.querySelector('[data-refine-close]')?.addEventListener('click', () => {
+      this.actions.click();
+      this.refineTarget = null;
+      this.refineLines = [];
+      this.render();
+    });
+    box.querySelectorAll<HTMLInputElement>('.rf-name').forEach((inp) => inp.addEventListener('input', () => {
+      this.variantNames.set(inp.closest<HTMLElement>('.rf-var')!.dataset.v!, inp.value);
+    }));
+    box.querySelectorAll<HTMLButtonElement>('[data-save]').forEach((b) => b.addEventListener('click', () => {
+      const id = b.dataset.save!;
+      const v = variants.find((x) => x.id === id)!;
+      this.refineLines = [this.actions.refine.save(id, this.variantNames.get(id) ?? v.name)];
+      this.render();
+    }));
     list.appendChild(box);
   }
 }

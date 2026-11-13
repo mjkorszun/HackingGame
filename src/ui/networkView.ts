@@ -796,7 +796,7 @@ export class NetworkView {
       if (a.hop) {
         const from = a.node === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.node);
         const to = a.hop.to === g.currentNode ? { x: CX, y: CY } : this.positions.get(a.hop.to);
-        const k = Math.min(1, (a.hop.elapsed + this.alpha) / ALLY_HOP_TICKS);
+        const k = Math.min(1, (a.hop.elapsed + this.alpha) / (a.hopTicks ?? ALLY_HOP_TICKS));
         pos = from && to ? { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k } : null;
         const m1 = this.miniXY(a.node);
         const m2 = this.miniXY(a.hop.to);

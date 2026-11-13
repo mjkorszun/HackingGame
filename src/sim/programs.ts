@@ -1,4 +1,6 @@
 import type { Rarity } from './development';
+import type { NodeKind } from './types';
+import { statOf, traitsOf } from './training';
 /** A program in the player's deck. */
 export const PROGRAM_TYPES = ['warrior', 'shield', 'scout', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge', 'mask'] as const;
 
@@ -40,6 +42,9 @@ export interface Program {
   color?: string;
   /** A legendary program carries its author's name. */
   author?: string;
+  /** Trained models: the Compute put into each category, and the base stats that came out of it. */
+  compute?: Record<string, number>;
+  stats?: Record<string, number>;
 }
 
 /** Base size in GB of a rating-1 program of each type (placeholder numbers). */
@@ -58,19 +63,29 @@ export function usedMemory(list: Pick<Program, 'type' | 'rating'>[]): number {
   return list.reduce((sum, p) => sum + programSize(p), 0);
 }
 
-/** Scout: seconds before it can fly again, for one instance (placeholder). Better scouts will trade a longer wait for more skill. */
-export const SCOUT_COOLDOWN_S = 30;
 /** Scout: each instance after the first adds this share of the cooldown (placeholder: +45%). */
 export const SCOUT_EXTRA_PER_INSTANCE = 0.45;
-/** Placeholder: noise a scout launch makes in your node. Nothing reacts to noise yet. */
-export const SCOUT_NOISE = 30;
+
+type Scout = Pick<Program, 'type' | 'rating' | 'stats' | 'traits'>;
 
 /** Ticks of cooldown after sending `instances` scouts at once. */
-export function scoutCooldown(instances: number): number {
-  return Math.round(SCOUT_COOLDOWN_S * 10 * (1 + SCOUT_EXTRA_PER_INSTANCE * Math.max(0, instances - 1)));
+export function scoutCooldown(p: Scout, instances: number): number {
+  const extra = Math.min(SCOUT_EXTRA_PER_INSTANCE, ...traitsOf(p).map((t) => t.extraPerInstance ?? SCOUT_EXTRA_PER_INSTANCE));
+  return Math.round(statOf(p, 'cooldown') * 10 * (1 + extra * Math.max(0, instances - 1)));
 }
 
-/** A scout's d100 chance to tell what a node is (placeholder: rating 1 = 50%, +15 per rating). */
-export function scoutChance(rating: number): number {
-  return Math.min(100, 35 + 15 * rating);
+/** A scout's d100 chance to tell what a node of this kind is. */
+export function scoutChance(p: Scout, kind?: NodeKind): number {
+  if (kind && traitsOf(p).some((t) => t.sure?.includes(kind))) return 100;
+  return Math.min(100, statOf(p, 'accuracy'));
+}
+
+/** Noise a scout launch makes in your node (nothing reacts to noise yet). */
+export function scoutNoise(p: Scout): number {
+  return statOf(p, 'noise');
+}
+
+/** How fast a scout flies, times the usual agent speed. */
+export function scoutSpeed(p: Scout): number {
+  return statOf(p, 'speed') || 1;
 }
