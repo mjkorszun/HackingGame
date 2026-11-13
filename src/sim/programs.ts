@@ -45,25 +45,32 @@ export interface Program {
   /** Trained models: the Compute put into each category, and the base stats that came out of it. */
   compute?: Record<string, number>;
   stats?: Record<string, number>;
+  /** Trained models: how its size came out, times the usual (0.9 to 1.1). */
+  sizeRoll?: number;
 }
 
-/** Base size in GB of a rating-1 program of each type (placeholder numbers). */
+/** Base size (hundredths of a TB) of a rating-2 program of each type (placeholder numbers). */
 const BASE_SIZE: Record<ProgramType, number> = {
   warrior: 60, shield: 40, scout: 30, silence: 40, deceive: 50, hide: 40, analyze: 30, skimmer: 30, scan: 30,
   evaluate: 20, identify: 20, defuse: 30, decrypt: 50, scrub: 30, forge: 40, mask: 40,
 };
 
 /**
- * Size of a program in GB. Mostly the rating: it grows in step with it (rating 1 is half the base, rating 2
+ * Size of a program, in hundredths of a TB (shown as 0.30 TB). Mostly the rating: it grows in step with it (rating 1 is half the base, rating 2
  * the base). Then, for trained models, speed and noise: a lean model is fast and quiet, so the more Compute
  * goes there, the smaller it is (0% on both is 1.5 times an even split, 100% on both half of it).
  */
-export function programSize(p: Pick<Program, 'type' | 'rating' | 'compute'>): number {
+export function programSize(p: Pick<Program, 'type' | 'rating' | 'compute' | 'sizeRoll'>): number {
   const lean = p.compute && ('speed' in p.compute || 'noise' in p.compute) ? 1.5 - ((p.compute.speed ?? 0) + (p.compute.noise ?? 0)) / COMPUTE_POINTS : 1;
-  return Math.max(1, Math.round(BASE_SIZE[p.type] * 0.5 * p.rating * lean));
+  return Math.max(1, Math.round(BASE_SIZE[p.type] * 0.5 * p.rating * lean * (p.sizeRoll ?? 1)));
 }
 
-/** GB taken by a set of programs. */
+/** Memory as shown: hundredths of a TB, e.g. 30 is "0.30 TB". */
+export function tb(units: number): string {
+  return `${(units / 100).toFixed(2)} TB`;
+}
+
+/** Memory taken by a set of programs. */
 export function usedMemory(list: Pick<Program, 'type' | 'rating'>[]): number {
   return list.reduce((sum, p) => sum + programSize(p), 0);
 }

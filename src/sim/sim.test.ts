@@ -1335,6 +1335,8 @@ describe('train model and refine', () => {
     const prog = finishProgram(p, 'p9', 'you', () => 0.5);
     expect(prog.stats).toBeDefined();
     expect(prog.compute).toEqual(p.compute);
+    expect(prog.sizeRoll).toBeGreaterThanOrEqual(0.9);
+    expect(prog.sizeRoll).toBeLessThanOrEqual(1.1);
   });
 });
 

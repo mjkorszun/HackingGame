@@ -5,7 +5,7 @@ import { actionsFor, type NodeAction, type Privilege } from './actions';
 import { apparentContent, CONTENT_LABEL, fileActions, PROTECTION_PROGRAM, generateFiles, scanTicks, type DataFile, type FileAction } from './files';
 import { Network } from './network';
 import { programSize, usedMemory } from './programs';
-import { FILE_PROGRAMS, PROGRAM_STUBS, scoutChance, scoutCooldown, scoutNoise, scoutSpeed, type Program, type ProgramType } from './programs';
+import { FILE_PROGRAMS, PROGRAM_STUBS, scoutChance, scoutCooldown, scoutNoise, scoutSpeed, tb, type Program, type ProgramType } from './programs';
 import type { FxTarget, LogColor, NodeDef, NodeKind, SimEvent, SystemDef } from './types';
 
 /** Unidentified nodes are called ?1, ?2, ... */
@@ -181,7 +181,7 @@ export class Game {
   readonly privileges = new Set<Privilege>();
   /** Programs loaded in the player's memory: the ones usable in this run. */
   readonly programs: Program[];
-  /** Memory size in GB: loaded programs must fit in it. */
+  /** Memory size in hundredths of a TB: loaded programs must fit in it. */
   readonly memorySlots: number;
   /** What the player took in this run: paid out (sats, programs) only when the run ends. */
   readonly loot: LootItem[] = [];
@@ -320,13 +320,13 @@ export class Game {
     }
     const size = programSize(item.software!);
     if (usedMemory(this.programs) + size > this.memorySlots) {
-      this.log(`not enough memory: ${item.software!.name} needs ${size} GB, ${this.memorySlots - usedMemory(this.programs)} GB free. it waits in your data until you leave the net`, 'alarm1');
+      this.log(`not enough memory: ${item.software!.name} needs ${tb(size)}, ${tb(this.memorySlots - usedMemory(this.programs))} free. it waits in your data until you leave the net`, 'alarm1');
       return false;
     }
     item.loaded = true;
     this.programs.push(item.software!);
     this.deckVersion++;
-    this.log(`${item.software!.name} loaded into memory (${usedMemory(this.programs)}/${this.memorySlots} GB)`, 'info');
+    this.log(`${item.software!.name} loaded into memory (${tb(usedMemory(this.programs))}/${tb(this.memorySlots)})`, 'info');
     return true;
   }
 
@@ -1895,7 +1895,7 @@ export class Game {
   }
 }
 
-/** Memory of the starting hardware, in GB. */
+/** Memory of the starting hardware, in hundredths of a TB (5.00 TB). */
 export const DEFAULT_MEMORY = 500;
 
 /** The deck a new player starts with. */

@@ -1,4 +1,4 @@
-import { programSize, type Program, type ProgramType } from '../sim/programs';
+import { programSize, tb, type Program, type ProgramType } from '../sim/programs';
 import { formatStat, programStats } from '../sim/training';
 import { programIcon } from './icons';
 
@@ -53,7 +53,7 @@ export function showProgramInfo(p: Program, opts: InfoOptions = {}): void {
   const lines: string[] = [
     `<tr><td>type</td><td>${p.type}</td></tr>`,
     `<tr><td>rating</td><td>${p.rating}</td></tr>`,
-    `<tr><td>size</td><td>${programSize(p)} GB</td></tr>`,
+    `<tr><td>size</td><td>${tb(programSize(p))}</td></tr>`,
     `<tr><td>rarity</td><td class="rarity-${rarity}">${rarity}</td></tr>`,
   ];
   for (const st of statHtml(p)) lines.push(`<tr><td>${st.label}</td><td>${st.html}</td></tr>`);

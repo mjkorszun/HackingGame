@@ -10,7 +10,7 @@ import { AVATAR_ICONS, ICON_POOLS, MENU_ICONS, iconSvg, programIcon, randomIcon 
 import { showIconPicker } from './iconPicker';
 import { showProgramInfo, statHtml } from './programInfo';
 import { CATEGORIES, COMPUTE_POINTS, evenCompute, variantCost, VARIANTS_PER_DAY } from '../sim/training';
-import { PROGRAM_TYPES, programSize, type Program, type ProgramType } from '../sim/programs';
+import { PROGRAM_TYPES, programSize, tb, type Program, type ProgramType } from '../sim/programs';
 
 /** A contract on offer: the job and the system it is in. */
 export interface ContractOffer {
@@ -390,7 +390,7 @@ export class HomeScreen {
         <div class="sw-body">
           <div class="sw-name">${esc(p.name)}</div>
           <div class="sw-meta">${p.type} ${p.rating}</div>
-          <div class="sw-rarity">${rarity} · ${programSize(p)} GB${p.author ? ` · by ${esc(p.author)}` : ''}</div>
+          <div class="sw-rarity">${rarity} · ${tb(programSize(p))}${p.author ? ` · by ${esc(p.author)}` : ''}</div>
           ${statHtml(p).map((st) => `<div class="sw-stat">${st.label} ${st.html}</div>`).join('')}
           ${traits}
           ${bugs}
@@ -400,7 +400,7 @@ export class HomeScreen {
       </div>`;
     };
     this.soft.innerHTML = `
-      <h2 class="sw-head">memory <span class="sw-used${sw.used > sw.memory * 0.9 ? ' is-full' : ''}">${sw.used} / ${sw.memory} GB</span><span class="mem-bar sw-mem-bar${sw.used > sw.memory * 0.9 ? ' is-full' : ''}" title="${sw.used} GB used, ${sw.memory - sw.used} GB free"><span class="mem-fill" style="width:${Math.min(100, (100 * sw.used) / sw.memory)}%"></span></span><span class="home-dim">${sw.memory - sw.used} GB free</span></h2>
+      <h2 class="sw-head">memory <span class="sw-used${sw.used > sw.memory * 0.9 ? ' is-full' : ''}">${tb(sw.used)} / ${tb(sw.memory)}</span><span class="mem-bar sw-mem-bar${sw.used > sw.memory * 0.9 ? ' is-full' : ''}" title="${tb(sw.used)} used, ${tb(sw.memory - sw.used)} free"><span class="mem-fill" style="width:${Math.min(100, (100 * sw.used) / sw.memory)}%"></span></span><span class="home-dim">${tb(sw.memory - sw.used)} free</span></h2>
       <div class="sw-zone" data-zone="loaded">${sw.loaded.map((p) => card(p)).join('') || '<div class="sw-empty">drag programs here to take them into the net</div>'}</div>
       <h2 class="sw-head">storage <span class="home-dim">known, not loaded</span></h2>
       <div class="sw-zone" data-zone="stored">${sw.stored.map((p) => card(p, true)).join('') || '<div class="sw-empty">nothing in storage</div>'}</div>
@@ -532,7 +532,7 @@ export class HomeScreen {
         <label class="dev-row">rating <select class="dev-rating">${Array.from({ length: MAX_DEV_RATING }, (_, i) => `<option${i + 1 === f.rating ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></label>
         <label class="dev-row">name <input class="dev-name" maxlength="20" value="${esc(name)}"></label>
         ${this.computeHtml()}
-        <div class="cc-line home-dim">size ${programSize(f)} GB. when it is done it may have up to ${MAX_BUGS} bugs: use it as it is, or fix them later (${bugFixDays(f)} days a bug). rarity and traits are rolled when it is done: common ${RARITY_TRAITS.common} traits, uncommon ${RARITY_TRAITS.uncommon}, rare ${RARITY_TRAITS.rare}, epic ${RARITY_TRAITS.epic}, legendary ${RARITY_TRAITS.legendary} and your name</div>
+        <div class="cc-line home-dim">size about ${tb(programSize(f))}. when it is done it may have up to ${MAX_BUGS} bugs: use it as it is, or fix them later (${bugFixDays(f)} days a bug). rarity and traits are rolled when it is done: common ${RARITY_TRAITS.common} traits, uncommon ${RARITY_TRAITS.uncommon}, rare ${RARITY_TRAITS.rare}, epic ${RARITY_TRAITS.epic}, legendary ${RARITY_TRAITS.legendary} and your name</div>
         <button type="button" class="home-btn cc-btn" data-dev="start"${this.computeLeft() ? ` disabled title="Spend all ${COMPUTE_POINTS} points of Compute first"` : ''}>Train Model</button>`;
       const type = box.querySelector<HTMLSelectElement>('.dev-type')!;
       const rating = box.querySelector<HTMLSelectElement>('.dev-rating')!;

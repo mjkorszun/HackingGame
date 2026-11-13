@@ -140,6 +140,7 @@ export function finishProgram(p: DevProject, id: string, author: string, roll: (
   if (p.compute) {
     program.compute = { ...p.compute };
     program.stats = rollStats(p.type, p.compute, p.rating, roll);
+    program.sizeRoll = Math.round((0.9 + 0.2 * roll()) * 100) / 100;
   }
   if (rarity === 'legendary') program.author = author;
   const bugs = rollBugs(roll);

@@ -306,7 +306,7 @@ export function migrate(a: Account): Account {
   }
   a.version = SAVE_VERSION;
   renameOld(a.programs as { type: string; name: string }[]);
-  // Memory used to count programs; now it is GB.
+  // Memory used to count programs; now it is hundredths of a TB.
   if (typeof a.memory !== 'number' || a.memory < 100) a.memory = DEFAULT_MEMORY;
   if (typeof a.day !== 'number') a.day = 1;
   if (typeof a.reputation !== 'number') a.reputation = 0;
