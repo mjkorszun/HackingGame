@@ -1155,9 +1155,34 @@ describe('hardware', () => {
     expect(a.memory).toBe(1000);
     expect(a.hardware.spare).toEqual(['tianwei-memory-0-jade']);
     expect(typeof removeChip(a, 'hippocampus')).toBe('string');
-    expect(typeof removeChip(a, 'spine1')).toBe('string');
+    expect(typeof removeChip(a, 'spine2')).toBe('string');
     expect(sellChip(a, 'tianwei-memory-0-jade')).toMatch(/sold/);
     expect(a.hardware.spare).toEqual([]);
+  });
+
+  it('takes only a Surge Suppressor in the upper spine and only the Neural Jack in the lower', async () => {
+    const { CATALOGUE } = await import('./implants');
+    const { buyChip, installChip, fresh: newAccount } = await import('../ui/account');
+    const a = newAccount();
+    a.sats = 10000;
+    expect(a.hardware.installed.spine2).toBe('tianwei-jack-0-tn');
+    const jack = CATALOGUE.find((c) => c.kind === 'jack' && c.value > 1)!;
+    const surge = CATALOGUE.find((c) => c.kind === 'surge')!;
+    buyChip(a, jack.id, 100);
+    buyChip(a, surge.id, 100);
+    expect(typeof installChip(a, jack.id, 'spine1')).toBe('string');
+    expect(typeof installChip(a, surge.id, 'spine2')).toBe('string');
+    expect(installChip(a, surge.id, 'spine1')).toEqual({ days: surge.surgery });
+    expect(installChip(a, jack.id, 'spine2')).toEqual({ days: jack.surgery });
+  });
+
+  it('moves a jack from the old upper spine socket into the neural port', async () => {
+    const { migrate } = await import('../ui/account');
+    const old = JSON.parse(JSON.stringify((await import('../ui/account')).fresh()));
+    old.hardware.installed = { spine1: 'tianwei-jack-0-tn', hippocampus: 'tianwei-memory-0-jade' };
+    const a = migrate(old);
+    expect(a.hardware.installed.spine2).toBe('tianwei-jack-0-tn');
+    expect(a.hardware.installed.spine1).toBeUndefined();
   });
 });
 
