@@ -93,9 +93,9 @@ export function rest(a: Account, days: number): void {
   a.news.unshift(`you rested ${days} day${days === 1 ? '' : 's'}: health ${before}% → ${a.health}%`);
 }
 
-/** The bare minimum to go online: a basic jack in the spinal cord and memory in the hippocampus. */
+/** The bare minimum to go online: a basic jack in the neural port and memory in the hippocampus. */
 function newHardware(): Account['hardware'] {
-  return { installed: { spine1: STARTER_CHIPS.jack.id, hippocampus: STARTER_CHIPS.memory.id }, spare: [], bought: { day: 0, ids: [] } };
+  return { installed: { spine2: STARTER_CHIPS.jack.id, hippocampus: STARTER_CHIPS.memory.id }, spare: [], bought: { day: 0, ids: [] } };
 }
 
 /** Memory size comes from the memory chip in the hippocampus. Unloads programs from the end until they fit. */
@@ -147,14 +147,13 @@ export function installChip(a: Account, chipId: string, socket: SocketId): { day
   return { days: c.surgery };
 }
 
-/** Takes a chip out into your spares. You cannot take out your memory or your only jack: you could not go online. */
+/** Takes a chip out into your spares. You cannot take out your memory or your jack: you could not go online. */
 export function removeChip(a: Account, socket: SocketId): { days: number } | string {
   const id = a.hardware.installed[socket];
   const c = id ? chipById(id) : undefined;
   if (!id || !c) return 'the socket is empty';
   if (c.kind === 'memory') return 'without memory you cannot go online: swap it for another memory chip instead';
-  const jacks = Object.values(a.hardware.installed).filter((x) => x && chipById(x)?.kind === 'jack').length;
-  if (c.kind === 'jack' && jacks <= 1) return 'without a jack you cannot go online: swap it for another jack instead';
+  if (c.kind === 'jack') return 'without a Neural Jack you cannot go online: swap it for another jack instead';
   delete a.hardware.installed[socket];
   a.hardware.spare.push(id);
   return { days: REMOVE_DAYS };
@@ -247,7 +246,7 @@ export function saveAccount(a: Account): void {
 }
 
 /** Saves from before the rename: old "decrypt" read archives (now scan), old "brute" cracked seals (now decrypt). */
-function migrate(a: Account): Account {
+export function migrate(a: Account): Account {
   const programs = a.programs as { type: string; name: string }[];
   if ((a.version ?? 0) < 2) {
     // Before version 2 every load turned scouts into mappers, the new Sparrow too: put it back.
@@ -284,6 +283,18 @@ function migrate(a: Account): Account {
   const renamed = (id: string) => RENAMED_CHIPS[id] ?? id;
   for (const k of Object.keys(a.hardware.installed) as SocketId[]) a.hardware.installed[k] = renamed(a.hardware.installed[k]!);
   a.hardware.spare = a.hardware.spare.map(renamed);
+  // The spine sockets changed: the upper one takes only a Surge Suppressor, the lower one only the Neural Jack.
+  const inst = a.hardware.installed;
+  const kindIn = (k: SocketId) => (inst[k] ? chipById(inst[k]!)?.kind : undefined);
+  if (kindIn('spine1') === 'jack' || kindIn('spine2') === 'surge') [inst.spine1, inst.spine2] = [inst.spine2, inst.spine1];
+  for (const k of ['spine1', 'spine2'] as SocketId[]) {
+    const id = inst[k];
+    if (!id) delete inst[k];
+    else if (!SOCKETS.find((x) => x.id === k)!.fits.includes(chipById(id)!.kind)) {
+      a.hardware.spare.push(id);
+      delete inst[k];
+    }
+  }
   if (!Array.isArray(a.loaded)) a.loaded = a.programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id);
   // Unload from the end until what is loaded fits.
   while (a.loaded.length && usedMemory(loadedPrograms(a)) > a.memory) a.loaded.pop();

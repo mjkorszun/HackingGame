@@ -74,8 +74,9 @@ export interface Socket {
 }
 
 export const SOCKETS: readonly Socket[] = [
-  { id: 'spine1', name: 'Spinal cord I', fits: ['jack', 'surge'] },
-  { id: 'spine2', name: 'Spinal cord II', fits: ['jack', 'surge'] },
+  // Upper spine: guards the cable against surges. Lower spine: the port you jack in by, only for a Neural Jack.
+  { id: 'spine1', name: 'Cervical guard', fits: ['surge'] },
+  { id: 'spine2', name: 'Neural port', fits: ['jack'] },
   { id: 'brainstem', name: 'Brainstem', fits: ['bio'] },
   { id: 'thalamus', name: 'Thalamus', fits: ['damper'] },
   { id: 'hippocampus', name: 'Hippocampus', fits: ['memory'] },
