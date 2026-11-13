@@ -563,6 +563,7 @@ function enterNetwork(choice: Choice, entry?: string): void {
   requestAnimationFrame(frame);
   // Exposed for debugging and automated checks.
   (window as unknown as { game: Game }).game = game;
+  (window as unknown as { view: NetworkView }).view = view;
 }
 
 function startView(): void {

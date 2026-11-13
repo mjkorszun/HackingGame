@@ -122,6 +122,7 @@ body {
 
 /* ---------- graphical view (right) ---------- */
 #view {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -548,7 +549,6 @@ body {
 
 /* ---------- shots and outcome texts ---------- */
 .fx-layer { pointer-events: none; }
-.fx-bolt { transition: transform 0.22s linear; }
 .fx-bolt.is-mine { fill: #eaffef; filter: drop-shadow(0 0 4px #33ff66); }
 .fx-bolt.is-hostile { fill: #ffe0e0; filter: drop-shadow(0 0 4px #ff3030); }
 .fx-trail { stroke-width: 2; stroke-linecap: round; animation: fx-fade 0.22s linear forwards; }
@@ -1081,3 +1081,9 @@ body {
 .game-menu-yes:hover { background: #1a1604; }
 .game-menu-no { color: var(--green); border: 1px solid var(--green); }
 .game-menu-no:hover { background: var(--green-faint); }
+
+/* ---------- paused: grey-blue label and frame round the net view ---------- */
+.paused-tag, .paused-frame { display: none; pointer-events: none; }
+#view.is-paused .paused-tag, #view.is-paused .paused-frame { display: block; }
+.paused-frame { position: absolute; inset: 0; border: 2px solid #7f9cc2; z-index: 4; }
+.paused-tag { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); z-index: 4; padding: 2px 10px; font-family: var(--font); font-size: 13px; letter-spacing: 3px; color: #9db4d4; background: rgba(0, 0, 0, 0.7); border: 1px solid #7f9cc2; }
