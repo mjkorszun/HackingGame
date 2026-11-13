@@ -121,6 +121,9 @@ const FROZEN = new Set(['idle-drift', 'avatar-idle', 'bob', 'shot', 'fx-fade', '
 /** Animations that keep full speed: the avatar appearing and fading out (leaving pauses the game), the clock's own spinner. */
 const UNPACED = new Set(['avatar-spawn', 'avatar-out', 'time-spin']);
 
+/** How fast the avatar steps about the room (px per second). */
+const AVATAR_GLIDE = 70;
+
 const icon = (body: string) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${body}</svg>`;
 /** Stopwatch with pause bars: time that stops by itself. */
 const ICON_POWER = icon(
@@ -356,7 +359,13 @@ export class NetworkView {
     this.queryBox = document.createElement('div');
     this.queryBox.className = 'query-box';
     this.queryBox.hidden = true;
-    root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox, this.gameMenu.box);
+    // While paused: a small PAUSED label at the top and a frame round the whole view.
+    const pausedTag = document.createElement('div');
+    pausedTag.className = 'paused-tag';
+    pausedTag.textContent = 'PAUSED';
+    const pausedFrame = document.createElement('div');
+    pausedFrame.className = 'paused-frame';
+    root.append(this.header, this.stage, this.miniSvg, exitBtn, this.queryBox, pausedFrame, pausedTag, this.gameMenu.box);
     this.render();
   }
 
@@ -405,11 +414,11 @@ export class NetworkView {
   private avatarHome = { x: CX, y: CY + 40 };
   private walkIn: { from: { x: number; y: number }; at: number } | null = null;
   /** How far you lean towards the file you work on (0..1), and the line to it. */
-  private lean = 0;
   private actionLink: SVGLineElement | null = null;
   /** Spots taken in your node by agents (theirs and yours), so nobody covers a file or anyone else. */
   private roomSpots = new Map<string, { x: number; y: number }>();
-  private leanTo: { x: number; y: number } | null = null;
+  /** Where the avatar stands in the room right now, gliding towards home or the file being worked on. */
+  private restPos: { x: number; y: number } | null = null;
   private lastAvatarAt = 0;
   /** Top layer for shots and outcome texts. */
   private fxLayer: SVGGElement | null = null;
@@ -515,6 +524,7 @@ export class NetworkView {
     this.gameMenu.refresh();
     this.autoBtn.classList.toggle('is-on', this.game.autoPause);
     this.header.classList.toggle('is-paused', this.game.paused);
+    this.root.classList.toggle('is-paused', this.game.paused);
     const key = `${this.game.currentNode}|${this.game.moveTarget}|${this.game.paused}|${this.game.identifiedCount}|${this.game.knownCount}|${this.game.filesKey}`;
     if (key !== this.lastKey) this.render();
     this.updateAvatar();
@@ -595,6 +605,7 @@ export class NetworkView {
     if (this.lastNode !== current.id) {
       // A new node: everyone gets a new spot here, clear of the files and of each other.
       this.roomSpots.clear();
+      this.restPos = null;
       if (came) {
         const door = this.doorTowards(came.x, came.y);
         // You step in through that door and walk a little way in, to a free spot.
@@ -1297,7 +1308,7 @@ export class NetworkView {
     const now = performance.now();
     const dt = Math.min(0.1, (now - (this.lastAvatarAt || now)) / 1000);
     this.lastAvatarAt = now;
-    this.lean = filePos ? Math.min(1, this.lean + dt * 2.5) : Math.max(0, this.lean - dt * 2.5);
+    let target = this.avatarHome;
     if (filePos) {
       // Step a little towards the file, but keep some distance so the line between you shows.
       const h = this.avatarHome;
@@ -1305,9 +1316,15 @@ export class NetworkView {
       const fy = filePos.y + 20;
       const d = Math.hypot(h.x - fx, h.y - fy);
       const keep = 90;
-      this.leanTo = d > keep ? lerpXY(h, { x: fx + ((h.x - fx) * keep) / d, y: fy + ((h.y - fy) * keep) / d }, 0.5) : h;
+      target = d > keep ? lerpXY(h, { x: fx + ((h.x - fx) * keep) / d, y: fy + ((h.y - fy) * keep) / d }, 0.5) : h;
     }
-    let start = this.lean > 0 && this.leanTo ? lerpXY(this.avatarHome, this.leanTo, easeInOut(this.lean)) : this.avatarHome;
+    // You glide there at walking pace (also from one file to the next, and back home), never jump.
+    const rest = this.restPos ?? target;
+    const gap = Math.hypot(target.x - rest.x, target.y - rest.y);
+    // It stands still while the game is paused.
+    const step = this.game.paused ? 0 : AVATAR_GLIDE * dt;
+    this.restPos = gap <= step ? target : { x: rest.x + ((target.x - rest.x) * step) / gap, y: rest.y + ((target.y - rest.y) * step) / gap };
+    let start = this.restPos;
     let walking = false;
     if (this.walkIn) {
       const k = (now - this.walkIn.at) / WALK_IN_MS;
