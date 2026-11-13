@@ -136,7 +136,7 @@ export function rollTraits(count: number, roll: () => number = Math.random): str
 /** Turns a finished project into a program with a rolled rarity and traits. */
 export function finishProgram(p: DevProject, id: string, author: string, roll: () => number = Math.random): Program {
   const rarity = rollRarity(roll);
-  const program: Program = { id, type: p.type, name: p.name, rating: p.rating, rarity, traits: rollTypeTraits(p.type, RARITY_TRAITS[rarity], TRAIT_POOL, roll) };
+  const program: Program = { id, type: p.type, name: p.name, rating: p.rating, rarity, traits: rollTypeTraits(p.type, rarity, TRAIT_POOL, roll) };
   if (p.compute) {
     program.compute = { ...p.compute };
     program.stats = rollStats(p.type, p.compute, p.rating, roll);

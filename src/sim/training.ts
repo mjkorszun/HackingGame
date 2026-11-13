@@ -75,18 +75,27 @@ export interface StatTrait {
   extraMul?: number;
   /** Scout: always tells these node types apart. */
   sure?: NodeKind[];
+  /** Trait points it takes from the rarity's pool: 1 weak, 2 medium, 3 strong. */
+  cost: number;
+  /** Traits of one family (the same stat at different strengths): a program gets at most one of them. */
+  family: string;
+}
+
+/** The same stat at three strengths, costing 1, 2 and 3 points. */
+function tiers(family: string, texts: [string, string, string], make: (i: number) => Partial<StatTrait>): StatTrait[] {
+  return texts.map((text, i) => ({ text, cost: i + 1, family, ...make(i) }));
 }
 
 /** Traits of each trainable type (placeholder list, more to come). */
 export const TYPE_TRAITS: Partial<Record<ProgramType, StatTrait[]>> = {
   scout: [
-    { text: '+25% speed', mul: { speed: 1.25 } },
-    { text: '+15 accuracy', add: { accuracy: 15 } },
-    { text: '-20% cooldown', mul: { cooldown: 0.8 } },
-    { text: '-40% noise', mul: { noise: 0.6 } },
-    { text: '-40% additional instance cost', extraMul: 0.6 },
-    { text: 'always identifies databases', sure: ['database'] },
-    { text: 'always identifies gateways and relays', sure: ['gateway', 'relay'] },
+    ...tiers('speed', ['+10% speed', '+20% speed', '+30% speed'], (i) => ({ mul: { speed: 1.1 + 0.1 * i } })),
+    ...tiers('accuracy', ['+5 accuracy', '+10 accuracy', '+15 accuracy'], (i) => ({ add: { accuracy: 5 + 5 * i } })),
+    ...tiers('cooldown', ['-10% cooldown', '-20% cooldown', '-30% cooldown'], (i) => ({ mul: { cooldown: 0.9 - 0.1 * i } })),
+    ...tiers('noise', ['-15% noise', '-30% noise', '-45% noise'], (i) => ({ mul: { noise: 0.85 - 0.15 * i } })),
+    ...tiers('instances', ['-20% additional instance cost', '-40% additional instance cost', '-60% additional instance cost'], (i) => ({ extraMul: 0.8 - 0.2 * i })),
+    { text: 'always identifies databases', sure: ['database'], cost: 2, family: 'databases' },
+    { text: 'always identifies gateways and relays', sure: ['gateway', 'relay'], cost: 3, family: 'gateways' },
   ],
 };
 
@@ -138,13 +147,32 @@ export function formatStat(def: StatDef, v: number): string {
   return def.unit === 'x' ? `${v.toFixed(2)}x` : def.unit === 's' ? `${v} s` : def.unit === '%' ? `${v}%` : `${v}`;
 }
 
-/** Different traits for a program of this type: its own pool if it has one. */
-export function rollTypeTraits(type: ProgramType, count: number, fallback: readonly string[], roll: () => number = Math.random): string[] {
+/** Trait points each rarity gets (placeholder): uncommon can be three weak traits or one strong. */
+export const TRAIT_POINTS: Record<Rarity, number> = { common: 0, uncommon: 3, rare: 5, epic: 7, legendary: 9 };
+
+/**
+ * Traits for a program of this rarity. A type with its own traits spends the rarity's points: random
+ * traits that still fit, at most one of each family, until the points run out. Other types still draw a
+ * number of traits from the general pool.
+ */
+export function rollTypeTraits(type: ProgramType, rarity: Rarity, fallback: readonly string[], roll: () => number = Math.random): string[] {
   const own = TYPE_TRAITS[type];
-  const pool: string[] = own ? own.map((t) => t.text) : [...fallback];
   const out: string[] = [];
-  for (let i = 0; i < count && pool.length; i++) out.push(pool.splice(Math.floor(roll() * pool.length), 1)[0]);
-  return out;
+  if (!own) {
+    const pool = [...fallback];
+    for (let i = 0; i < RARITY_TRAITS[rarity] && pool.length; i++) out.push(pool.splice(Math.floor(roll() * pool.length), 1)[0]);
+    return out;
+  }
+  let left = TRAIT_POINTS[rarity];
+  const taken = new Set<string>();
+  for (;;) {
+    const fits = own.filter((t) => t.cost <= left && !taken.has(t.family));
+    if (!fits.length) return out;
+    const t = fits[Math.floor(roll() * fits.length)];
+    out.push(t.text);
+    taken.add(t.family);
+    left -= t.cost;
+  }
 }
 
 /** Variants Refine makes each day (placeholder; later your skills raise it). */
@@ -168,7 +196,7 @@ export interface Refining {
 /** One new variant of a base: same base stats and bugs, the rarity and traits rolled again. */
 export function makeVariant(base: Program, number: number, fallback: readonly string[], roll: () => number = Math.random): Program {
   const rarity: Rarity = rollRarity(roll);
-  const v: Program = { ...base, id: `v${number}`, name: `${base.name.split('#')[0]}#${String(number).padStart(3, '0')}`, rarity, traits: rollTypeTraits(base.type, RARITY_TRAITS[rarity], fallback, roll) };
+  const v: Program = { ...base, id: `v${number}`, name: `${base.name.split('#')[0]}#${String(number).padStart(3, '0')}`, rarity, traits: rollTypeTraits(base.type, rarity, fallback, roll) };
   if (rarity !== 'legendary') delete v.author;
   else v.author = base.author ?? 'you';
   if (base.stats) v.stats = { ...base.stats };
