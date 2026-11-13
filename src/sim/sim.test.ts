@@ -856,7 +856,7 @@ describe('agents', () => {
 
 describe('memory', () => {
   it('a downloaded program can be loaded into free memory and used at once', () => {
-    const g = new Game(quiet, Math.random, [], { memory: 150 }); // Mace 15 (attack 3) takes 120 GB
+    const g = new Game(quiet, Math.random, [], { memory: 100 }); // Mace 15 (warrior 3) takes 90 GB, Owl 2 (decrypt 1) 25 GB
     g.loot.push({ name: 'x f1', label: 'Mace 15', price: 0, evaluated: true, software: { id: 'p500', type: 'warrior', name: 'Mace 15', rating: 3 } });
     g.loot.push({ name: 'x f2', label: 'Owl', price: 0, evaluated: true, software: { id: 'p501', type: 'decrypt', name: 'Owl 2', rating: 1 } });
     expect(g.loadProgram('Mace 15')).toBe(true);
@@ -1335,5 +1335,16 @@ describe('train model and refine', () => {
     const prog = finishProgram(p, 'p9', 'you', () => 0.5);
     expect(prog.stats).toBeDefined();
     expect(prog.compute).toEqual(p.compute);
+  });
+});
+
+describe('program size', () => {
+  it('grows with the rating, and shrinks with Compute put into speed and noise', async () => {
+    const { programSize } = await import('./programs');
+    expect(programSize({ type: 'scout', rating: 1 })).toBe(15);
+    expect(programSize({ type: 'scout', rating: 2 })).toBe(30);
+    expect(programSize({ type: 'scout', rating: 2, compute: { speed: 0, accuracy: 10, cooldown: 10, noise: 0 } })).toBe(45);
+    expect(programSize({ type: 'scout', rating: 2, compute: { speed: 5, accuracy: 5, cooldown: 5, noise: 5 } })).toBe(30);
+    expect(programSize({ type: 'scout', rating: 2, compute: { speed: 10, accuracy: 0, cooldown: 0, noise: 10 } })).toBe(15);
   });
 });

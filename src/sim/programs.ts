@@ -1,6 +1,6 @@
 import type { Rarity } from './development';
 import type { NodeKind } from './types';
-import { statOf, traitsOf } from './training';
+import { COMPUTE_POINTS, statOf, traitsOf } from './training';
 /** A program in the player's deck. */
 export const PROGRAM_TYPES = ['warrior', 'shield', 'scout', 'silence', 'deceive', 'hide', 'analyze', 'skimmer', 'scan', 'evaluate', 'identify', 'defuse', 'decrypt', 'scrub', 'forge', 'mask'] as const;
 
@@ -53,9 +53,14 @@ const BASE_SIZE: Record<ProgramType, number> = {
   evaluate: 20, identify: 20, defuse: 30, decrypt: 50, scrub: 30, forge: 40, mask: 40,
 };
 
-/** Size of a program in GB: bigger for higher ratings. */
-export function programSize(p: Pick<Program, 'type' | 'rating'>): number {
-  return Math.round(BASE_SIZE[p.type] * (1 + 0.5 * (p.rating - 1)));
+/**
+ * Size of a program in GB. Mostly the rating: it grows in step with it (rating 1 is half the base, rating 2
+ * the base). Then, for trained models, speed and noise: a lean model is fast and quiet, so the more Compute
+ * goes there, the smaller it is (0% on both is 1.5 times an even split, 100% on both half of it).
+ */
+export function programSize(p: Pick<Program, 'type' | 'rating' | 'compute'>): number {
+  const lean = p.compute && ('speed' in p.compute || 'noise' in p.compute) ? 1.5 - ((p.compute.speed ?? 0) + (p.compute.noise ?? 0)) / COMPUTE_POINTS : 1;
+  return Math.max(1, Math.round(BASE_SIZE[p.type] * 0.5 * p.rating * lean));
 }
 
 /** GB taken by a set of programs. */
