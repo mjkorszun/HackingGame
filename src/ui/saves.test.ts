@@ -61,28 +61,3 @@ describe('save slots', () => {
     expect(takeResume()).toBe(false);
   });
 });
-
-describe('abandoned runs', () => {
-  it('a run left without ending goes back to before entering, day included', async () => {
-    const { setInRun, recoverAbandonedRuns } = await import('./saves');
-    localStorage.setItem(slotKey(2), save(6));
-    localStorage.setItem(backupKey(2), save(5));
-    setInRun(2, true);
-    recoverAbandonedRuns();
-    expect(JSON.parse(localStorage.getItem(slotKey(2))!).day).toBe(5);
-    // Only once: a later start keeps the slot as it is.
-    localStorage.setItem(slotKey(2), save(7));
-    recoverAbandonedRuns();
-    expect(JSON.parse(localStorage.getItem(slotKey(2))!).day).toBe(7);
-  });
-
-  it('a run that ended leaves the slot alone', async () => {
-    const { setInRun, recoverAbandonedRuns } = await import('./saves');
-    localStorage.setItem(slotKey(1), save(6));
-    localStorage.setItem(backupKey(1), save(5));
-    setInRun(1, true);
-    setInRun(1, false);
-    recoverAbandonedRuns();
-    expect(JSON.parse(localStorage.getItem(slotKey(1))!).day).toBe(6);
-  });
-});

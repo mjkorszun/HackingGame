@@ -1,6 +1,6 @@
 import './style.css';
 import { showMainMenu } from './ui/mainMenu';
-import { clearSlot, migrateLegacy, recoverAbandonedRuns, setActiveSlot, takeResume } from './ui/saves';
+import { clearSlot, migrateLegacy, setActiveSlot, takeResume } from './ui/saves';
 import { Sound } from './ui/sound';
 
 /**
@@ -8,7 +8,6 @@ import { Sound } from './ui/sound';
  * after loading a save on death). The game itself loads only once a save is picked.
  */
 migrateLegacy();
-recoverAbandonedRuns();
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 const startGame = () => void import('./main');
 if (takeResume()) startGame();

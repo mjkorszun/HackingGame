@@ -22,7 +22,7 @@ import { isBuiltInIcon, randomIcon, registerIcon } from './ui/icons';
 import { generate } from './sim/generate';
 import { mergeIntel } from './sim/intel';
 import { needsEntryScreen, showEntryScreen } from './ui/entryScreen';
-import { activeSlot, clearSlot, markLast, reloadIntoGame, slotInfo, restoreBackup, setInRun, writeBackup } from './ui/saves';
+import { activeSlot, clearSlot, markLast, reloadIntoGame, slotInfo, restoreBackup, writeBackup } from './ui/saves';
 import { GameMenu, ICON_GEAR } from './ui/gameMenu';
 import { COMMANDS, complete, findCommand, splitCommand } from './ui/commands';
 
@@ -100,9 +100,10 @@ function endTheRun(): void {
   const kicked = game.kicked;
   const integrity = { now: game.integrity, max: game.maxIntegrity };
   const report = game.endRun();
-  setInRun(activeSlot(), false);
   account.sats += report.total;
   if (report.success && report.contract) account.contract = undefined;
+  // The run took the day: it passes once the run ends (skimmers pay out, and may be found; one planted now starts tomorrow).
+  passDay(account);
   // Leaving badly hurt, or being thrown out, damages your brain.
   const loss = exitDamage(integrity.now, integrity.max, kicked);
   account.health = Math.max(0, account.health - loss);
@@ -542,15 +543,12 @@ function enterNetwork(choice: Choice, entry?: string): void {
   const system = systemFor(choice);
   // The state before the run, to load if you die in it.
   writeBackup(activeSlot(), JSON.stringify(account));
-  // Every trip into the net is one day: skimmers pay out, and may be found.
-  passDay(account);
-  // Taking a contract starts its deadline (today counts as the first day).
+  // Taking a contract starts its deadline (today counts as the first day). Nothing is saved until
+  // the run ends: leaving it any other way (Quit, a refresh, a closed tab) leaves no trace.
   if (choice.kind === 'contract' && account.contract?.title !== choice.offer.contract.title) {
     const days = choice.offer.contract.days ?? 5;
     account.contract = { title: choice.offer.contract.title, deadline: account.day + days - 1 };
   }
-  saveAccount(account);
-  setInRun(activeSlot(), true);
   game = new Game(system, Math.random, loadedPrograms(account), { memory: account.memory, nextId: nextProgramId(account), entry, intel: account.intel[system.id] });
   // Skimmers planted here earlier are still at work in the payment gateway.
   const gateway = system.nodes.find((n) => n.kind === 'payment');
@@ -615,7 +613,6 @@ view = new NetworkView(document.getElementById('view')!, game, menu, {
     flush();
   },
   command: (cmd) => ui(cmd),
-  // Quitting a run takes the game back to just before you entered, day included (done on the reload, as for a refresh).
   quit: quitToMenu,
   sound: sfx,
 });
@@ -631,7 +628,7 @@ document.getElementById('home')!.appendChild(buildTag.cloneNode(true));
 
 let menuWasPaused = false;
 
-/** Back to the main menu: a plain reload opens it. Everything outside a run is already saved. */
+/** Back to the main menu: a plain reload opens it. Everything outside a run is already saved, and a run is saved only when it ends. */
 function quitToMenu(): void {
   location.reload();
 }
