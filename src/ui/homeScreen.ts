@@ -383,7 +383,7 @@ export class HomeScreen {
     const sw = this.actions.software.list();
     const card = (p: Program, stored = false) => {
       const rarity = p.rarity ?? 'common';
-      const traits = (p.traits ?? []).map((t) => `<div class="sw-trait">+ ${esc(t)}</div>`).join('');
+      const traits = (p.traits ?? []).map((t) => `<div class="sw-trait">${esc(t)}</div>`).join('');
       const bugs = (p.bugs ?? []).map((b, i) => `<div class="sw-bug">- ${esc(b)} <button type="button" class="sw-fix" data-fix="${i}" title="Spend ${bugFixDays(p)} days fixing this bug">fix ${bugFixDays(p)} d</button></div>`).join('');
       return `<div class="sw-card rarity-${rarity}${p.id === this.devDone?.id ? ' is-new' : ''}" draggable="true" data-id="${esc(p.id)}" title="drag to load, unload or reorder; right-click for details">
         <div class="sw-icon">${programIcon(p, 'sw-icon-svg')}</div>
@@ -652,7 +652,7 @@ export class HomeScreen {
       return `<div class="rf-var rarity-${rarity}" data-v="${esc(v.id)}">
         <div class="rf-var-head">${programIcon(v, 'dev-icon')}<input class="rf-name" maxlength="20" value="${esc(name)}"><span>${rarity}</span></div>
         ${statHtml(v).map((s) => `<div class="sw-stat">${s.label} ${s.html}</div>`).join('')}
-        ${(v.traits ?? []).map((t) => `<div class="sw-trait">+ ${esc(t)}</div>`).join('') || '<div class="home-dim">no traits</div>'}
+        ${(v.traits ?? []).map((t) => `<div class="sw-trait">${esc(t)}</div>`).join('') || '<div class="home-dim">no traits</div>'}
         ${(v.bugs ?? []).map((b) => `<div class="sw-bug">- ${esc(b)}</div>`).join('')}
         <button type="button" class="home-btn cc-btn" data-save="${esc(v.id)}">Save (${cost} §)</button>
       </div>`;

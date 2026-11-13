@@ -45,8 +45,6 @@ export interface Program {
   /** Trained models: the Compute put into each category, and the base stats that came out of it. */
   compute?: Record<string, number>;
   stats?: Record<string, number>;
-  /** Trained models: how its size came out, times the usual (0.9 to 1.1). */
-  sizeRoll?: number;
 }
 
 /** Base size (hundredths of a TB) of a rating-2 program of each type (placeholder numbers). */
@@ -60,9 +58,9 @@ const BASE_SIZE: Record<ProgramType, number> = {
  * the base). Then, for trained models, speed and noise: a lean model is fast and quiet, so the more Compute
  * goes there, the smaller it is (0% on both is 1.5 times an even split, 100% on both half of it).
  */
-export function programSize(p: Pick<Program, 'type' | 'rating' | 'compute' | 'sizeRoll'>): number {
+export function programSize(p: Pick<Program, 'type' | 'rating' | 'compute'>): number {
   const lean = p.compute && ('speed' in p.compute || 'noise' in p.compute) ? 1.5 - ((p.compute.speed ?? 0) + (p.compute.noise ?? 0)) / COMPUTE_POINTS : 1;
-  return Math.max(1, Math.round(BASE_SIZE[p.type] * 0.5 * p.rating * lean * (p.sizeRoll ?? 1)));
+  return Math.max(1, Math.round(BASE_SIZE[p.type] * 0.5 * p.rating * lean));
 }
 
 /** Memory as shown: hundredths of a TB, e.g. 30 is "0.30 TB". */
@@ -82,7 +80,7 @@ type Scout = Pick<Program, 'type' | 'rating' | 'stats' | 'traits'>;
 
 /** Ticks of cooldown after sending `instances` scouts at once. */
 export function scoutCooldown(p: Scout, instances: number): number {
-  const extra = Math.min(SCOUT_EXTRA_PER_INSTANCE, ...traitsOf(p).map((t) => t.extraPerInstance ?? SCOUT_EXTRA_PER_INSTANCE));
+  const extra = traitsOf(p).reduce((e, t) => e * (t.extraMul ?? 1), SCOUT_EXTRA_PER_INSTANCE);
   return Math.round(statOf(p, 'cooldown') * 10 * (1 + extra * Math.max(0, instances - 1)));
 }
 

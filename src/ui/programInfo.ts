@@ -61,7 +61,7 @@ export function showProgramInfo(p: Program, opts: InfoOptions = {}): void {
   if (p.efficiency !== undefined) lines.push(`<tr><td>efficiency</td><td>x${p.efficiency}</td></tr>`);
   if (p.detection !== undefined) lines.push(`<tr><td>detection</td><td>${p.detection}% a day</td></tr>`);
   if (opts.status) lines.push(`<tr><td>status</td><td>${esc(opts.status)}</td></tr>`);
-  const traits = (p.traits?.length ? `<h3>traits</h3><ul>${p.traits.map((t) => `<li>+ ${esc(t)}</li>`).join('')}</ul>` : '')
+  const traits = (p.traits?.length ? `<h3>traits</h3><ul>${p.traits.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '')
     + (p.bugs?.length ? `<h3>bugs</h3><ul class="pi-bugs">${p.bugs.map((b) => `<li>- ${esc(b)}</li>`).join('')}</ul>` : '');
   const overlay = document.createElement('div');
   overlay.className = 'pi-overlay';

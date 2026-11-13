@@ -67,12 +67,12 @@ export function rollStats(type: ProgramType, compute: Stats, rating: number, rol
 
 /** A trait that changes a stat (times `mul`, or plus `add`), or does something of its own. */
 export interface StatTrait {
-  name: string;
+  /** What it does: also how it is shown, and how a program's trait list names it. */
   text: string;
   mul?: Stats;
   add?: Stats;
-  /** Scout: share of the cooldown each extra instance adds, instead of the usual. */
-  extraPerInstance?: number;
+  /** Scout: times the cooldown each extra instance adds. */
+  extraMul?: number;
   /** Scout: always tells these node types apart. */
   sure?: NodeKind[];
 }
@@ -80,20 +80,19 @@ export interface StatTrait {
 /** Traits of each trainable type (placeholder list, more to come). */
 export const TYPE_TRAITS: Partial<Record<ProgramType, StatTrait[]>> = {
   scout: [
-    { name: 'swift', text: '+25% speed', mul: { speed: 1.25 } },
-    { name: 'keen', text: '+15 accuracy', add: { accuracy: 15 } },
-    { name: 'quick charge', text: '-20% cooldown', mul: { cooldown: 0.8 } },
-    { name: 'hushed', text: '-40% noise', mul: { noise: 0.6 } },
-    { name: 'swarm', text: 'each extra instance adds 25% cooldown (not 45%)', extraPerInstance: 0.25 },
-    { name: 'data hound', text: 'always tells a database', sure: ['database'] },
-    { name: 'pathfinder', text: 'always tells a gateway or relay', sure: ['gateway', 'relay'] },
+    { text: '+25% speed', mul: { speed: 1.25 } },
+    { text: '+15 accuracy', add: { accuracy: 15 } },
+    { text: '-20% cooldown', mul: { cooldown: 0.8 } },
+    { text: '-40% noise', mul: { noise: 0.6 } },
+    { text: '-40% additional instance cost', extraMul: 0.6 },
+    { text: 'always identifies databases', sure: ['database'] },
+    { text: 'always identifies gateways and relays', sure: ['gateway', 'relay'] },
   ],
 };
 
 /** The trait a program's trait line stands for, if its type has it. */
 export function traitOf(type: ProgramType, line: string): StatTrait | undefined {
-  const name = line.split(':')[0].trim();
-  return TYPE_TRAITS[type]?.find((t) => t.name === name);
+  return TYPE_TRAITS[type]?.find((t) => t.text === line);
 }
 
 export function traitsOf(p: Pick<Program, 'type' | 'traits'>): StatTrait[] {
@@ -142,7 +141,7 @@ export function formatStat(def: StatDef, v: number): string {
 /** Different traits for a program of this type: its own pool if it has one. */
 export function rollTypeTraits(type: ProgramType, count: number, fallback: readonly string[], roll: () => number = Math.random): string[] {
   const own = TYPE_TRAITS[type];
-  const pool: string[] = own ? own.map((t) => `${t.name}: ${t.text}`) : [...fallback];
+  const pool: string[] = own ? own.map((t) => t.text) : [...fallback];
   const out: string[] = [];
   for (let i = 0; i < count && pool.length; i++) out.push(pool.splice(Math.floor(roll() * pool.length), 1)[0]);
   return out;

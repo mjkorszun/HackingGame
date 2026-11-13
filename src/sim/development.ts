@@ -18,18 +18,18 @@ export const RARITY_WEIGHTS: Record<Rarity, number> = { common: 60, uncommon: 25
 
 /** The pool traits are drawn from (placeholder; none of them works yet). */
 export const TRAIT_POOL = [
-  'compact: -15% size',
-  'quick: -20% run time',
-  'quiet: makes less noise',
-  'stubborn: +10% against resistance',
-  'lucky: one failed roll per run is rolled again',
-  'lean: -15% CPU use',
-  'first strike: +25% on its first use in a node',
-  'patient: +15% when you have not moved for 5 s',
-  'ghostly: no noise on its first use in a node',
-  'sturdy: -20% chance to crash',
-  'eager: starts 0.5 s sooner',
-  'echo: 10% chance to run twice',
+  '-15% size',
+  '-20% run time',
+  'makes less noise',
+  '+10% against resistance',
+  'one failed roll per run is rolled again',
+  '-15% CPU use',
+  '+25% on its first use in a node',
+  '+15% when you have not moved for 5 s',
+  'no noise on its first use in a node',
+  '-20% chance to crash',
+  'starts 0.5 s sooner',
+  '10% chance to run twice',
 ] as const;
 
 /** Highest rating you can develop for now (later: skill and hardware). */
@@ -140,7 +140,6 @@ export function finishProgram(p: DevProject, id: string, author: string, roll: (
   if (p.compute) {
     program.compute = { ...p.compute };
     program.stats = rollStats(p.type, p.compute, p.rating, roll);
-    program.sizeRoll = Math.round((0.9 + 0.2 * roll()) * 100) / 100;
   }
   if (rarity === 'legendary') program.author = author;
   const bugs = rollBugs(roll);
