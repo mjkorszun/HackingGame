@@ -114,6 +114,13 @@ function drawEye(x: number, y: number, scale: number, opacity: number, parent: E
   svg('circle', { cx: 0, cy: 0, r: 3, class: 'mapper-eye-pupil' }, g);
 }
 
+/** How fast animations run while the game is paused. */
+const PAUSE_PACE = 0.25;
+/** Animations that stop dead on pause: agents' and the avatar's own motion, and shots. */
+const FROZEN = new Set(['idle-drift', 'avatar-idle', 'bob', 'shot', 'fx-fade', 'fx-burst']);
+/** Animations that keep full speed: the avatar appearing and fading out (leaving pauses the game), the clock's own spinner. */
+const UNPACED = new Set(['avatar-spawn', 'avatar-out', 'time-spin']);
+
 const icon = (body: string) => `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${body}</svg>`;
 /** Stopwatch with pause bars: time that stops by itself. */
 const ICON_POWER = icon(
@@ -407,7 +414,7 @@ export class NetworkView {
   /** Top layer for shots and outcome texts. */
   private fxLayer: SVGGElement | null = null;
   /** When a shot towards each target lands, so its outcome text waits for it. */
-  private shotLands = new Map<string, number>();
+  private shotLands = new Map<string, Promise<void>>();
   /** Outcome texts still rising over each target, so new ones stack above. */
   private fxStack = new Map<string, number>();
 
@@ -421,6 +428,29 @@ export class NetworkView {
     if (t.kind === 'ally') return this.allyPos.get(t.id) ?? null;
     if (t.kind === 'file') return this.filePos.get(t.id) ?? null;
     return t.id === this.game.currentNode ? { x: CX, y: CY } : this.positions.get(t.id) ?? null;
+  }
+
+  /** Time that runs only while the game does (ms), for motion drawn in code such as a shield's orbit. */
+  private animClock = 0;
+  private lastFrameAt = 0;
+  private pacedPaused: boolean | null = null;
+
+  /**
+   * Pause shows at once: agents, the avatar and shots stand still, and every other animation
+   * (scan band, attitude rings, dashed lines, room outline...) runs four times slower.
+   */
+  private pace(): void {
+    const paused = this.game.paused;
+    // While paused, new animations must slow down too; after resuming, one pass sets them back.
+    if (!paused && this.pacedPaused === false) return;
+    this.pacedPaused = paused;
+    for (const a of this.root.getAnimations({ subtree: true })) this.applyPace(a);
+  }
+
+  private applyPace(a: Animation): void {
+    const name = a instanceof CSSAnimation ? a.animationName : a.id;
+    const rate = !this.game.paused || UNPACED.has(name) ? 1 : FROZEN.has(name) ? 0 : PAUSE_PACE;
+    if (a.playbackRate !== rate) a.updatePlaybackRate(rate);
   }
 
   /** Draws a shot or an outcome text in the map view. */
@@ -437,23 +467,23 @@ export class NetworkView {
       const cls = ev.hostile ? 'is-hostile' : 'is-mine';
       const trail = svg('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: `fx-trail ${cls}` }, layer);
       const bolt = svg('circle', { r: 4.5, class: `fx-bolt ${cls}` }, layer);
-      bolt.style.transform = `translate(${from.x}px, ${from.y}px)`;
-      bolt.getBoundingClientRect();
-      bolt.style.transform = `translate(${to.x}px, ${to.y}px)`;
-      const flight = 220;
-      this.shotLands.set(this.fxKey(ev.to), performance.now() + flight);
-      setTimeout(() => {
+      // The bolt flies as an animation, so it stops in mid-air while the game is paused.
+      const flight = bolt.animate([{ transform: `translate(${from.x}px, ${from.y}px)` }, { transform: `translate(${to.x}px, ${to.y}px)` }], { duration: 220, fill: 'forwards' });
+      flight.id = 'shot';
+      this.applyPace(flight);
+      const landed = flight.finished.then(() => {
         bolt.remove();
         trail.remove();
         if (!ev.hit || !this.fxLayer) return;
         const burst = svg('circle', { cx: to.x, cy: to.y, r: 14, class: `fx-burst ${cls}` }, this.fxLayer);
-        setTimeout(() => burst.remove(), 400);
-      }, flight);
+        burst.addEventListener('animationend', () => burst.remove());
+      }, () => undefined);
+      this.shotLands.set(this.fxKey(ev.to), landed);
       return;
     }
     const key = this.fxKey(ev.at);
-    const wait = Math.max(0, (this.shotLands.get(key) ?? 0) - performance.now());
-    setTimeout(() => {
+    // An outcome shows once the shot that caused it lands.
+    void (this.shotLands.get(key) ?? Promise.resolve()).then(() => {
       const p = this.fxPoint(ev.at);
       if (!p || !this.fxLayer) return;
       const n = this.fxStack.get(key) ?? 0;
@@ -461,11 +491,11 @@ export class NetworkView {
       const lift = ev.at.kind === 'player' ? 34 : ev.at.kind === 'agent' || ev.at.kind === 'ally' ? 22 : 16;
       const t = svg('text', { x: p.x, y: p.y - lift - n * 16, class: `fx-text ${ev.ok ? 'is-ok' : 'is-fail'}` }, this.fxLayer);
       t.textContent = ev.text;
-      setTimeout(() => {
+      t.addEventListener('animationend', () => {
         t.remove();
         this.fxStack.set(key, Math.max(0, (this.fxStack.get(key) ?? 1) - 1));
-      }, 1500);
-    }, wait);
+      });
+    });
   }
 
   /** Neighbour reached with number key n (1-based), in the order shown on screen. */
@@ -476,6 +506,10 @@ export class NetworkView {
   /** Called every frame. Redraws the stage only when something visible changed. */
   update(alpha = 0): void {
     this.alpha = alpha;
+    const now = performance.now();
+    if (!this.game.paused) this.animClock += Math.min(100, now - (this.lastFrameAt || now));
+    this.lastFrameAt = now;
+    this.pace();
     this.clock.textContent = formatTime(this.game.tick);
     this.pauseBtn.setAttribute('aria-label', this.game.paused ? 'Resume' : 'Pause');
     this.gameMenu.refresh();
@@ -724,10 +758,8 @@ export class NetworkView {
     if (!this.fxLayer) return;
     const flash = svg('circle', { cx: at.x, cy: at.y, r: 10, class: `fx-arrive-flash is-${type}` }, this.fxLayer);
     const ring = svg('circle', { cx: at.x, cy: at.y, r: 16, class: `fx-arrive-ring is-${type}` }, this.fxLayer);
-    setTimeout(() => {
-      flash.remove();
-      ring.remove();
-    }, 800);
+    flash.addEventListener('animationend', () => flash.remove());
+    ring.addEventListener('animationend', () => ring.remove());
   }
 
   /** The avatar fades out as you leave the net. */
@@ -770,7 +802,7 @@ export class NetworkView {
         miniPos = { x: m1.x + (m2.x - m1.x) * k, y: m1.y + (m2.y - m1.y) * k };
       } else if (a.program.type === 'shield' && a.node === g.currentNode && !g.isMoving) {
         // A shield circles you.
-        const t = performance.now() / 700;
+        const t = this.animClock / 700;
         pos = { x: this.avatarPos.x + Math.cos(t) * 56, y: this.avatarPos.y + Math.sin(t) * 38 };
         miniPos = this.miniXY(a.node);
       } else {

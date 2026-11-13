@@ -548,7 +548,6 @@ body {
 
 /* ---------- shots and outcome texts ---------- */
 .fx-layer { pointer-events: none; }
-.fx-bolt { transition: transform 0.22s linear; }
 .fx-bolt.is-mine { fill: #eaffef; filter: drop-shadow(0 0 4px #33ff66); }
 .fx-bolt.is-hostile { fill: #ffe0e0; filter: drop-shadow(0 0 4px #ff3030); }
 .fx-trail { stroke-width: 2; stroke-linecap: round; animation: fx-fade 0.22s linear forwards; }
