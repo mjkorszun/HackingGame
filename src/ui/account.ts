@@ -206,7 +206,7 @@ export function fresh(): Account {
   return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {}, hardware: newHardware(), health: MAX_HEALTH, intel: {}, version: SAVE_VERSION };
 }
 
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -303,6 +303,17 @@ export function migrate(a: Account): Account {
     a.programs = a.programs.filter((p) => !gone.has(p.id));
     if (Array.isArray(a.loaded)) a.loaded = a.loaded.filter((id) => !gone.has(id));
     if ((a.project?.type as string) === 'mapper') a.project = undefined;
+  }
+  if ((a.version ?? 0) < 4) {
+    // Version 4: traits are just their effects, without names; sizes no longer vary at random.
+    const scout: Record<string, string> = { swift: '+25% speed', keen: '+15 accuracy', 'quick charge': '-20% cooldown', hushed: '-40% noise', swarm: '-40% additional instance cost', 'data hound': 'always identifies databases', pathfinder: 'always identifies gateways and relays' };
+    const fix = (p: Program) => {
+      if (p.traits) p.traits = p.traits.map((t) => { const i = t.indexOf(': '); return i < 0 ? t : (scout[t.slice(0, i)] && p.type === 'scout' ? scout[t.slice(0, i)] : t.slice(i + 2)); });
+      delete (p as { sizeRoll?: number }).sizeRoll;
+    };
+    a.programs.forEach(fix);
+    a.refine?.variants.forEach(fix);
+    a.skimmers?.forEach((s) => fix(s.program));
   }
   a.version = SAVE_VERSION;
   renameOld(a.programs as { type: string; name: string }[]);

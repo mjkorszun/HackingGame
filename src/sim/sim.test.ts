@@ -261,10 +261,10 @@ describe('scout', () => {
     const crow = { type: 'scout' as const, rating: 1, stats: { speed: 1, accuracy: 50, cooldown: 30, noise: 30 } };
     expect(scoutCooldown(crow, 1)).toBe(300);
     expect(scoutCooldown(crow, 3)).toBe(570);
-    expect(scoutCooldown({ ...crow, traits: ['swarm: x'] }, 3)).toBe(450);
+    expect(scoutCooldown({ ...crow, traits: ['-40% additional instance cost'] }, 3)).toBe(462);
     expect(scoutChance(crow)).toBe(50);
-    expect(scoutChance({ ...crow, traits: ['data hound: x'] }, 'database')).toBe(100);
-    expect(scoutChance({ ...crow, traits: ['keen: x'] })).toBe(65);
+    expect(scoutChance({ ...crow, traits: ['always identifies databases'] }, 'database')).toBe(100);
+    expect(scoutChance({ ...crow, traits: ['+15 accuracy'] })).toBe(65);
     const g = scoutGame(() => 0);
     g.scoutCommand('');
     expect(g.cooldownOf('p1')).not.toBeNull();
@@ -1128,6 +1128,21 @@ describe('hardware', () => {
     expect(a.hardware.installed.spine1).toBeUndefined();
   });
 
+  it('keeps only the effect of each trait from old saves', async () => {
+    const { migrate, fresh } = await import('../ui/account');
+    const old = JSON.parse(JSON.stringify(fresh()));
+    old.version = 3;
+    old.programs[0].traits = ['compact: -15% size'];
+    const scout = old.programs.find((p: { type: string }) => p.type === 'scout');
+    scout.traits = ['swarm: each extra instance adds 25% cooldown (not 45%)'];
+    scout.sizeRoll = 1.1;
+    const a = migrate(old);
+    expect(a.programs[0].traits).toEqual(['-15% size']);
+    const s = a.programs.find((p) => p.type === 'scout')!;
+    expect(s.traits).toEqual(['-40% additional instance cost']);
+    expect('sizeRoll' in s).toBe(false);
+  });
+
   it('drops mapper programs from old saves', async () => {
     const { migrate, fresh } = await import('../ui/account');
     const old = JSON.parse(JSON.stringify(fresh()));
@@ -1335,8 +1350,6 @@ describe('train model and refine', () => {
     const prog = finishProgram(p, 'p9', 'you', () => 0.5);
     expect(prog.stats).toBeDefined();
     expect(prog.compute).toEqual(p.compute);
-    expect(prog.sizeRoll).toBeGreaterThanOrEqual(0.9);
-    expect(prog.sizeRoll).toBeLessThanOrEqual(1.1);
   });
 });
 
