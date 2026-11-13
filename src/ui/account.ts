@@ -206,7 +206,7 @@ export function fresh(): Account {
   return { sats: 0, programs, loaded: programs.filter((p) => !START_STORED.includes(p.name)).map((p) => p.id), memory: DEFAULT_MEMORY, day: 1, reputation: 0, networks: [newPizzeria(randomSeed())], skimmers: [], news: [], level: 1, xp: 0, skills: [], skillPicks: 0, code: newGameCode(), avatar: { ...DEFAULT_AVATAR }, customIcons: {}, hardware: newHardware(), health: MAX_HEALTH, intel: {}, version: SAVE_VERSION };
 }
 
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 4;
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -314,13 +314,6 @@ export function migrate(a: Account): Account {
     a.programs.forEach(fix);
     a.refine?.variants.forEach(fix);
     a.skimmers?.forEach((s) => fix(s.program));
-  }
-  if ((a.version ?? 0) < 5) {
-    // Version 5: scout traits come in three strengths; the old ones move to the nearest.
-    const near: Record<string, string> = { '+25% speed': '+20% speed', '-40% noise': '-45% noise' };
-    const fix = (p: Program) => { if (p.type === 'scout' && p.traits) p.traits = p.traits.map((t) => near[t] ?? t); };
-    a.programs.forEach(fix);
-    a.refine?.variants.forEach(fix);
   }
   a.version = SAVE_VERSION;
   renameOld(a.programs as { type: string; name: string }[]);

@@ -9,7 +9,7 @@ import { renderHardware, type HardwareActions, type HardwareView } from './hardw
 import { AVATAR_ICONS, ICON_POOLS, MENU_ICONS, iconSvg, programIcon, randomIcon } from './icons';
 import { showIconPicker } from './iconPicker';
 import { showProgramInfo, statHtml } from './programInfo';
-import { CATEGORIES, COMPUTE_POINTS, evenCompute, TRAIT_POINTS, variantCost, VARIANTS_PER_DAY } from '../sim/training';
+import { CATEGORIES, COMPUTE_POINTS, evenCompute, MAX_TRAITS, TRAIT_POINTS, variantCost, VARIANTS_PER_DAY } from '../sim/training';
 import { PROGRAM_TYPES, programSize, tb, type Program, type ProgramType } from '../sim/programs';
 
 /** A contract on offer: the job and the system it is in. */
@@ -532,7 +532,7 @@ export class HomeScreen {
         <label class="dev-row">rating <select class="dev-rating">${Array.from({ length: MAX_DEV_RATING }, (_, i) => `<option${i + 1 === f.rating ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></label>
         <label class="dev-row">name <input class="dev-name" maxlength="20" value="${esc(name)}"></label>
         ${this.computeHtml()}
-        <div class="cc-line home-dim">size about ${tb(programSize(f))}. when it is done it may have up to ${MAX_BUGS} bugs: use it as it is, or fix them later (${bugFixDays(f)} days a bug). rarity and traits are rolled when it is done: ${CATEGORIES[f.type] ? `trait points: common ${TRAIT_POINTS.common}, uncommon ${TRAIT_POINTS.uncommon}, rare ${TRAIT_POINTS.rare}, epic ${TRAIT_POINTS.epic}, legendary ${TRAIT_POINTS.legendary} and your name (a weak trait takes 1 point, a strong one 3)` : `common ${RARITY_TRAITS.common} traits, uncommon ${RARITY_TRAITS.uncommon}, rare ${RARITY_TRAITS.rare}, epic ${RARITY_TRAITS.epic}, legendary ${RARITY_TRAITS.legendary} and your name`}</div>
+        <div class="cc-line home-dim">size about ${tb(programSize(f))}. when it is done it may have up to ${MAX_BUGS} bugs: use it as it is, or fix them later (${bugFixDays(f)} days a bug). rarity and traits are rolled when it is done: ${CATEGORIES[f.type] ? `trait points: common ${TRAIT_POINTS.common}, uncommon ${TRAIT_POINTS.uncommon}, rare ${TRAIT_POINTS.rare}, epic ${TRAIT_POINTS.epic}, legendary ${TRAIT_POINTS.legendary} and your name (shared out among up to ${MAX_TRAITS.uncommon}, ${MAX_TRAITS.rare}, ${MAX_TRAITS.epic} or ${MAX_TRAITS.legendary} traits)` : `common ${RARITY_TRAITS.common} traits, uncommon ${RARITY_TRAITS.uncommon}, rare ${RARITY_TRAITS.rare}, epic ${RARITY_TRAITS.epic}, legendary ${RARITY_TRAITS.legendary} and your name`}</div>
         <button type="button" class="home-btn cc-btn" data-dev="start"${this.computeLeft() ? ` disabled title="Spend all ${COMPUTE_POINTS} points of Compute first"` : ''}>Train Model</button>`;
       const type = box.querySelector<HTMLSelectElement>('.dev-type')!;
       const rating = box.querySelector<HTMLSelectElement>('.dev-rating')!;

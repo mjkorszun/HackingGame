@@ -1344,19 +1344,23 @@ describe('train model and refine', () => {
     expect(currentRefine(a)).toBeUndefined();
   });
 
-  it('spends the rarity\'s trait points, at most one trait of each family', async () => {
-    const { rollTypeTraits, traitOf, TRAIT_POINTS } = await import('./training');
-    for (const rarity of ['uncommon', 'rare', 'epic', 'legendary'] as const) for (let k = 0; k < 30; k++) {
-      let seed = k + 1;
+  it('shares the rarity\'s trait points out among up to 4 different traits', async () => {
+    const { rollTypeTraits, traitOf, MAX_TRAITS } = await import('./training');
+    const seen = new Set<string>();
+    for (const rarity of ['uncommon', 'rare', 'epic', 'legendary'] as const) for (let k = 0; k < 40; k++) {
+      let seed = k + 7;
       const roll = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
-      const traits = rollTypeTraits('scout', rarity, [], roll).map((t) => traitOf('scout', t)!);
-      const spent = traits.reduce((a, t) => a + t.cost, 0);
-      expect(spent).toBeLessThanOrEqual(TRAIT_POINTS[rarity]);
-      expect(spent).toBeGreaterThanOrEqual(TRAIT_POINTS[rarity] - 2); // a point or two can be left when only costlier families remain
+      const lines = rollTypeTraits('scout', rarity, [], roll);
+      const traits = lines.map((t) => traitOf('scout', t)!);
+      expect(traits.every(Boolean)).toBe(true);
+      expect(lines.length).toBeGreaterThan(0);
+      expect(lines.length).toBeLessThanOrEqual(MAX_TRAITS[rarity]);
       expect(new Set(traits.map((t) => t.family)).size).toBe(traits.length);
+      lines.forEach((l) => seen.add(l));
     }
+    expect(seen.size).toBeGreaterThan(40);
     expect(rollTypeTraits('scout', 'common', [])).toEqual([]);
-    expect(rollTypeTraits('scout', 'uncommon', [], () => 0.999)).toEqual(['always identifies gateways and relays']);
+    expect(traitOf('scout', '+12% speed')!.mul!.speed).toBeCloseTo(1.12);
   });
 
   it('trains a scout from Compute into a program with stats', async () => {
