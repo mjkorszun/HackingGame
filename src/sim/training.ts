@@ -167,6 +167,9 @@ export function formatStat(def: StatDef, v: number): string {
 /** Trait points each rarity gets (placeholder). */
 export const TRAIT_POINTS: Record<Rarity, number> = { common: 0, uncommon: 30, rare: 50, epic: 70, legendary: 100 };
 
+/** How far the pool can land either way from the rarity's points (20%). */
+export const TRAIT_POINT_SPREAD = 0.2;
+
 /** Most traits a program of each rarity gets (placeholder). */
 export const MAX_TRAITS: Record<Rarity, number> = { common: 0, uncommon: 2, rare: 3, epic: 4, legendary: 6 };
 
@@ -183,8 +186,9 @@ export function rollTypeTraits(type: ProgramType, rarity: Rarity, fallback: read
     for (let i = 0; i < RARITY_TRAITS[rarity] && pool.length; i++) out.push(pool.splice(Math.floor(roll() * pool.length), 1)[0]);
     return out;
   }
-  const points = TRAIT_POINTS[rarity];
-  if (!points) return [];
+  if (!TRAIT_POINTS[rarity]) return [];
+  // The pool itself is partly random: 80% to 120% of the rarity's points (uncommon 24 to 36).
+  const points = Math.round(TRAIT_POINTS[rarity] * (1 - TRAIT_POINT_SPREAD + 2 * TRAIT_POINT_SPREAD * roll()));
   const most = MAX_TRAITS[rarity];
   const want = 1 + Math.floor(roll() * most);
   const left = [...own];
