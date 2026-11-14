@@ -75,24 +75,50 @@ export interface StatTrait {
   extraMul?: number;
   /** Scout: always tells these node types apart. */
   sure?: NodeKind[];
+  /** Its family: a program gets at most one trait of each. */
+  family?: string;
 }
 
-/** Traits of each trainable type (placeholder list, more to come). */
-export const TYPE_TRAITS: Partial<Record<ProgramType, StatTrait[]>> = {
+/**
+ * A kind of trait. Most scale: every trait point spent on it adds `perPoint` to its value (shown in
+ * whole numbers, up to `max`), so two variants can get +12% speed and -22% noise, or +15% and -17%.
+ * Some are fixed: they cost `min` points and do one thing.
+ */
+export interface TraitFamily {
+  family: string;
+  /** Fewest points it takes (for a fixed one, what it costs). */
+  min: number;
+  perPoint?: number;
+  max?: number;
+  /** Scaling: the text for a value, and the pattern that reads the value back. */
+  fmt?: (v: number) => string;
+  match?: RegExp;
+  /** Fixed: its text. */
+  text?: string;
+  effect: (v: number) => Partial<StatTrait>;
+}
+
+/** Traits of each trainable type (placeholder numbers, more to come). */
+export const TYPE_TRAITS: Partial<Record<ProgramType, TraitFamily[]>> = {
   scout: [
-    { text: '+25% speed', mul: { speed: 1.25 } },
-    { text: '+15 accuracy', add: { accuracy: 15 } },
-    { text: '-20% cooldown', mul: { cooldown: 0.8 } },
-    { text: '-40% noise', mul: { noise: 0.6 } },
-    { text: '-40% additional instance cost', extraMul: 0.6 },
-    { text: 'always identifies databases', sure: ['database'] },
-    { text: 'always identifies gateways and relays', sure: ['gateway', 'relay'] },
+    { family: 'speed', min: 5, perPoint: 1, max: 60, fmt: (v) => `+${v}% speed`, match: /^\+(\d+)% speed$/, effect: (v) => ({ mul: { speed: 1 + v / 100 } }) },
+    { family: 'accuracy', min: 6, perPoint: 0.5, max: 30, fmt: (v) => `+${v} accuracy`, match: /^\+(\d+) accuracy$/, effect: (v) => ({ add: { accuracy: v } }) },
+    { family: 'cooldown', min: 5, perPoint: 1, max: 50, fmt: (v) => `-${v}% cooldown`, match: /^-(\d+)% cooldown$/, effect: (v) => ({ mul: { cooldown: 1 - v / 100 } }) },
+    { family: 'noise', min: 4, perPoint: 1.5, max: 75, fmt: (v) => `-${v}% noise`, match: /^-(\d+)% noise$/, effect: (v) => ({ mul: { noise: 1 - v / 100 } }) },
+    { family: 'instances', min: 5, perPoint: 2, max: 90, fmt: (v) => `-${v}% additional instance cost`, match: /^-(\d+)% additional instance cost$/, effect: (v) => ({ extraMul: 1 - v / 100 }) },
+    { family: 'databases', min: 20, text: 'always identifies databases', effect: () => ({ sure: ['database'] }) },
+    { family: 'gateways', min: 30, text: 'always identifies gateways and relays', effect: () => ({ sure: ['gateway', 'relay'] }) },
   ],
 };
 
 /** The trait a program's trait line stands for, if its type has it. */
 export function traitOf(type: ProgramType, line: string): StatTrait | undefined {
-  return TYPE_TRAITS[type]?.find((t) => t.text === line);
+  for (const f of TYPE_TRAITS[type] ?? []) {
+    if (f.text === line) return { text: line, family: f.family, ...f.effect(0) };
+    const m = f.match?.exec(line);
+    if (m) return { text: line, family: f.family, ...f.effect(Number(m[1])) };
+  }
+  return undefined;
 }
 
 export function traitsOf(p: Pick<Program, 'type' | 'traits'>): StatTrait[] {
@@ -138,13 +164,59 @@ export function formatStat(def: StatDef, v: number): string {
   return def.unit === 'x' ? `${v.toFixed(2)}x` : def.unit === 's' ? `${v} s` : def.unit === '%' ? `${v}%` : `${v}`;
 }
 
-/** Different traits for a program of this type: its own pool if it has one. */
-export function rollTypeTraits(type: ProgramType, count: number, fallback: readonly string[], roll: () => number = Math.random): string[] {
+/** Trait points each rarity gets (placeholder). */
+export const TRAIT_POINTS: Record<Rarity, number> = { common: 0, uncommon: 30, rare: 50, epic: 70, legendary: 100 };
+
+/** How far the pool can land either way from the rarity's points (20%). */
+export const TRAIT_POINT_SPREAD = 0.2;
+
+/** Most traits a program of each rarity gets (placeholder). */
+export const MAX_TRAITS: Record<Rarity, number> = { common: 0, uncommon: 2, rare: 3, epic: 4, legendary: 6 };
+
+/**
+ * Traits for a program of this rarity. A type with its own traits spends the rarity's points: a random
+ * number of different traits, up to the rarity's most (each needs its fewest points), then the points left are shared out at
+ * random among the ones that scale. Other types still draw a number of traits from the general pool.
+ */
+export function rollTypeTraits(type: ProgramType, rarity: Rarity, fallback: readonly string[], roll: () => number = Math.random): string[] {
   const own = TYPE_TRAITS[type];
-  const pool: string[] = own ? own.map((t) => t.text) : [...fallback];
-  const out: string[] = [];
-  for (let i = 0; i < count && pool.length; i++) out.push(pool.splice(Math.floor(roll() * pool.length), 1)[0]);
-  return out;
+  if (!own) {
+    const pool = [...fallback];
+    const out: string[] = [];
+    for (let i = 0; i < RARITY_TRAITS[rarity] && pool.length; i++) out.push(pool.splice(Math.floor(roll() * pool.length), 1)[0]);
+    return out;
+  }
+  if (!TRAIT_POINTS[rarity]) return [];
+  // The pool itself is partly random: 80% to 120% of the rarity's points (uncommon 24 to 36).
+  const points = Math.round(TRAIT_POINTS[rarity] * (1 - TRAIT_POINT_SPREAD + 2 * TRAIT_POINT_SPREAD * roll()));
+  const most = MAX_TRAITS[rarity];
+  const want = 1 + Math.floor(roll() * most);
+  const left = [...own];
+  const chosen: TraitFamily[] = [];
+  let spent = 0;
+  while (chosen.length < want && left.length) {
+    const fits = left.filter((f) => spent + f.min <= points);
+    if (!fits.length) break;
+    const f = fits[Math.floor(roll() * fits.length)];
+    left.splice(left.indexOf(f), 1);
+    chosen.push(f);
+    spent += f.min;
+  }
+  // Points left over need a trait that scales to go into.
+  if (!chosen.some((f) => f.perPoint) && chosen.length < most) {
+    const f = left.find((x) => x.perPoint && spent + x.min <= points);
+    if (f) {
+      chosen.push(f);
+      spent += f.min;
+    }
+  }
+  const scaling = chosen.filter((f) => f.perPoint);
+  const extra = new Map<TraitFamily, number>(scaling.map((f) => [f, 0]));
+  for (let i = 0; i < points - spent && scaling.length; i++) {
+    const f = scaling[Math.floor(roll() * scaling.length)];
+    extra.set(f, extra.get(f)! + 1);
+  }
+  return chosen.map((f) => (f.text ?? f.fmt!(Math.min(f.max ?? Infinity, Math.round((f.min + extra.get(f)!) * f.perPoint!)))));
 }
 
 /** Variants Refine makes each day (placeholder; later your skills raise it). */
@@ -168,7 +240,7 @@ export interface Refining {
 /** One new variant of a base: same base stats and bugs, the rarity and traits rolled again. */
 export function makeVariant(base: Program, number: number, fallback: readonly string[], roll: () => number = Math.random): Program {
   const rarity: Rarity = rollRarity(roll);
-  const v: Program = { ...base, id: `v${number}`, name: `${base.name.split('#')[0]}#${String(number).padStart(3, '0')}`, rarity, traits: rollTypeTraits(base.type, RARITY_TRAITS[rarity], fallback, roll) };
+  const v: Program = { ...base, id: `v${number}`, name: `${base.name.split('#')[0]}#${String(number).padStart(3, '0')}`, rarity, traits: rollTypeTraits(base.type, rarity, fallback, roll) };
   if (rarity !== 'legendary') delete v.author;
   else v.author = base.author ?? 'you';
   if (base.stats) v.stats = { ...base.stats };

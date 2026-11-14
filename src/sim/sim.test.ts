@@ -1344,6 +1344,25 @@ describe('train model and refine', () => {
     expect(currentRefine(a)).toBeUndefined();
   });
 
+  it('shares the rarity\'s trait points out among up to 4 different traits', async () => {
+    const { rollTypeTraits, traitOf, MAX_TRAITS } = await import('./training');
+    const seen = new Set<string>();
+    for (const rarity of ['uncommon', 'rare', 'epic', 'legendary'] as const) for (let k = 0; k < 40; k++) {
+      let seed = k + 7;
+      const roll = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+      const lines = rollTypeTraits('scout', rarity, [], roll);
+      const traits = lines.map((t) => traitOf('scout', t)!);
+      expect(traits.every(Boolean)).toBe(true);
+      expect(lines.length).toBeGreaterThan(0);
+      expect(lines.length).toBeLessThanOrEqual(MAX_TRAITS[rarity]);
+      expect(new Set(traits.map((t) => t.family)).size).toBe(traits.length);
+      lines.forEach((l) => seen.add(l));
+    }
+    expect(seen.size).toBeGreaterThan(40);
+    expect(rollTypeTraits('scout', 'common', [])).toEqual([]);
+    expect(traitOf('scout', '+12% speed')!.mul!.speed).toBeCloseTo(1.12);
+  });
+
   it('trains a scout from Compute into a program with stats', async () => {
     const { finishProgram, newProject } = await import('./development');
     const p = { ...newProject('scout', 1, 'Crow'), compute: { speed: 5, accuracy: 5, cooldown: 5, noise: 5 } };
